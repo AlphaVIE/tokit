@@ -45,6 +45,8 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        ("array_index", "fn main()->String{[\"a\",\"✓\"][1]}"),
+        ("nested_array_index", "fn main()->i32{[[1,2],[3,4]][1][0]}"),
         (
             "utf8_strings",
             r#"fn greet(x:String)->String{"Grüß, "+x+"\n"} fn main()->[String]{[greet("世界"),"✓"]}"#,
@@ -70,6 +72,28 @@ fn native_output_matches_reference_interpreter() {
             expected,
             "{name}"
         );
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_array_bounds_match_reference_diagnostic() {
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let directory = temporary_directory("bounds-test");
+    for (name, source) in [
+        ("positive", "fn main()->i32{[1][2]}"),
+        ("negative", "fn main()->i32{[1][0-1]}"),
+        ("empty", "fn main()->i32{let xs:[i32]=[];xs[0]}"),
+    ] {
+        let expected = run(source).unwrap_err().display(source);
+        let output = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        native::build(&check(source).unwrap(), source, &output).unwrap();
+        let result = Command::new(&output).output().unwrap();
+        assert!(!result.status.success());
+        assert_eq!(String::from_utf8_lossy(&result.stderr).trim(), expected);
     }
     std::fs::remove_dir_all(directory).unwrap();
 }

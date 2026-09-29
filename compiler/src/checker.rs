@@ -159,6 +159,23 @@ fn infer(
             }
             Ok(Type::Array(Box::new(element)))
         }
+        ExprKind::Index(array, index) => {
+            let array_type = type_of(array, env, signatures, return_type, types)?;
+            let index_type = type_of(index, env, signatures, return_type, types)?;
+            if array_type == Type::Never || index_type == Type::Never {
+                return Ok(Type::Never);
+            }
+            require(&Type::I32, &index_type, index.span, "array index")?;
+            if let Type::Array(element) = array_type {
+                Ok(*element)
+            } else {
+                Err(Diagnostic::new(
+                    "E110",
+                    array.span,
+                    "indexing requires an array",
+                ))
+            }
+        }
         ExprKind::Ok(inner) => {
             let inner = type_of(inner, env, signatures, return_type, types)?;
             if inner == Type::Never {

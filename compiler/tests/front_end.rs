@@ -30,6 +30,26 @@ fn utf8_strings_escape_concatenate_and_compare() {
 }
 
 #[test]
+fn array_indexing_checks_type_and_bounds() {
+    let source =
+        "fn pick(xs:[String],i:i32)->String{xs[i]} fn main()->String{pick([\"a\",\"✓\"],1)}";
+    assert_eq!(run(source).unwrap(), Value::String("✓".to_owned()));
+    assert_eq!(
+        run("fn main()->i32{[[1,2],[3,4]][1][0]}").unwrap(),
+        Value::I32(3)
+    );
+    for source in [
+        "fn main()->i32{[1][1]}",
+        "fn main()->i32{[1][0-1]}",
+        "fn main()->i32{let xs:[i32]=[];xs[0]}",
+    ] {
+        assert_eq!(run(source).unwrap_err().code, "E205", "{source}");
+    }
+    assert_eq!(check("fn main()->i32{1[0]}").unwrap_err().code, "E110");
+    assert_eq!(check("fn main()->i32{[1][true]}").unwrap_err().code, "E102");
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";
