@@ -61,10 +61,44 @@ fn run_command(args: &[String]) {
     }
 }
 
+fn test_command(args: &[String]) {
+    let (root, path) = match args {
+        [path] => (None, path),
+        [flag, root, path] if flag == "--allow-read" => (Some(Path::new(root)), path),
+        _ => {
+            eprintln!("usage: tok test [--allow-read <path>] <file.tok>");
+            process::exit(2);
+        }
+    };
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("could not read {path}: {error}");
+            process::exit(2);
+        }
+    };
+    match tokit_compiler::test_runner::run(&source, root) {
+        Ok(report) => {
+            println!("{}", report.display());
+            if report.failed() > 0 {
+                process::exit(1);
+            }
+        }
+        Err(diagnostic) => {
+            eprintln!("{}", diagnostic.display(&source));
+            process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.get(1).is_some_and(|command| command == "run") {
         run_command(&args[2..]);
+        return;
+    }
+    if args.get(1).is_some_and(|command| command == "test") {
+        test_command(&args[2..]);
         return;
     }
     let fmt = match args.as_slice() {
@@ -143,7 +177,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
