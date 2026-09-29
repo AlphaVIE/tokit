@@ -32,6 +32,7 @@ fn native_output_matches_reference_interpreter() {
         "checked_division",
         "checked_division_enum",
         "generic_pair",
+        "match_result",
         "record",
     ] {
         let source =
@@ -53,6 +54,23 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        (
+            "match_result",
+            r#"fn describe(x:Result<i32,String>)->String{match x{Ok(v)=>if v>0{"positive"}else{"zero"},Err(e)=>e}} fn main()->String{describe(Err("bad"))}"#,
+        ),
+        (
+            "match_enum",
+            "enum Mode{Add,Sub} fn apply(m:Mode,a:i32,b:i32)->i32{match m{Mode::Add=>a+b,Mode::Sub=>a-b}} fn main()->i32{apply(Mode::Sub,7,2)}",
+        ),
+        ("match_bool", "fn main()->i32{match true{true=>1,false=>2}}"),
+        (
+            "match_direct_result",
+            "fn main()->i32{match Ok(1){Ok(v)=>v,Err(e)=>0}}",
+        ),
+        (
+            "match_early_return",
+            "fn f(x:Result<i32,i32>)->i32{match x{Ok(v)=>{return v;},Err(e)=>e}} fn main()->i32{f(Ok(7))}",
+        ),
         (
             "generic_pair_i32",
             "struct Pair<T>{left:T,right:T} fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)} fn main()->Pair<i32>{flip(Pair(1,2))}",
