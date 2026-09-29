@@ -204,6 +204,14 @@ fn eval(
 ) -> Result<Flow, Diagnostic> {
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
+        ExprKind::Neg(inner) => {
+            let Value::I32(value) = take_value!(eval(inner, env, program, depth, runtime)) else {
+                return Err(Diagnostic::new("E204", expr.span, "invalid negation value"));
+            };
+            Value::I32(value.checked_neg().ok_or_else(|| {
+                Diagnostic::new("E201", expr.span, "integer overflow or division by zero")
+            })?)
+        }
         ExprKind::Bool(value) => Value::Bool(*value),
         ExprKind::String(value) => Value::String(value.clone()),
         ExprKind::Variant(name, variant, payload) => {

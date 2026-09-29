@@ -41,6 +41,9 @@ fn __tok_add(a: i32, b: i32, line: usize, column: usize) -> i32 {
 fn __tok_sub(a: i32, b: i32, line: usize, column: usize) -> i32 {
     a.checked_sub(b).unwrap_or_else(|| __tok_fail(line, column))
 }
+fn __tok_neg(a: i32, line: usize, column: usize) -> i32 {
+    a.checked_neg().unwrap_or_else(|| __tok_fail(line, column))
+}
 fn __tok_mul(a: i32, b: i32, line: usize, column: usize) -> i32 {
     a.checked_mul(b).unwrap_or_else(|| __tok_fail(line, column))
 }
@@ -294,6 +297,13 @@ fn emit_array_borrow(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> 
 fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
+        ExprKind::Neg(value) => {
+            let (line, column) = location(source, expr.span);
+            format!(
+                "__tok_neg({},{line},{column})",
+                emit_expr(value, source, types)
+            )
+        }
         ExprKind::Bool(value) => value.to_string(),
         ExprKind::String(value) => format!("{:?}.to_owned()", value),
         ExprKind::Variant(name, variant, payload) => {

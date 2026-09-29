@@ -465,11 +465,19 @@ impl Parser {
         let token = self.bump();
         match token.kind {
             Kind::Minus => {
-                let (number, span) = self.negative_literal(token.span)?;
-                Ok(Expr {
-                    kind: ExprKind::Int(number),
-                    span,
-                })
+                if self.at(&Kind::Int(String::new())) {
+                    let (number, span) = self.negative_literal(token.span)?;
+                    Ok(Expr {
+                        kind: ExprKind::Int(number),
+                        span,
+                    })
+                } else {
+                    let value = self.expr(5)?;
+                    Ok(Expr {
+                        span: token.span.join(value.span),
+                        kind: ExprKind::Neg(Box::new(value)),
+                    })
+                }
             }
             Kind::Int(value) => {
                 let number = value

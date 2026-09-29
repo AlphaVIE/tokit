@@ -25,7 +25,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
           | "break" ";" | "continue" ";"
           | "return" expression ";"
           | expression ";" ;
-expression = integer | "-" integer | string | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | "-" integer | "-" expression | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
            | "Some" "(" expression ")" | "None"
@@ -51,7 +51,7 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 `Option<T>` represents a present value with `Some(value)` or an absent value with `None`; there is no unrestricted null value. `None` gets its element type from a declared return, binding, field, or another expression. Matching an untyped bare `None` reports `E115`. A match on `Option<T>` must cover both `Some(binding)` and `None`, either explicitly or with a final `_` arm. `Option<T>` has an inline value layout, so directly recursive records or enums through `Option` report `E112`; arrays and tasks provide indirection. `?` currently applies only to `Result`, not `Option`.
 
-`i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`, including `-2147483648`; the minus sign and digits of a negative literal must be adjacent. General unary negation of a computed expression is not yet supported. These are prototype limitations, not final numeric semantics.
+`i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`, including `-2147483648`; the minus sign and digits of a negative literal must be adjacent. Unary `-` also negates a computed `i32` expression with higher precedence than multiplication and reports `E201` for `i32::MIN`. These are prototype choices, not final numeric semantics.
 
 Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
 

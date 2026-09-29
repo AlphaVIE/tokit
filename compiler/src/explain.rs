@@ -46,6 +46,10 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             visit(index, facts);
         }
         ExprKind::Field(value, _) => visit(value, facts),
+        ExprKind::Neg(value) => {
+            facts.operations.insert("arithmetic or concatenation");
+            visit(value, facts);
+        }
         ExprKind::Ok(value) | ExprKind::Err(value) | ExprKind::Some(value) => visit(value, facts),
         ExprKind::Try(value) => {
             facts.operations.insert("error propagation");
