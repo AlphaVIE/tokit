@@ -78,6 +78,12 @@ impl Parser {
                 self.expect(Kind::Gt)?;
                 Ok(Type::Result(Box::new(ok), Box::new(err)))
             }
+            "Option" => {
+                self.expect(Kind::Lt)?;
+                let element = self.ty()?;
+                self.expect(Kind::Gt)?;
+                Ok(Type::Option(Box::new(element)))
+            }
             "Task" => {
                 self.expect(Kind::Lt)?;
                 let result = self.ty()?;
@@ -397,20 +403,25 @@ impl Parser {
                 kind: ExprKind::Bool(token.kind == Kind::True),
                 span: token.span,
             }),
-            Kind::Ok | Kind::Err => {
+            Kind::Ok | Kind::Err | Kind::Some => {
                 self.expect(Kind::LParen)?;
                 let inner = self.expr(0)?;
                 let end = self.expect(Kind::RParen)?.span;
-                let kind = if token.kind == Kind::Ok {
-                    ExprKind::Ok(Box::new(inner))
-                } else {
-                    ExprKind::Err(Box::new(inner))
+                let kind = match token.kind {
+                    Kind::Ok => ExprKind::Ok(Box::new(inner)),
+                    Kind::Err => ExprKind::Err(Box::new(inner)),
+                    Kind::Some => ExprKind::Some(Box::new(inner)),
+                    _ => unreachable!(),
                 };
                 Ok(Expr {
                     kind,
                     span: token.span.join(end),
                 })
             }
+            Kind::None => Ok(Expr {
+                kind: ExprKind::None,
+                span: token.span,
+            }),
             Kind::Ident(name) => {
                 if self.at(&Kind::ColonColon) {
                     self.bump();
@@ -536,17 +547,19 @@ impl Parser {
         let (kind, span) = match token.kind {
             Kind::True => (PatternKind::Bool(true), token.span),
             Kind::False => (PatternKind::Bool(false), token.span),
-            Kind::Ok | Kind::Err => {
+            Kind::Ok | Kind::Err | Kind::Some => {
                 self.expect(Kind::LParen)?;
                 let (name, _) = self.ident()?;
                 let end = self.expect(Kind::RParen)?.span;
-                let kind = if token.kind == Kind::Ok {
-                    PatternKind::Ok(name)
-                } else {
-                    PatternKind::Err(name)
+                let kind = match token.kind {
+                    Kind::Ok => PatternKind::Ok(name),
+                    Kind::Err => PatternKind::Err(name),
+                    Kind::Some => PatternKind::Some(name),
+                    _ => unreachable!(),
                 };
                 (kind, token.span.join(end))
             }
+            Kind::None => (PatternKind::None, token.span),
             Kind::Ident(name) => {
                 self.expect(Kind::ColonColon)?;
                 let (variant, end) = self.ident()?;

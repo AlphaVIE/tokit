@@ -13,7 +13,8 @@ enum-variant = identifier ("(" type ")")? ;
 generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
 type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
-         | "Result" "<" type "," type ">" | "Task" "<" type ">" | identifier
+         | "Result" "<" type "," type ">" | "Option" "<" type ">"
+         | "Task" "<" type ">" | identifier
          | identifier "<" type ("," type)* ">" ;
 block    = "{" statement* expression? "}" ;
 statement = ("let" | "var") identifier ":" type "=" expression ";"
@@ -24,6 +25,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
 expression = integer | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
+           | "Some" "(" expression ")" | "None"
            | identifier "(" arguments? ")"
            | "spawn" identifier "(" arguments? ")"
            | "(" expression ")" | block
@@ -32,6 +34,7 @@ expression = integer | string | "true" | "false" | identifier | "[" arguments? "
            | expression "?" | expression "[" expression "]" | expression "." identifier
            | expression binary-op expression ;
 pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
+        | "Some" "(" identifier ")" | "None"
         | identifier "::" identifier ("(" identifier ")")? | "true" | "false" ;
 binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
@@ -39,6 +42,8 @@ binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 Binary operators use normal arithmetic precedence, with equality below comparisons. Blocks return their final expression; a block without a final expression has type `Unit`. `return` exits the current function, including from a loop. `if` requires `else`, and both branches must have compatible types. Functions may call later functions and recurse. Local bindings require explicit types. `let` is immutable and `var` permits reassignment; shadowing an outer binding in a nested block is currently permitted, while duplicate names in one block are rejected. Arrays are homogeneous and can be empty when an expected array type provides context. `for` iterates over an array value; its loop variable is scoped to one iteration. Arrays are copied as values in this interpreter. Postfix `array[index]` reads an element; the index is `i32`, and negative or out-of-range indices report `E205`. Mutation of array elements and append are not yet supported.
 
 `Result<T,E>` is a typed success/error value. `Ok(value)` and `Err(value)` produce the corresponding variant; the missing side of each constructor is inferred from the expected type or the other branch. Postfix `?` unwraps `Ok` and immediately returns `Err` from the current function. The enclosing function must return a `Result` with a compatible error type. Normal errors are values, while checked arithmetic failures still use the prototype's runtime diagnostic `E201`; unifying these models remains an open semantic decision.
+
+`Option<T>` represents a present value with `Some(value)` or an absent value with `None`; there is no unrestricted null value. `None` gets its element type from a declared return, binding, field, or another expression. Matching an untyped bare `None` reports `E115`. A match on `Option<T>` must cover both `Some(binding)` and `None`. `Option<T>` has an inline value layout, so directly recursive records or enums through `Option` report `E112`; arrays and tasks provide indirection. `?` currently applies only to `Result`, not `Option`.
 
 `i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`. This subset has no unary minus, so negative literals cannot currently be written directly; subtraction can produce negative values. These are prototype limitations, not final numeric semantics.
 

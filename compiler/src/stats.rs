@@ -31,7 +31,9 @@ impl Stats {
 fn count_type(ty: &Type, nodes: &mut usize) {
     *nodes += 1;
     match ty {
-        Type::Array(element) | Type::Task(element) => count_type(element, nodes),
+        Type::Array(element) | Type::Option(element) | Type::Task(element) => {
+            count_type(element, nodes)
+        }
         Type::Result(ok, err) => {
             count_type(ok, nodes);
             count_type(err, nodes);
@@ -48,7 +50,11 @@ fn count_type(ty: &Type, nodes: &mut usize) {
 fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
     *nodes += 1;
     match &expr.kind {
-        ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => {}
+        ExprKind::Int(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Var(_)
+        | ExprKind::None => {}
         ExprKind::Variant(_, _, payload) => {
             *ops += 1;
             if let Some(payload) = payload {
@@ -69,6 +75,7 @@ fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
         ExprKind::Field(value, _)
         | ExprKind::Ok(value)
         | ExprKind::Err(value)
+        | ExprKind::Some(value)
         | ExprKind::Try(value) => {
             *ops += 1;
             count_expr(value, nodes, ops);

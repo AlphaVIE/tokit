@@ -22,6 +22,8 @@ pub enum Kind {
     False,
     Ok,
     Err,
+    Some,
+    None,
     LParen,
     RParen,
     LBrace,
@@ -94,6 +96,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "false" => Kind::False,
                 "Ok" => Kind::Ok,
                 "Err" => Kind::Err,
+                "Some" => Kind::Some,
+                "None" => Kind::None,
                 name => Kind::Ident(name.to_owned()),
             }
         } else if bytes[i] == b'"' {

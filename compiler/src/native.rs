@@ -26,6 +26,11 @@ impl<T: __TokRender, E: __TokRender> __TokRender for Result<T, E> {
         match self { Ok(x) => format!("Ok({})", x.tok_render()), Err(x) => format!("Err({})", x.tok_render()) }
     }
 }
+impl<T: __TokRender> __TokRender for Option<T> {
+    fn tok_render(&self) -> String {
+        match self { Some(x) => format!("Some({})", x.tok_render()), None => "None".to_owned() }
+    }
+}
 fn __tok_fail(line: usize, column: usize) -> ! {
     eprintln!("E201@{}:{} integer overflow or division by zero", line, column);
     std::process::exit(1)
@@ -154,6 +159,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Param(name) => user_name(name),
         Type::Unit => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
+        Type::Option(element) => format!("Option<{}>", rust_type(element)),
         Type::Task(result) => format!("__TokTask<{}>", rust_type(result)),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
         Type::Never => "!".to_owned(),
@@ -183,6 +189,7 @@ fn rust_type_fallback(ty: &Type) -> String {
     match ty {
         Type::Never => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type_fallback(element)),
+        Type::Option(element) => format!("Option<{}>", rust_type_fallback(element)),
         Type::Task(result) => format!("__TokTask<{}>", rust_type_fallback(result)),
         Type::Result(ok, err) => format!(
             "Result<{},{}>",
@@ -245,6 +252,8 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         }
         ExprKind::Ok(inner) => format!("Ok({})", emit_expr(inner, source, types)),
         ExprKind::Err(inner) => format!("Err({})", emit_expr(inner, source, types)),
+        ExprKind::Some(inner) => format!("Some({})", emit_expr(inner, source, types)),
+        ExprKind::None => "None".to_owned(),
         ExprKind::Try(inner) => format!("({}?)", emit_expr(inner, source, types)),
         ExprKind::Var(name) => format!("{}.clone()", user_name(name)),
         ExprKind::Call(name, args) => {
@@ -329,6 +338,8 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                     let pattern = match &pattern.kind {
                         PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
                         PatternKind::Err(name) => format!("Err({})", user_name(name)),
+                        PatternKind::Some(name) => format!("Some({})", user_name(name)),
+                        PatternKind::None => "None".to_owned(),
                         PatternKind::Bool(value) => value.to_string(),
                         PatternKind::Variant(name, variant, binding) => {
                             let prefix = enum_path(name, variant);
@@ -344,7 +355,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 .join(",");
             let matched = emit_expr(value, source, types);
             let matched = match types.get(&value.span) {
-                Some(ty @ Type::Result(_, _)) => {
+                Some(ty @ (Type::Result(_, _) | Type::Option(_))) => {
                     format!(
                         "{{ let __tok_matched: {} = {matched}; __tok_matched }}",
                         rust_type_fallback(ty)

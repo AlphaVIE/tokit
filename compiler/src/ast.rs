@@ -24,6 +24,7 @@ pub enum Type {
     Unit,
     Never,
     Array(Box<Type>),
+    Option(Box<Type>),
     Task(Box<Type>),
     EmptyArray,
     Result(Box<Type>, Box<Type>),
@@ -50,6 +51,7 @@ impl std::fmt::Display for Type {
             Self::Unit => "Unit",
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
+            Self::Option(element) => return write!(f, "Option<{element}>"),
             Self::Task(result) => return write!(f, "Task<{result}>"),
             Self::EmptyArray => "empty array",
             Self::Result(ok, err) => return write!(f, "Result<{ok},{err}>"),
@@ -82,6 +84,8 @@ pub struct Expr {
 pub enum PatternKind {
     Ok(String),
     Err(String),
+    Some(String),
+    None,
     Variant(String, String, Option<String>),
     Bool(bool),
 }
@@ -103,6 +107,8 @@ pub enum ExprKind {
     Variant(String, String, Option<Box<Expr>>),
     Ok(Box<Expr>),
     Err(Box<Expr>),
+    Some(Box<Expr>),
+    None,
     Try(Box<Expr>),
     Var(String),
     Binary(Box<Expr>, Op, Box<Expr>),

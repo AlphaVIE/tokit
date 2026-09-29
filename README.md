@@ -9,3 +9,5 @@ An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can pa
 An [experimental filesystem-read capability](spec/FILESYSTEM_CAPABILITY.md) lets `tok run --allow-read examples examples/line_count.tok` process UTF-8 files with explicit access to a path.
 
 An experimental typed task primitive lets `spawn f(args)` start a pure function and `join(task)` recover its result. See [the task example](examples/task_square.tok) and [subset contract](spec/EXPERIMENTAL_SUBSET.md).
+
+`Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.

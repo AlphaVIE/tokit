@@ -35,6 +35,7 @@ fn native_output_matches_reference_interpreter() {
         "match_result",
         "payload_enum",
         "record",
+        "option_lookup",
         "task_square",
     ] {
         let source =

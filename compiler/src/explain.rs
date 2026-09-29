@@ -15,7 +15,11 @@ struct Facts {
 
 fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
-        ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => {}
+        ExprKind::Int(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Var(_)
+        | ExprKind::None => {}
         ExprKind::Variant(_, _, payload) => {
             if let Some(payload) = payload {
                 visit(payload, facts);
@@ -32,7 +36,7 @@ fn visit(expr: &Expr, facts: &mut Facts) {
             visit(index, facts);
         }
         ExprKind::Field(value, _) => visit(value, facts),
-        ExprKind::Ok(value) | ExprKind::Err(value) => visit(value, facts),
+        ExprKind::Ok(value) | ExprKind::Err(value) | ExprKind::Some(value) => visit(value, facts),
         ExprKind::Try(value) => {
             facts.operations.insert("error propagation");
             visit(value, facts);
