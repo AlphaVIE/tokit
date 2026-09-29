@@ -1,0 +1,6 @@
+// BENCH_START
+enum DivError{DivZero}
+fn divide(a:i32,b:i32)->Result<i32,DivError>{
+  if b==0{Err(DivError::DivZero)}else{Ok(a/b)}
+}
+// BENCH_END
