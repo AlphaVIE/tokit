@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::{
     EnumVariant, Expr, ExprKind, Op, Pattern, PatternKind, Program, Span, Stmt, Type,
 };
+use crate::builtins;
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone)]
@@ -28,10 +29,46 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     let mut types = HashMap::new();
     let mut record_names = HashSet::new();
     let mut arities = HashMap::new();
+    let io_error = builtins::io_error_decl();
+    record_names.insert(io_error.name.clone());
+    arities.insert(io_error.name.clone(), 0);
+    signatures.insert(
+        io_error.name.clone(),
+        Signature {
+            type_params: Vec::new(),
+            params: Vec::new(),
+            ret: Type::Named(io_error.name),
+            fields: None,
+            variants: Some(io_error.variants),
+        },
+    );
+    for (name, params, ret) in [
+        (
+            builtins::READ_TEXT,
+            vec![Type::String],
+            builtins::read_text_result(),
+        ),
+        (
+            builtins::LINES,
+            vec![Type::String],
+            Type::Array(Box::new(Type::String)),
+        ),
+    ] {
+        signatures.insert(
+            name.to_owned(),
+            Signature {
+                type_params: Vec::new(),
+                params,
+                ret,
+                fields: None,
+                variants: None,
+            },
+        );
+    }
     for record in &program.records {
         if matches!(
             record.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result"
+            "i32" | "bool" | "String" | "Unit" | "Result" | "read_text" | "lines"
         ) || !record_names.insert(record.name.clone())
         {
             return Err(Diagnostic::new(
@@ -45,7 +82,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     for enum_decl in &program.enums {
         if matches!(
             enum_decl.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result"
+            "i32" | "bool" | "String" | "Unit" | "Result" | "read_text" | "lines"
         ) || !record_names.insert(enum_decl.name.clone())
         {
             return Err(Diagnostic::new(

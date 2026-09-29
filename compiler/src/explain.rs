@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::ast::{Expr, ExprKind, Op, Program, Stmt};
+use crate::builtins;
 
 #[derive(Default)]
 struct Facts {
@@ -44,6 +45,11 @@ fn visit(expr: &Expr, facts: &mut Facts) {
             visit(right, facts);
         }
         ExprKind::Call(name, args) => {
+            if name == builtins::READ_TEXT {
+                facts.operations.insert("filesystem read (requires grant)");
+            } else if name == builtins::LINES {
+                facts.operations.insert("line splitting");
+            }
             if facts.record_names.contains(name) {
                 facts.constructors.insert(name.clone());
             } else {

@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::ast::{Expr, ExprKind, Function, Op, PatternKind, Program, Span, Stmt};
+use crate::builtins;
 use crate::diagnostic::Diagnostic;
+use crate::filesystem::ReadPolicy;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
@@ -75,6 +78,11 @@ macro_rules! take_value {
 }
 
 pub fn run(program: &Program) -> Result<Value, Diagnostic> {
+    run_with_read_root(program, None)
+}
+
+pub fn run_with_read_root(program: &Program, root: Option<&Path>) -> Result<Value, Diagnostic> {
+    let policy = ReadPolicy::from_root(root);
     let main = program
         .functions
         .iter()
@@ -89,7 +97,7 @@ pub fn run(program: &Program) -> Result<Value, Diagnostic> {
             "main must have no parameters or type parameters",
         ));
     }
-    invoke(program, main, Vec::new(), 0)
+    invoke(program, main, Vec::new(), 0, &policy)
 }
 
 fn invoke(
@@ -97,6 +105,7 @@ fn invoke(
     function: &Function,
     args: Vec<Value>,
     depth: usize,
+    policy: &ReadPolicy,
 ) -> Result<Value, Diagnostic> {
     if depth >= MAX_CALL_DEPTH {
         return Err(Diagnostic::new(
@@ -111,19 +120,27 @@ fn invoke(
         .zip(args)
         .map(|((name, _), value)| (name.clone(), Rc::new(RefCell::new(value))))
         .collect();
-    match eval(&function.body, &env, program, depth)? {
+    match eval(&function.body, &env, program, depth, policy)? {
         Flow::Value(value) | Flow::Return(value) => Ok(value),
     }
 }
 
-fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow, Diagnostic> {
+fn eval(
+    expr: &Expr,
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    policy: &ReadPolicy,
+) -> Result<Flow, Diagnostic> {
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
         ExprKind::String(value) => Value::String(value.clone()),
         ExprKind::Variant(name, variant, payload) => {
             let payload = match payload {
-                Some(value) => Some(Box::new(take_value!(eval(value, env, program, depth)))),
+                Some(value) => Some(Box::new(take_value!(eval(
+                    value, env, program, depth, policy
+                )))),
                 None => None,
             };
             Value::Enum(name.clone(), variant.clone(), payload)
@@ -131,13 +148,13 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
         ExprKind::Array(items) => {
             let mut values = Vec::new();
             for item in items {
-                values.push(take_value!(eval(item, env, program, depth)));
+                values.push(take_value!(eval(item, env, program, depth, policy)));
             }
             Value::Array(values)
         }
         ExprKind::Index(array, index) => {
-            let values = take_value!(eval(array, env, program, depth));
-            let position = take_value!(eval(index, env, program, depth));
+            let values = take_value!(eval(array, env, program, depth, policy));
+            let position = take_value!(eval(index, env, program, depth, policy));
             let (Value::Array(values), Value::I32(position)) = (values, position) else {
                 return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
             };
@@ -148,7 +165,7 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
         }
         ExprKind::Field(value, field) => {
-            let value = take_value!(eval(value, env, program, depth));
+            let value = take_value!(eval(value, env, program, depth, policy));
             let Value::Record(_, fields) = value else {
                 return Err(Diagnostic::new(
                     "E204",
@@ -162,10 +179,14 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 .map(|(_, value)| value)
                 .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?
         }
-        ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(inner, env, program, depth)))),
-        ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(inner, env, program, depth)))),
+        ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(
+            inner, env, program, depth, policy
+        )))),
+        ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(
+            inner, env, program, depth, policy
+        )))),
         ExprKind::Try(inner) => {
-            let value = take_value!(eval(inner, env, program, depth));
+            let value = take_value!(eval(inner, env, program, depth, policy));
             match value {
                 Value::Ok(value) => *value,
                 Value::Err(value) => return Ok(Flow::Return(Value::Err(value))),
@@ -186,14 +207,37 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 })?
         }
         ExprKind::Binary(left, op, right) => {
-            let left = take_value!(eval(left, env, program, depth));
-            let right = take_value!(eval(right, env, program, depth));
+            let left = take_value!(eval(left, env, program, depth, policy));
+            let right = take_value!(eval(right, env, program, depth, policy));
             binary(left, *op, right, expr.span)?
         }
         ExprKind::Call(name, args) => {
             let mut values = Vec::new();
             for arg in args {
-                values.push(take_value!(eval(arg, env, program, depth)));
+                values.push(take_value!(eval(arg, env, program, depth, policy)));
+            }
+            if name == builtins::READ_TEXT {
+                let [Value::String(path)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid read_text call"));
+                };
+                return Ok(Flow::Value(match policy.read_text(path) {
+                    Ok(value) => Value::Ok(Box::new(Value::String(value))),
+                    Err(error) => Value::Err(Box::new(Value::Enum(
+                        builtins::IO_ERROR.to_owned(),
+                        error.variant().to_owned(),
+                        None,
+                    ))),
+                }));
+            }
+            if name == builtins::LINES {
+                let [Value::String(text)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid lines call"));
+                };
+                return Ok(Flow::Value(Value::Array(
+                    text.lines()
+                        .map(|line| Value::String(line.to_owned()))
+                        .collect(),
+                )));
             }
             if let Some(record) = program.records.iter().find(|record| record.name == *name) {
                 return Ok(Flow::Value(Value::Record(
@@ -217,19 +261,19 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                         format!("unresolved runtime function {name}"),
                     )
                 })?;
-            invoke(program, function, values, depth + 1)?
+            invoke(program, function, values, depth + 1, policy)?
         }
         ExprKind::If(condition, yes, no) => {
-            let condition = take_value!(eval(condition, env, program, depth));
+            let condition = take_value!(eval(condition, env, program, depth, policy));
             let branch = if condition == Value::Bool(true) {
                 yes
             } else {
                 no
             };
-            return eval(branch, env, program, depth);
+            return eval(branch, env, program, depth, policy);
         }
         ExprKind::Match(value, arms) => {
-            let scrutinee = take_value!(eval(value, env, program, depth));
+            let scrutinee = take_value!(eval(value, env, program, depth, policy));
             for (pattern, body) in arms {
                 let binding = match (&pattern.kind, &scrutinee) {
                     (PatternKind::Ok(name), Value::Ok(value)) => {
@@ -258,7 +302,7 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                     if let Some((name, value)) = binding {
                         scope.insert(name, Rc::new(RefCell::new(value)));
                     }
-                    return eval(body, &scope, program, depth);
+                    return eval(body, &scope, program, depth, policy);
                 }
             }
             return Err(Diagnostic::new(
@@ -272,11 +316,11 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
             for stmt in stmts {
                 match stmt {
                     Stmt::Let { name, value, .. } => {
-                        let value = take_value!(eval(value, &scope, program, depth));
+                        let value = take_value!(eval(value, &scope, program, depth, policy));
                         scope.insert(name.clone(), Rc::new(RefCell::new(value)));
                     }
                     Stmt::Assign { name, value, span } => {
-                        let value = take_value!(eval(value, &scope, program, depth));
+                        let value = take_value!(eval(value, &scope, program, depth, policy));
                         let cell = scope.get(name).ok_or_else(|| {
                             Diagnostic::new(
                                 "E204",
@@ -292,27 +336,27 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                         body,
                         span,
                     } => {
-                        let iterable = take_value!(eval(iterable, &scope, program, depth));
+                        let iterable = take_value!(eval(iterable, &scope, program, depth, policy));
                         let Value::Array(values) = iterable else {
                             return Err(Diagnostic::new("E204", *span, "invalid runtime iterable"));
                         };
                         for value in values {
                             let mut loop_scope = scope.clone();
                             loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
-                            take_value!(eval(body, &loop_scope, program, depth));
+                            take_value!(eval(body, &loop_scope, program, depth, policy));
                         }
                     }
                     Stmt::Return { value, .. } => {
-                        let value = take_value!(eval(value, &scope, program, depth));
+                        let value = take_value!(eval(value, &scope, program, depth, policy));
                         return Ok(Flow::Return(value));
                     }
                     Stmt::Expr(value) => {
-                        take_value!(eval(value, &scope, program, depth));
+                        take_value!(eval(value, &scope, program, depth, policy));
                     }
                 }
             }
             if let Some(tail) = tail {
-                return eval(tail, &scope, program, depth);
+                return eval(tail, &scope, program, depth, policy);
             }
             Value::Unit
         }

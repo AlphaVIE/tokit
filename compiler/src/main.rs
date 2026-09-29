@@ -1,4 +1,4 @@
-use std::{env, fs, process};
+use std::{env, fs, path::Path, process};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -44,6 +44,26 @@ fn main() {
         }
         return;
     }
+    if let [_, command, flag, root, path] = args.as_slice()
+        && command == "run"
+        && flag == "--allow-read"
+    {
+        let source = match fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("could not read {path}: {error}");
+                process::exit(2);
+            }
+        };
+        match tokit_compiler::run_with_read_root(&source, Path::new(root)) {
+            Ok(value) => println!("{value}"),
+            Err(diagnostic) => {
+                eprintln!("{}", diagnostic.display(&source));
+                process::exit(1);
+            }
+        }
+        return;
+    }
     if let [_, command, path, flag, output] = args.as_slice()
         && command == "build"
         && flag == "-o"
@@ -80,7 +100,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: tok <check|run> [--json] <file.tok> | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok <check|run> [--json] <file.tok> | tok run --allow-read <path> <file.tok> | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
