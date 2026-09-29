@@ -14,6 +14,7 @@ pub enum Kind {
     For,
     In,
     If,
+    Match,
     Else,
     Return,
     True,
@@ -31,6 +32,7 @@ pub enum Kind {
     Comma,
     Semicolon,
     Arrow,
+    FatArrow,
     Plus,
     Minus,
     Star,
@@ -83,6 +85,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "for" => Kind::For,
                 "in" => Kind::In,
                 "if" => Kind::If,
+                "match" => Kind::Match,
                 "else" => Kind::Else,
                 "return" => Kind::Return,
                 "true" => Kind::True,
@@ -164,6 +167,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                     Kind::Arrow
                 }
                 b'-' => Kind::Minus,
+                b'=' if bytes.get(i) == Some(&b'>') => {
+                    i += 1;
+                    Kind::FatArrow
+                }
                 b'=' if bytes.get(i) == Some(&b'=') => {
                     i += 1;
                     Kind::EqEq

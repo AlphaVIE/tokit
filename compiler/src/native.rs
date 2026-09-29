@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ast::{Expr, ExprKind, Op, Program, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, Op, PatternKind, Program, Span, Stmt, Type};
 use crate::diagnostic::Diagnostic;
 
 const PRELUDE: &str = r#"trait __TokRender { fn tok_render(&self) -> String; }
@@ -202,6 +202,34 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
             emit_expr(yes, source, types),
             emit_expr(no, source, types)
         ),
+        ExprKind::Match(value, arms) => {
+            let arms = arms
+                .iter()
+                .map(|(pattern, body)| {
+                    let pattern = match &pattern.kind {
+                        PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
+                        PatternKind::Err(name) => format!("Err({})", user_name(name)),
+                        PatternKind::Bool(value) => value.to_string(),
+                        PatternKind::Variant(name, variant) => {
+                            format!("{}::{}", user_name(name), user_name(variant))
+                        }
+                    };
+                    format!("{pattern} => {}", emit_expr(body, source, types))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let matched = emit_expr(value, source, types);
+            let matched = match types.get(&value.span) {
+                Some(ty @ Type::Result(_, _)) => {
+                    format!(
+                        "{{ let __tok_matched: {} = {matched}; __tok_matched }}",
+                        rust_type_fallback(ty)
+                    )
+                }
+                _ => matched,
+            };
+            format!("(match {matched} {{ {arms} }})")
+        }
         ExprKind::Block(stmts, tail) => {
             let mut out = String::from("{\n");
             for stmt in stmts {
