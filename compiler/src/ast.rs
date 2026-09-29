@@ -67,6 +67,7 @@ pub enum ExprKind {
     Bool(bool),
     String(String),
     Array(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
     Ok(Box<Expr>),
     Err(Box<Expr>),
     Try(Box<Expr>),

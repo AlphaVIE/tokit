@@ -109,6 +109,18 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
             }
             Value::Array(values)
         }
+        ExprKind::Index(array, index) => {
+            let values = take_value!(eval(array, env, program, depth));
+            let position = take_value!(eval(index, env, program, depth));
+            let (Value::Array(values), Value::I32(position)) = (values, position) else {
+                return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
+            };
+            usize::try_from(position)
+                .ok()
+                .and_then(|position| values.get(position))
+                .cloned()
+                .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
+        }
         ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(inner, env, program, depth)))),
         ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(inner, env, program, depth)))),
         ExprKind::Try(inner) => {

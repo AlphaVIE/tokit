@@ -204,6 +204,17 @@ impl Parser {
     fn expr(&mut self, min_prec: u8) -> Result<Expr, Diagnostic> {
         let mut left = self.atom()?;
         loop {
+            if self.at(&Kind::LBracket) {
+                self.bump();
+                let index = self.expr(0)?;
+                let end = self.expect(Kind::RBracket)?.span;
+                let span = left.span.join(end);
+                left = Expr {
+                    kind: ExprKind::Index(Box::new(left), Box::new(index)),
+                    span,
+                };
+                continue;
+            }
             if self.at(&Kind::Question) {
                 let end = self.bump().span;
                 let span = left.span.join(end);

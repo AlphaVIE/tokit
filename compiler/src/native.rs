@@ -41,6 +41,12 @@ fn __tok_mul(a: i32, b: i32, line: usize, column: usize) -> i32 {
 fn __tok_div(a: i32, b: i32, line: usize, column: usize) -> i32 {
     a.checked_div(b).unwrap_or_else(|| __tok_fail(line, column))
 }
+fn __tok_index<T: Clone>(values: Vec<T>, index: i32, line: usize, column: usize) -> T {
+    usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
+        eprintln!("E205@{}:{} array index out of bounds", line, column);
+        std::process::exit(1)
+    })
+}
 thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 struct __TokDepthGuard;
 impl __TokDepthGuard {
@@ -114,6 +120,14 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 .collect::<Vec<_>>()
                 .join(",")
         ),
+        ExprKind::Index(array, index) => {
+            let (line, column) = location(source, expr.span);
+            format!(
+                "__tok_index({},{},{line},{column})",
+                emit_expr(array, source, types),
+                emit_expr(index, source, types)
+            )
+        }
         ExprKind::Ok(inner) => format!("Ok({})", emit_expr(inner, source, types)),
         ExprKind::Err(inner) => format!("Err({})", emit_expr(inner, source, types)),
         ExprKind::Try(inner) => format!("({}?)", emit_expr(inner, source, types)),
