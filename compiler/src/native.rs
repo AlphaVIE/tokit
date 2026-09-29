@@ -13,6 +13,7 @@ use crate::diagnostic::Diagnostic;
 const PRELUDE: &str = r#"trait __TokRender { fn tok_render(&self) -> String; }
 impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
 impl __TokRender for bool { fn tok_render(&self) -> String { self.to_string() } }
+impl __TokRender for String { fn tok_render(&self) -> String { format!("{:?}", self) } }
 impl __TokRender for () { fn tok_render(&self) -> String { "()".to_owned() } }
 impl<T: __TokRender> __TokRender for Vec<T> {
     fn tok_render(&self) -> String {
@@ -63,6 +64,7 @@ fn rust_type(ty: &Type) -> String {
     match ty {
         Type::I32 => "i32".to_owned(),
         Type::Bool => "bool".to_owned(),
+        Type::String => "String".to_owned(),
         Type::Unit => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
@@ -103,6 +105,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::Bool(value) => value.to_string(),
+        ExprKind::String(value) => format!("{:?}.to_owned()", value),
         ExprKind::Array(values) => format!(
             "vec![{}]",
             values
@@ -124,9 +127,13 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 .join(",")
         ),
         ExprKind::Binary(left, op, right) => {
+            let left_type = types.get(&left.span);
             let left = emit_expr(left, source, types);
             let right = emit_expr(right, source, types);
             match op {
+                Op::Add if left_type == Some(&Type::String) => {
+                    format!("({left} + &{right})")
+                }
                 Op::Add | Op::Sub | Op::Mul | Op::Div => {
                     let helper = match op {
                         Op::Add => "add",

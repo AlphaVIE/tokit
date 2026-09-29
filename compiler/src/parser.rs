@@ -60,6 +60,7 @@ impl Parser {
         match name.as_str() {
             "i32" => Ok(Type::I32),
             "bool" => Ok(Type::Bool),
+            "String" => Ok(Type::String),
             "Unit" => Ok(Type::Unit),
             "Result" => {
                 self.expect(Kind::Lt)?;
@@ -251,6 +252,10 @@ impl Parser {
                     span: token.span,
                 })
             }
+            Kind::String(value) => Ok(Expr {
+                kind: ExprKind::String(value),
+                span: token.span,
+            }),
             Kind::True | Kind::False => Ok(Expr {
                 kind: ExprKind::Bool(token.kind == Kind::True),
                 span: token.span,
