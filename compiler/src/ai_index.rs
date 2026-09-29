@@ -1,0 +1,149 @@
+//! Compact, deterministic facts from a checked single-file Tokit program.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
+
+use crate::ast::{Program, Span, Type};
+use crate::diagnostic::escape_json;
+use crate::explain::{Facts, visit};
+
+fn string(value: &str) -> String {
+    format!("\"{}\"", escape_json(value))
+}
+
+fn strings<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
+    format!(
+        "[{}]",
+        values.into_iter().map(string).collect::<Vec<_>>().join(",")
+    )
+}
+
+fn span(span: Span) -> String {
+    format!("[{},{}]", span.start, span.end)
+}
+
+fn fields(fields: &[(String, Type)]) -> String {
+    format!(
+        "[{}]",
+        fields
+            .iter()
+            .map(|(name, ty)| format!("[{},{}]", string(name), string(&ty.to_string())))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+/// Return a source-order JSON index. Call only after static checking succeeds.
+pub fn index(program: &Program) -> String {
+    let record_names = program
+        .records
+        .iter()
+        .map(|record| record.name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut entries = Vec::new();
+    for function in &program.functions {
+        let mut facts = Facts::with_records(record_names.clone());
+        visit(&function.body, &mut facts);
+        entries.push((function, facts));
+    }
+
+    // A fixed point handles recursion and mutually recursive call cycles.
+    let mut effects = entries
+        .iter()
+        .map(|(function, facts)| (function.name.clone(), facts.effects.clone()))
+        .collect::<BTreeMap<_, _>>();
+    loop {
+        let previous = effects.clone();
+        for (function, facts) in &entries {
+            let mut reachable = facts.effects.clone();
+            for callee in &facts.calls {
+                if let Some(callee_effects) = previous.get(callee) {
+                    reachable.extend(callee_effects);
+                }
+            }
+            effects.insert(function.name.clone(), reachable);
+        }
+        if effects == previous {
+            break;
+        }
+    }
+
+    let mut out = String::from("{\"version\":1,\"records\":[");
+    for (index, record) in program.records.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        write!(
+            out,
+            "{{\"name\":{},\"span\":{},\"params\":{},\"fields\":{}}}",
+            string(&record.name),
+            span(record.span),
+            strings(record.type_params.iter().map(String::as_str)),
+            fields(&record.fields)
+        )
+        .expect("writing to String cannot fail");
+    }
+    out.push_str("],\"enums\":[");
+    for (index, decl) in program.enums.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let variants = decl
+            .variants
+            .iter()
+            .map(|variant| {
+                format!(
+                    "[{},{}]",
+                    string(&variant.name),
+                    variant
+                        .payload
+                        .as_ref()
+                        .map(|ty| string(&ty.to_string()))
+                        .unwrap_or_else(|| "null".to_owned())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        write!(
+            out,
+            "{{\"name\":{},\"span\":{},\"variants\":[{}]}}",
+            string(&decl.name),
+            span(decl.span),
+            variants
+        )
+        .expect("writing to String cannot fail");
+    }
+    out.push_str("],\"functions\":[");
+    for (index, (function, facts)) in entries.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let calls = facts
+            .calls
+            .iter()
+            .filter(|name| effects.contains_key(*name))
+            .map(String::as_str);
+        let builtins = facts
+            .calls
+            .iter()
+            .filter(|name| !effects.contains_key(*name))
+            .map(String::as_str);
+        write!(
+            out,
+            "{{\"name\":{},\"span\":{},\"type_params\":{},\"params\":{},\"ret\":{},\"calls\":{},\"builtins\":{},\"constructs\":{},\"direct_effects\":{},\"effects\":{}}}",
+            string(&function.name),
+            span(function.span),
+            strings(function.type_params.iter().map(String::as_str)),
+            fields(&function.params),
+            string(&function.ret.to_string()),
+            strings(calls),
+            strings(builtins),
+            strings(facts.constructors.iter().map(String::as_str)),
+            strings(facts.effects.iter().copied()),
+            strings(effects[&function.name].iter().copied())
+        )
+        .expect("writing to String cannot fail");
+    }
+    out.push_str("]}");
+    out
+}

@@ -6,14 +6,24 @@ use crate::ast::{Expr, ExprKind, Op, Program, Stmt};
 use crate::builtins;
 
 #[derive(Default)]
-struct Facts {
-    calls: BTreeSet<String>,
-    constructors: BTreeSet<String>,
-    record_names: BTreeSet<String>,
+pub(crate) struct Facts {
+    pub(crate) calls: BTreeSet<String>,
+    pub(crate) constructors: BTreeSet<String>,
+    pub(crate) record_names: BTreeSet<String>,
+    pub(crate) effects: BTreeSet<&'static str>,
     operations: BTreeSet<&'static str>,
 }
 
-fn visit(expr: &Expr, facts: &mut Facts) {
+impl Facts {
+    pub(crate) fn with_records(record_names: BTreeSet<String>) -> Self {
+        Self {
+            record_names,
+            ..Self::default()
+        }
+    }
+}
+
+pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
         ExprKind::Int(_)
         | ExprKind::Bool(_)
@@ -51,16 +61,19 @@ fn visit(expr: &Expr, facts: &mut Facts) {
         ExprKind::Call(name, args) => {
             if name == builtins::READ_TEXT {
                 facts.operations.insert("filesystem read (requires grant)");
+                facts.effects.insert("fs.read");
             } else if name == builtins::LINES {
                 facts.operations.insert("line splitting");
             } else if name == builtins::ARGS {
                 facts.operations.insert("program arguments");
+                facts.effects.insert("env.args");
             } else if name == builtins::LEN {
                 facts.operations.insert("array length");
             } else if name == builtins::PARSE_I32 {
                 facts.operations.insert("integer parsing");
             } else if name == builtins::JOIN {
                 facts.operations.insert("task join");
+                facts.effects.insert("task.join");
             }
             if facts.record_names.contains(name) {
                 facts.constructors.insert(name.clone());
@@ -73,6 +86,7 @@ fn visit(expr: &Expr, facts: &mut Facts) {
         }
         ExprKind::Spawn(call) => {
             facts.operations.insert("task spawn");
+            facts.effects.insert("task.spawn");
             visit(call, facts);
         }
         ExprKind::If(condition, yes, no) => {
