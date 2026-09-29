@@ -15,7 +15,12 @@ struct Binding {
 }
 
 pub fn check(program: &Program) -> Result<(), Diagnostic> {
+    check_with_types(program).map(|_| ())
+}
+
+pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagnostic> {
     let mut signatures = HashMap::new();
+    let mut types = HashMap::new();
     for function in &program.functions {
         let signature = Signature {
             params: function.params.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -52,7 +57,7 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
                 ));
             }
         }
-        let body_type = type_of(&function.body, &env, &signatures, &function.ret)?;
+        let body_type = type_of(&function.body, &env, &signatures, &function.ret, &mut types)?;
         require(
             &function.ret,
             &body_type,
@@ -60,7 +65,7 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
             "function result",
         )?;
     }
-    Ok(())
+    Ok(types)
 }
 
 fn compatible(expected: &Type, actual: &Type) -> bool {
@@ -116,6 +121,19 @@ fn type_of(
     env: &HashMap<String, Binding>,
     signatures: &HashMap<String, Signature>,
     return_type: &Type,
+    types: &mut HashMap<Span, Type>,
+) -> Result<Type, Diagnostic> {
+    let inferred = infer(expr, env, signatures, return_type, types)?;
+    types.insert(expr.span, inferred.clone());
+    Ok(inferred)
+}
+
+fn infer(
+    expr: &Expr,
+    env: &HashMap<String, Binding>,
+    signatures: &HashMap<String, Signature>,
+    return_type: &Type,
+    types: &mut HashMap<Span, Type>,
 ) -> Result<Type, Diagnostic> {
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
@@ -124,12 +142,12 @@ fn type_of(
             let Some(first) = values.first() else {
                 return Ok(Type::EmptyArray);
             };
-            let mut element = type_of(first, env, signatures, return_type)?;
+            let mut element = type_of(first, env, signatures, return_type, types)?;
             if element == Type::Never {
                 return Ok(Type::Never);
             }
             for value in values.iter().skip(1) {
-                let actual = type_of(value, env, signatures, return_type)?;
+                let actual = type_of(value, env, signatures, return_type, types)?;
                 element = join(&element, &actual).ok_or_else(|| {
                     Diagnostic::new(
                         "E102",
@@ -141,21 +159,21 @@ fn type_of(
             Ok(Type::Array(Box::new(element)))
         }
         ExprKind::Ok(inner) => {
-            let inner = type_of(inner, env, signatures, return_type)?;
+            let inner = type_of(inner, env, signatures, return_type, types)?;
             if inner == Type::Never {
                 return Ok(Type::Never);
             }
             Ok(Type::Result(Box::new(inner), Box::new(Type::Never)))
         }
         ExprKind::Err(inner) => {
-            let inner = type_of(inner, env, signatures, return_type)?;
+            let inner = type_of(inner, env, signatures, return_type, types)?;
             if inner == Type::Never {
                 return Ok(Type::Never);
             }
             Ok(Type::Result(Box::new(Type::Never), Box::new(inner)))
         }
         ExprKind::Try(inner) => {
-            let actual = type_of(inner, env, signatures, return_type)?;
+            let actual = type_of(inner, env, signatures, return_type, types)?;
             if actual == Type::Never {
                 return Ok(Type::Never);
             }
@@ -181,8 +199,8 @@ fn type_of(
             .map(|binding| binding.ty.clone())
             .ok_or_else(|| Diagnostic::new("E101", expr.span, format!("unknown name {name}"))),
         ExprKind::Binary(left, op, right) => {
-            let lhs = type_of(left, env, signatures, return_type)?;
-            let rhs = type_of(right, env, signatures, return_type)?;
+            let lhs = type_of(left, env, signatures, return_type, types)?;
+            let rhs = type_of(right, env, signatures, return_type, types)?;
             if lhs == Type::Never || rhs == Type::Never {
                 return Ok(Type::Never);
             }
@@ -222,16 +240,16 @@ fn type_of(
                 ));
             }
             for (arg, expected) in args.iter().zip(&signature.params) {
-                let actual = type_of(arg, env, signatures, return_type)?;
+                let actual = type_of(arg, env, signatures, return_type, types)?;
                 require(expected, &actual, arg.span, "argument")?;
             }
             Ok(signature.ret.clone())
         }
         ExprKind::If(condition, yes, no) => {
-            let cond_type = type_of(condition, env, signatures, return_type)?;
+            let cond_type = type_of(condition, env, signatures, return_type, types)?;
             require(&Type::Bool, &cond_type, condition.span, "condition")?;
-            let yes_type = type_of(yes, env, signatures, return_type)?;
-            let no_type = type_of(no, env, signatures, return_type)?;
+            let yes_type = type_of(yes, env, signatures, return_type, types)?;
+            let no_type = type_of(no, env, signatures, return_type, types)?;
             join(&yes_type, &no_type).ok_or_else(|| {
                 Diagnostic::new(
                     "E102",
@@ -260,7 +278,7 @@ fn type_of(
                                 format!("duplicate binding {name}"),
                             ));
                         }
-                        let actual = type_of(value, &scope, signatures, return_type)?;
+                        let actual = type_of(value, &scope, signatures, return_type, types)?;
                         require(ty, &actual, value.span, "binding")?;
                         scope.insert(
                             name.clone(),
@@ -282,7 +300,7 @@ fn type_of(
                                 format!("cannot assign immutable binding {name}"),
                             ));
                         }
-                        let actual = type_of(value, &scope, signatures, return_type)?;
+                        let actual = type_of(value, &scope, signatures, return_type, types)?;
                         require(&binding.ty, &actual, value.span, "assignment")?;
                         (actual, *span)
                     }
@@ -292,7 +310,7 @@ fn type_of(
                         body,
                         span,
                     } => {
-                        let iter_type = type_of(iterable, &scope, signatures, return_type)?;
+                        let iter_type = type_of(iterable, &scope, signatures, return_type, types)?;
                         let Type::Array(element) = iter_type else {
                             return Err(Diagnostic::new(
                                 "E110",
@@ -308,17 +326,18 @@ fn type_of(
                                 mutable: false,
                             },
                         );
-                        type_of(body, &loop_scope, signatures, return_type)?;
+                        type_of(body, &loop_scope, signatures, return_type, types)?;
                         (Type::Unit, *span)
                     }
                     Stmt::Return { value, span } => {
-                        let actual = type_of(value, &scope, signatures, return_type)?;
+                        let actual = type_of(value, &scope, signatures, return_type, types)?;
                         require(return_type, &actual, value.span, "return")?;
                         (Type::Never, *span)
                     }
-                    Stmt::Expr(value) => {
-                        (type_of(value, &scope, signatures, return_type)?, value.span)
-                    }
+                    Stmt::Expr(value) => (
+                        type_of(value, &scope, signatures, return_type, types)?,
+                        value.span,
+                    ),
                 };
                 if statement_type == Type::Never {
                     if has_following {
@@ -328,7 +347,7 @@ fn type_of(
                 }
             }
             if let Some(tail) = tail {
-                type_of(tail, &scope, signatures, return_type)
+                type_of(tail, &scope, signatures, return_type, types)
             } else {
                 Ok(Type::Unit)
             }

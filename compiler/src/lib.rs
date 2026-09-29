@@ -3,6 +3,7 @@ pub mod checker;
 pub mod diagnostic;
 pub mod interpreter;
 pub mod lexer;
+pub mod native;
 pub mod parser;
 
 use ast::Program;
