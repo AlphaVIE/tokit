@@ -139,6 +139,7 @@ fn count_stmt(stmt: &Stmt, nodes: &mut usize, ops: &mut usize) {
             count_expr(condition, nodes, ops);
             count_expr(body, nodes, ops);
         }
+        Stmt::Break { .. } | Stmt::Continue { .. } => *ops += 1,
         Stmt::Expr(expr) => count_expr(expr, nodes, ops),
     }
 }

@@ -408,6 +408,7 @@ fn expression_is_spawn_safe(
                 | Stmt::Push { value, .. }
                 | Stmt::Return { value, .. }
                 | Stmt::Expr(value) => expression_is_spawn_safe(value, program, visiting),
+                Stmt::Break { .. } | Stmt::Continue { .. } => true,
                 Stmt::For { iterable, body, .. } => {
                     expression_is_spawn_safe(iterable, program, visiting)
                         && expression_is_spawn_safe(body, program, visiting)
@@ -1208,6 +1209,7 @@ fn infer(
                         require(return_type, &actual, value.span, "return")?;
                         (Type::Never, *span)
                     }
+                    Stmt::Break { span } | Stmt::Continue { span } => (Type::Never, *span),
                     Stmt::Expr(value) => (
                         type_of(value, &scope, signatures, return_type, types)?,
                         value.span,

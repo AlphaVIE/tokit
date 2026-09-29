@@ -69,6 +69,8 @@ impl std::fmt::Display for Value {
 enum Flow {
     Value(Value),
     Return(Value),
+    Break,
+    Continue,
 }
 
 type Env = HashMap<String, Rc<RefCell<Value>>>;
@@ -84,6 +86,8 @@ macro_rules! take_value {
         match $expr? {
             Flow::Value(value) => value,
             Flow::Return(value) => return Ok(Flow::Return(value)),
+            Flow::Break => return Ok(Flow::Break),
+            Flow::Continue => return Ok(Flow::Continue),
         }
     };
 }
@@ -144,6 +148,11 @@ fn invoke(
         .collect();
     match eval(&function.body, &env, program, depth, runtime)? {
         Flow::Value(value) | Flow::Return(value) => Ok(value),
+        Flow::Break | Flow::Continue => Err(Diagnostic::new(
+            "E204",
+            function.span,
+            "loop control escaped its loop",
+        )),
     }
 }
 
@@ -442,7 +451,11 @@ fn eval(
                         for value in values {
                             let mut loop_scope = scope.clone();
                             loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
-                            take_value!(eval(body, &loop_scope, program, depth, runtime));
+                            match eval(body, &loop_scope, program, depth, runtime)? {
+                                Flow::Value(_) | Flow::Continue => {}
+                                Flow::Break => break,
+                                Flow::Return(value) => return Ok(Flow::Return(value)),
+                            }
                         }
                     }
                     Stmt::While {
@@ -461,8 +474,15 @@ fn eval(
                         if !keep_going {
                             break;
                         }
-                        take_value!(eval(body, &scope, program, depth, runtime));
+                        match eval(body, &scope, program, depth, runtime)? {
+                            Flow::Value(_) => {}
+                            Flow::Continue => continue,
+                            Flow::Break => break,
+                            Flow::Return(value) => return Ok(Flow::Return(value)),
+                        }
                     },
+                    Stmt::Break { .. } => return Ok(Flow::Break),
+                    Stmt::Continue { .. } => return Ok(Flow::Continue),
                     Stmt::Return { value, .. } => {
                         let value = take_value!(eval(value, &scope, program, depth, runtime));
                         return Ok(Flow::Return(value));

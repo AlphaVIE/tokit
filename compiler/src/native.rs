@@ -488,6 +488,8 @@ fn emit_stmt(stmt: &Stmt, source: &str, types: &HashMap<Span, Type>) -> String {
             )
         }
         Stmt::Return { value, .. } => format!("return {};\n", emit_expr(value, source, types)),
+        Stmt::Break { .. } => "break;\n".to_owned(),
+        Stmt::Continue { .. } => "continue;\n".to_owned(),
         Stmt::Expr(value) => {
             let ty = types
                 .get(&value.span)

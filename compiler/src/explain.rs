@@ -108,6 +108,12 @@ fn visit(expr: &Expr, facts: &mut Facts) {
                         visit(condition, facts);
                         visit(body, facts);
                     }
+                    Stmt::Break { .. } => {
+                        facts.operations.insert("loop break");
+                    }
+                    Stmt::Continue { .. } => {
+                        facts.operations.insert("loop continue");
+                    }
                     Stmt::Return { value, .. } => {
                         facts.operations.insert("early return");
                         visit(value, facts);
