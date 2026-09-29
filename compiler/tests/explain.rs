@@ -39,7 +39,8 @@ fn cli_explain_checks_source_and_reports_operations() {
 
 #[test]
 fn explanation_includes_enum_payload_types() {
-    let source = "enum Message{Stop,Number(i32),Text(String)} fn main()->Message{Message::Number(7)}";
+    let source =
+        "enum Message{Stop,Number(i32),Text(String)} fn main()->Message{Message::Number(7)}";
     let report = explain::explain(&check(source).unwrap());
     assert!(report.contains("Message: Stop, Number(i32), Text(String)"));
 }
