@@ -1,0 +1,11 @@
+{
+  "name": "generic-pair",
+  "operation": "construct Pair<T>(left,right), then return a fresh Pair<T>(right,left)",
+  "types": ["i32", "bool", "String"],
+  "cases": [
+    {"type": "i32", "input": [1, 2], "expected": "Pair(left:2,right:1)"},
+    {"type": "i32", "input": [-7, 4], "expected": "Pair(left:4,right:-7)"},
+    {"type": "bool", "input": [true, false], "expected": "Pair(left:false,right:true)"},
+    {"type": "String", "input": ["alpha", "beta"], "expected": "Pair(left:\"beta\",right:\"alpha\")"}
+  ]
+}
