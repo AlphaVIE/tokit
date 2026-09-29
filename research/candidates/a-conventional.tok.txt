@@ -1,0 +1,21 @@
+use http,json,task;
+
+struct User{id:i32,name:str}
+
+fn identity<T>(x:T)->T{x}
+
+fn users_response(users:[User])->Result<Response,Error>{
+  let selected:[User]=[];
+  for user in users{
+    if user.id>0{selected.push(identity(user));}
+  }
+  let body:str=json.encode(selected)?;
+  http.response(200,body)
+}
+
+fn main()->Result<Unit,Error>{
+  let server:Server=http.server();
+  http.get(server,"GET","/users",users_response);
+  let worker:Task<Result<Unit,Error>>=task.spawn(||http.run(server));
+  task.join(worker)?
+}
