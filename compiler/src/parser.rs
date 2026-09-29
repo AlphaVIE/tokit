@@ -605,6 +605,12 @@ impl Parser {
     fn pattern(&mut self) -> Result<Pattern, Diagnostic> {
         let token = self.bump();
         let (kind, span) = match token.kind {
+            Kind::Int(value) => (
+                PatternKind::Int(value.parse::<i32>().map_err(|_| {
+                    Diagnostic::new("E003", token.span, "integer literal outside i32 range")
+                })?),
+                token.span,
+            ),
             Kind::True => (PatternKind::Bool(true), token.span),
             Kind::False => (PatternKind::Bool(false), token.span),
             Kind::Ok | Kind::Err | Kind::Some => {
@@ -620,6 +626,7 @@ impl Parser {
                 (kind, token.span.join(end))
             }
             Kind::None => (PatternKind::None, token.span),
+            Kind::Ident(name) if name == "_" => (PatternKind::Wildcard, token.span),
             Kind::Ident(name) => {
                 self.expect(Kind::ColonColon)?;
                 let (variant, end) = self.ident()?;

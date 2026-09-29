@@ -1,0 +1,2 @@
+fn classify(n:i32)->String{match n{0=>"zero",1=>"one",_=>"other"}}
+fn main()->String{classify(7)}

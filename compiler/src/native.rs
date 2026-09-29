@@ -423,6 +423,8 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 .iter()
                 .map(|(pattern, body)| {
                     let pattern = match &pattern.kind {
+                        PatternKind::Int(value) => value.to_string(),
+                        PatternKind::Wildcard => "_".to_owned(),
                         PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
                         PatternKind::Err(name) => format!("Err({})", user_name(name)),
                         PatternKind::Some(name) => format!("Some({})", user_name(name)),

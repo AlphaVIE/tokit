@@ -33,6 +33,7 @@ fn native_output_matches_reference_interpreter() {
         "checked_division_enum",
         "generic_pair",
         "match_result",
+        "integer_match",
         "payload_enum",
         "record",
         "option_lookup",
@@ -82,6 +83,14 @@ fn native_output_matches_reference_interpreter() {
             "enum List{Nil,Cons([List])} fn main()->List{List::Cons([List::Nil])}",
         ),
         ("match_bool", "fn main()->i32{match true{true=>1,false=>2}}"),
+        (
+            "match_bool_wildcard",
+            "fn main()->i32{match false{true=>1,_=>2}}",
+        ),
+        (
+            "match_result_wildcard",
+            "fn main()->i32{match Ok(5){Ok(v)=>v,_=>0}}",
+        ),
         (
             "match_direct_result",
             "fn main()->i32{match Ok(1){Ok(v)=>v,Err(e)=>0}}",

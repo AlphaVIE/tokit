@@ -696,6 +696,8 @@ fn match_pattern(
         )
     };
     match (&pattern.kind, matched) {
+        (PatternKind::Int(value), Type::I32) => Ok((value.to_string(), None)),
+        (PatternKind::Wildcard, _) => Ok(("_".to_owned(), None)),
         (PatternKind::Ok(name), Type::Result(ok, _)) => {
             Ok(("Ok".to_owned(), Some((name.clone(), *ok.clone()))))
         }
@@ -1030,7 +1032,9 @@ fn infer(
                     "cannot infer Option element type for match",
                 ));
             }
+            let integer_match = matched == Type::I32;
             let expected: HashSet<String> = match &matched {
+                Type::I32 => HashSet::new(),
                 Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
                 Type::Option(_) => ["Some".to_owned(), "None".to_owned()].into_iter().collect(),
                 Type::Bool => ["true".to_owned(), "false".to_owned()]
@@ -1043,7 +1047,7 @@ fn infer(
                         Diagnostic::new(
                             "E116",
                             value.span,
-                            "match requires a result, enum, or bool",
+                            "match requires i32, result, enum, or bool",
                         )
                     })?
                     .iter()
@@ -1053,15 +1057,32 @@ fn infer(
                     return Err(Diagnostic::new(
                         "E116",
                         value.span,
-                        "match requires a result, enum, or bool",
+                        "match requires i32, result, enum, or bool",
                     ));
                 }
             };
             let mut seen = HashSet::new();
+            let mut wildcard = false;
             let mut result = None;
             for (pattern, body) in arms {
                 let (key, binding) = match_pattern(pattern, &matched, signatures)?;
-                if !seen.insert(key.clone()) {
+                if wildcard {
+                    return Err(Diagnostic::new(
+                        "E116",
+                        pattern.span,
+                        "unreachable match arm after wildcard",
+                    ));
+                }
+                if matches!(&pattern.kind, PatternKind::Wildcard) {
+                    if !integer_match && seen == expected {
+                        return Err(Diagnostic::new(
+                            "E116",
+                            pattern.span,
+                            "wildcard arm is unreachable",
+                        ));
+                    }
+                    wildcard = true;
+                } else if !seen.insert(key.clone()) {
                     return Err(Diagnostic::new(
                         "E116",
                         pattern.span,
@@ -1084,8 +1105,11 @@ fn infer(
                     None => branch,
                 });
             }
-            if seen != expected {
+            if !wildcard && (integer_match || seen != expected) {
                 let mut missing: Vec<_> = expected.difference(&seen).cloned().collect();
+                if integer_match {
+                    missing.push("_".to_owned());
+                }
                 missing.sort();
                 return Err(Diagnostic::new(
                     "E116",
