@@ -42,6 +42,7 @@ enum Flow {
 }
 
 type Env = HashMap<String, Rc<RefCell<Value>>>;
+const MAX_CALL_DEPTH: usize = 32;
 
 macro_rules! take_value {
     ($expr:expr) => {
@@ -76,7 +77,7 @@ fn invoke(
     args: Vec<Value>,
     depth: usize,
 ) -> Result<Value, Diagnostic> {
-    if depth >= 1024 {
+    if depth >= MAX_CALL_DEPTH {
         return Err(Diagnostic::new(
             "E202",
             function.span,
