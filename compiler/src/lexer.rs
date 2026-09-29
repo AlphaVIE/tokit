@@ -1,0 +1,136 @@
+use crate::ast::Span;
+use crate::diagnostic::Diagnostic;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Ident(String),
+    Int(String),
+    Fn,
+    Let,
+    If,
+    Else,
+    Return,
+    True,
+    False,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    Colon,
+    Comma,
+    Semicolon,
+    Arrow,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Eq,
+    EqEq,
+    BangEq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eof,
+}
+
+#[derive(Clone, Debug)]
+pub struct Token {
+    pub kind: Kind,
+    pub span: Span,
+}
+
+pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
+    let bytes = source.as_bytes();
+    let mut tokens = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        let start = i;
+        let kind = if bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' {
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            match &source[start..i] {
+                "fn" => Kind::Fn,
+                "let" => Kind::Let,
+                "if" => Kind::If,
+                "else" => Kind::Else,
+                "return" => Kind::Return,
+                "true" => Kind::True,
+                "false" => Kind::False,
+                name => Kind::Ident(name.to_owned()),
+            }
+        } else if bytes[i].is_ascii_digit() {
+            i += 1;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            Kind::Int(source[start..i].to_owned())
+        } else {
+            i += 1;
+            match bytes[start] {
+                b'(' => Kind::LParen,
+                b')' => Kind::RParen,
+                b'{' => Kind::LBrace,
+                b'}' => Kind::RBrace,
+                b':' => Kind::Colon,
+                b',' => Kind::Comma,
+                b';' => Kind::Semicolon,
+                b'+' => Kind::Plus,
+                b'*' => Kind::Star,
+                b'/' => Kind::Slash,
+                b'-' if bytes.get(i) == Some(&b'>') => {
+                    i += 1;
+                    Kind::Arrow
+                }
+                b'-' => Kind::Minus,
+                b'=' if bytes.get(i) == Some(&b'=') => {
+                    i += 1;
+                    Kind::EqEq
+                }
+                b'=' => Kind::Eq,
+                b'!' if bytes.get(i) == Some(&b'=') => {
+                    i += 1;
+                    Kind::BangEq
+                }
+                b'<' if bytes.get(i) == Some(&b'=') => {
+                    i += 1;
+                    Kind::Le
+                }
+                b'<' => Kind::Lt,
+                b'>' if bytes.get(i) == Some(&b'=') => {
+                    i += 1;
+                    Kind::Ge
+                }
+                b'>' => Kind::Gt,
+                _ => {
+                    return Err(Diagnostic::new(
+                        "E001",
+                        Span { start, end: i },
+                        "invalid character",
+                    ));
+                }
+            }
+        };
+        tokens.push(Token {
+            kind,
+            span: Span { start, end: i },
+        });
+    }
+    tokens.push(Token {
+        kind: Kind::Eof,
+        span: Span { start: i, end: i },
+    });
+    Ok(tokens)
+}

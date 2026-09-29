@@ -1,0 +1,5 @@
+fn add(a:i32,b:i32)->i32{a+b}
+fn main()->i32{
+  let base:i32=40;
+  if base>0{add(base,2)}else{0}
+}
