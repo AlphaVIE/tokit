@@ -120,3 +120,42 @@ fn invalid_arrays_and_mutation_are_rejected() {
         assert_eq!(check(source).unwrap_err().code, expected, "{source}");
     }
 }
+
+#[test]
+fn typed_results_and_propagation_execute() {
+    let source = "fn divide(a:i32,b:i32)->Result<i32,i32>{if b==0{Err(1)}else{Ok(a/b)}} fn main()->Result<i32,i32>{let x:i32=divide(8,2)?;Ok(x+1)}";
+    assert_eq!(run(source).unwrap(), Value::Ok(Box::new(Value::I32(5))));
+    let source = "fn divide(a:i32,b:i32)->Result<i32,i32>{if b==0{Err(1)}else{Ok(a/b)}} fn main()->Result<i32,i32>{let x:i32=divide(8,0)?;Ok(x+1)}";
+    assert_eq!(run(source).unwrap(), Value::Err(Box::new(Value::I32(1))));
+}
+
+#[test]
+fn result_payloads_and_propagation_are_checked() {
+    let cases = [
+        ("fn main()->Result<i32,i32>{Ok(true)}", "E102"),
+        ("fn main()->Result<i32,i32>{Err(true)}", "E102"),
+        ("fn main()->i32{Ok(1)?}", "E111"),
+        ("fn main()->Result<i32,i32>{1?}", "E111"),
+        (
+            "fn f()->Result<i32,bool>{Err(true)} fn main()->Result<i32,i32>{let x:i32=f()?;Ok(x)}",
+            "E102",
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(check(source).unwrap_err().code, expected, "{source}");
+    }
+}
+
+#[test]
+fn propagation_crosses_loop_scope_and_result_arrays_unify() {
+    let source = "fn div(a:i32,b:i32)->Result<i32,i32>{if b==0{Err(1)}else{Ok(a/b)}} fn main()->Result<i32,i32>{for x in [1,0]{let q:i32=div(8,x)?;}Ok(5)}";
+    assert_eq!(run(source).unwrap(), Value::Err(Box::new(Value::I32(1))));
+    let source = "fn main()->[Result<i32,i32>]{[Ok(1),Err(2)]}";
+    assert_eq!(
+        run(source).unwrap(),
+        Value::Array(vec![
+            Value::Ok(Box::new(Value::I32(1))),
+            Value::Err(Box::new(Value::I32(2))),
+        ])
+    );
+}
