@@ -1,0 +1,1079 @@
+You are the founding language architect, compiler engineer, programming-language researcher, runtime engineer, systems engineer, security engineer, AI/LLM optimization researcher, standard-library architect, tooling engineer, benchmark engineer, and developer-experience engineer responsible for designing and implementing a new general-purpose programming language called Tokit.
+Tokit is not intended to be another human-first programming language.
+Its central thesis is that future software will increasingly be written, modified, audited, refactored, and maintained by large language models and autonomous software agents rather than directly by humans. Existing programming languages were designed around constraints such as human readability, keyboard ergonomics, historical compatibility, teaching simplicity, and developer familiarity. Tokit must reconsider those assumptions from first principles.
+The name Tokit derives primarily from:
+Token + Kit
+There is also an intentional secondary wordplay:
+Tokit -> "took it"
+The language must be designed as an LLM-first, machine-first programming language with human accessibility provided through tooling rather than through verbose source syntax.
+Your task is not merely to propose Tokit.
+Your task is to design Tokit as a serious programming language and incrementally implement its compiler, runtime, standard library, package ecosystem, tooling, documentation, benchmark suite, interoperability layer, AI interface, and development environment.
+You must work scientifically rather than aesthetically.
+Do not assume that shorter source code automatically means fewer LLM tokens.
+Do not assume that one-character keywords are automatically better.
+Do not assume that human-readable syntax is inherently desirable.
+Measure.
+Benchmark.
+Experiment.
+Revise design decisions when empirical evidence contradicts assumptions.
+The highest-level design priorities, in descending but partially overlapping order, are:
+1. Extremely low LLM token consumption.
+2. Extremely high native execution performance.
+3. Strong correctness and reliability guarantees.
+4. Minimal semantic ambiguity.
+5. Strong memory safety.
+6. Deterministic machine generation.
+7. Efficient compilation.
+8. Small binary and runtime overhead where practical.
+9. Excellent interoperability.
+10. Broad general-purpose applicability.
+11. Good tooling.
+12. Human usability through translation and visualization tooling rather than verbose source code.
+Tokit should eventually be capable of implementing nearly anything that is practically implementable in established general-purpose systems languages.
+This includes, but is not limited to:
+* command-line applications
+* backend APIs
+* web servers
+* distributed systems
+* microservices
+* desktop software
+* mobile applications
+* WebAssembly applications
+* frontend web applications
+* operating-system components
+* low-level systems software
+* network services
+* database engines
+* game engines
+* browser games
+* compilers
+* interpreters
+* developer tooling
+* machine-learning systems
+* GPU compute
+* scientific computing
+* embedded software
+* automation
+* scripting
+* security tooling
+* cryptographic systems
+* high-performance computing
+Tokit must not sacrifice its core architecture simply to imitate another language.
+Treat existing languages as research references, not templates.
+Study useful characteristics of:
+* Rust
+* C
+* C++
+* Go
+* Zig
+* Swift
+* Kotlin
+* TypeScript
+* OCaml
+* Haskell
+* Lisp
+* Python
+Tokit should specifically learn from:
+Rust:
+* memory safety
+* ownership research
+* zero-cost abstractions
+* strong types
+* pattern matching
+* native performance
+Go:
+* fast compilation
+* simple concurrency
+* straightforward package management
+* practical networking
+* deployment simplicity
+Zig:
+* explicit systems programming
+* minimal runtime assumptions
+* strong C interoperability
+* compile-time execution
+C:
+* predictable execution
+* ABI interoperability
+* small runtime footprint
+* systems accessibility
+Functional languages:
+* algebraic data types
+* strong type reasoning
+* expressions
+* pattern matching
+* immutability
+* composability
+Python:
+* ecosystem accessibility
+* scripting convenience
+* developer velocity
+TypeScript:
+* tooling
+* language-server ergonomics
+* practical application development
+Lisp:
+* AST-oriented thinking
+* code/data relationships
+* machine transformation
+Avoid inheriting the major disadvantages of existing languages.
+Explicitly avoid:
+* C++ grammar complexity
+* excessive syntactic alternatives
+* Java-style boilerplate
+* JavaScript implicit coercion
+* JavaScript truthiness ambiguity
+* uncontrolled null values
+* Python-level runtime overhead for native workloads
+* unnecessary Rust verbosity
+* macro systems that destroy analyzability
+* textual preprocessors
+* accidental undefined behavior
+* opaque dependency resolution
+* non-deterministic builds
+* unnecessary global state
+* unnecessarily complicated build systems
+CORE LANGUAGE PHILOSOPHY
+Tokit is machine-first.
+Human readability is a constraint, not the optimization target.
+The canonical Tokit representation may appear hostile, dense, cryptic, compressed, or visually unpleasant to human programmers if doing so measurably improves token efficiency without creating unacceptable ambiguity.
+A human should not necessarily be expected to directly understand large Tokit programs.
+Instead, the official toolchain must provide semantic translation.
+For example:
+tok explain app.tok
+should convert canonical Tokit code into a structured, human-readable explanation.
+Possible output should include:
+* modules
+* functions
+* parameters
+* types
+* control flow
+* side effects
+* dependencies
+* data structures
+* external capabilities
+* concurrency
+* error behavior
+* security-relevant operations
+A stronger mode should produce pseudocode.
+Example:
+tok explain --pseudo app.tok
+Another mode should produce expanded human-readable Tokit:
+tok expand app.tok
+The human-readable representation does not need to be accepted as canonical Tokit source unless doing so proves useful.
+CANONICALITY
+Tokit should strongly prefer ONE canonical way of representing each language construct.
+Avoid allowing multiple equivalent forms merely for programmer preference.
+For example, do not simultaneously support:
+if x
+if(x)
+if x then
+unless x
+unless benchmarks demonstrate a compelling reason.
+Canonicality matters because it reduces:
+* model uncertainty
+* generation entropy
+* training complexity
+* formatting variance
+* diff size
+* repair complexity
+* token usage
+The formatter should therefore be more than a visual formatter.
+tok fmt
+must normalize Tokit source toward its canonical representation.
+Semantically equivalent syntax should ideally converge toward the same form.
+Investigate whether deeper normalization can safely canonicalize:
+* literal forms
+* import ordering
+* type aliases
+* generic notation
+* control-flow representation
+* equivalent expressions
+* declaration order where semantically irrelevant
+TOKEN OPTIMIZATION
+This is one of the most important areas of the entire project.
+Do not optimize only for character count.
+Optimize for actual LLM tokenization.
+Build a benchmark subsystem capable of testing source code against multiple tokenizer families.
+Measure at minimum:
+* source characters
+* source bytes
+* LLM tokens
+* AST nodes
+* tokens per AST node
+* tokens per semantic operation
+* tokens per function
+* tokens per declaration
+* tokens per dependency
+* tokens required for modifications
+* tokens required for compiler-error correction
+Create equivalent benchmark programs in:
+* Tokit
+* Rust
+* Go
+* C
+* C++
+* Python
+* TypeScript
+* Java
+Use realistic workloads such as:
+* HTTP API
+* JSON serialization
+* CLI application
+* file processing
+* CRUD service
+* WebSocket server
+* sorting algorithms
+* tree structures
+* concurrent worker pool
+* database access
+* cryptographic wrapper
+* small game loop
+* parser
+* REST endpoint
+* matrix operations
+Create a tool such as:
+tok stats file.tok
+with output conceptually similar to:
+bytes=823
+chars=823
+ast=192
+tok.gpt=241
+tok.claude=256
+tok.gemini=229
+tok_ast=1.25
+The exact format itself should also be machine-efficient.
+Design syntax empirically.
+For example, test whether:
+f
+is actually more token-efficient than:
+fn
+across major tokenizer architectures.
+Likewise test:
+:
+
+->
+{}
+()
+[]
+,
+;
+Do not choose syntax based on assumptions.
+ASCII-FIRST
+Tokit version 1 should use characters normally present on standard keyboards.
+Prefer ASCII.
+The language architecture may later support optional Unicode syntax if benchmarks demonstrate advantages.
+Unicode must never be necessary to write ordinary Tokit.
+TYPE SYSTEM
+Tokit must be statically typed.
+Types should generally be explicit, especially at important boundaries.
+The language must prevent nonsense operations such as implicit string-number arithmetic.
+For example, something equivalent to JavaScript:
+"5" + 5
+must not silently produce:
+"55"
+Tokit should reject type-invalid operations at compile time unless explicitly converted.
+However, type syntax itself must be highly token-efficient.
+Investigate extremely compact forms.
+For example, a conceptual function might eventually resemble:
+add,i32>i32=$0+$1
+Do not blindly adopt this syntax.
+Use it as a direction.
+Find a syntax that minimizes actual tokenizer cost while preserving deterministic parsing.
+Support:
+* integers of explicit sizes
+* unsigned integers
+* floating-point types
+* booleans
+* strings
+* byte sequences
+* arrays
+* slices
+* tuples
+* structs
+* enums
+* algebraic data types
+* functions
+* generics
+* option types
+* result types
+Support strong generics.
+Use traits, interfaces, protocols, structural typing, compile-time specialization, or another abstraction mechanism based on which produces the best combination of:
+* compiler analyzability
+* token efficiency
+* runtime performance
+* API expressiveness
+* error quality
+Prefer monomorphization or equivalent specialization where it delivers near-zero runtime abstraction cost.
+NULL SAFETY
+Do not allow unrestricted null values.
+Use optional types.
+FFI boundaries may expose null where necessary.
+Internally, the compiler should encourage or enforce safe representation.
+MEMORY MODEL
+For early Tokit versions, use a practical garbage collector.
+The initial model may resemble modern Go, .NET, JVM, or another high-quality managed runtime.
+However, design the IR and type system so that Tokit is not permanently dependent on universal GC.
+Research a future adaptive memory model where the compiler can select among:
+* stack allocation
+* escape-analysis-based placement
+* region allocation
+* reference counting
+* ownership
+* arena allocation
+* tracing GC
+based on static analysis.
+The ultimate long-term goal should be reducing GC overhead where the compiler can prove that safer or faster lifetime strategies are valid.
+Tokit must be memory-safe by default.
+Unsafe operations must exist for systems programming and interoperability.
+Unsafe capabilities should be granular.
+Conceptually:
+unsafe[mem]
+unsafe[ffi]
+unsafe[asm]
+is preferable to one undifferentiated unsafe category.
+CONCURRENCY
+Tokit must support serious concurrent and server-side development.
+Design a coherent concurrency model supporting:
+* OS threads
+* lightweight tasks
+* async execution
+* futures
+* structured concurrency
+* channels
+* actors where useful
+* parallel iteration
+* synchronization primitives
+Avoid forcing users or LLMs to manually write excessive asynchronous boilerplate.
+The compiler should make safe concurrency easy.
+Investigate compile-time race detection where feasible.
+Make concurrency constructs highly token-efficient.
+ERROR HANDLING
+Prefer explicit typed errors.
+Research a Result/Option-inspired architecture with compact propagation syntax.
+Avoid exceptions as the primary invisible control-flow mechanism.
+Exceptions may exist for foreign interoperability or catastrophic runtime conditions.
+Normal application errors should be visible in types or contracts.
+Design syntax that is considerably less verbose than Rust's common error-handling patterns while retaining comparable safety.
+COMPILER ARCHITECTURE
+The initial compiler should be implemented in Rust unless benchmarked evidence strongly favors another implementation language.
+The long-term goal is self-hosting.
+Target roadmap:
+Tokit compiler v0:
+Rust
+Tokit compiler v1:
+Rust with increasingly substantial Tokit components
+Tokit compiler v2:
+predominantly Tokit
+Tokit compiler v3:
+fully self-hosted where practical
+Use a compiler architecture conceptually similar to:
+Tokit source
+-> lexer/tokenizer
+-> parser
+-> AST
+-> semantic analysis
+-> typed AST
+-> Tokit IR
+-> optimized IR
+-> target backend
+-> executable/library
+Use LLVM initially if it provides the fastest path toward high-quality native optimization.
+Do not permanently tie the language specification to LLVM.
+Tokit IR should remain independent enough to support future backends such as:
+* LLVM
+* Cranelift
+* native machine-code backend
+* WebAssembly
+* SPIR-V
+* CUDA/PTX
+* Metal
+* other GPU targets
+PERFORMANCE
+Tokit should target native systems-language performance.
+For optimized native CPU workloads, establish a long-term objective of remaining approximately within the same performance class as optimized Rust, C, and C++.
+Performance targets must be benchmarked rather than claimed.
+Benchmark:
+* runtime
+* memory
+* allocations
+* executable size
+* startup latency
+* compilation latency
+Maintain a benchmark repository.
+REGRESSION POLICY
+No major language change should be accepted solely because it appears elegant.
+Important language changes should consider:
+* token cost
+* parser complexity
+* compile time
+* runtime cost
+* safety
+* ambiguity
+* LLM generation accuracy
+AI-NATIVE DEVELOPMENT
+Tokit must be designed specifically for autonomous coding agents.
+Introduce stable internal AST identifiers.
+Agents should eventually be able to modify a program without rewriting entire files.
+For example, rather than sending a 4,000-token source file, an agent might issue an AST patch conceptually equivalent to:
+@42=$3+$4
+Meaning:
+modify AST node 42.
+Design a compact patch protocol.
+Requirements:
+* stable node identity where possible
+* transaction support
+* validation
+* atomic patches
+* rollback
+* machine-readable errors
+* source-map integration
+* compatibility with version control
+Investigate whether agents should eventually communicate with the Tokit compiler primarily through AST operations rather than raw source text.
+MACHINE ERROR MODE
+The compiler must support human-readable and AI-readable diagnostics.
+Human mode:
+Type mismatch at function add: expected i32, received str.
+AI mode should be compact.
+Conceptually:
+E102@8:14 exp=i32 got=str
+Also support structured output.
+Example architecture:
+tok check --json
+Return fields such as:
+error code
+AST node
+source span
+expected type
+actual type
+candidate fixes
+dependency context
+Do not waste agent context windows on verbose compiler prose when structured data suffices.
+AI PROJECT INDEX
+Design an AI-optimized project representation.
+An agent should not need to read thousands of lines simply to understand a project.
+Generate a compact semantic index containing:
+* modules
+* exports
+* function signatures
+* types
+* dependencies
+* capability requirements
+* call graph summaries
+* data-flow summaries
+* invariants
+* tests
+* ownership relationships
+* documentation summaries
+Possible command:
+tok ai-index
+The resulting representation should itself be optimized for LLM context efficiency.
+DEPENDENCY SYSTEM
+Create an official package manager integrated with Tokit.
+Use:
+tok
+as the primary CLI unless empirical or ecosystem constraints indicate otherwise.
+Examples:
+tok new
+tok add
+tok rm
+tok build
+tok run
+tok test
+tok bench
+tok fmt
+tok check
+tok lint
+tok explain
+tok expand
+tok stats
+tok fuzz
+tok doc
+tok repl
+Use a project manifest such as:
+tok.toml
+unless a more token-efficient structured format is justified.
+Package resolution must emphasize:
+* deterministic dependency graphs
+* lockfiles
+* checksums
+* signing
+* reproducible builds
+* SBOM generation
+* vulnerability metadata
+* minimal dependency duplication
+The package system should be extremely fast.
+Investigate shared package caching and content-addressed storage.
+STANDARD LIBRARY
+Tokit should use a pragmatic batteries-included standard library.
+Include high-quality primitives for:
+* strings
+* collections
+* filesystem
+* paths
+* processes
+* networking
+* HTTP
+* HTTPS
+* TLS
+* JSON
+* binary serialization
+* time
+* concurrency
+* cryptography interfaces
+* compression
+* regular expressions
+* WebSockets
+* logging
+* testing
+* random generation
+Avoid unnecessary dependencies for standard application tasks.
+WEB DEVELOPMENT
+Tokit must be suitable for backend development from early versions.
+Provide ergonomic primitives for:
+* HTTP servers
+* routing
+* middleware
+* JSON
+* WebSockets
+* TLS
+* databases
+* authentication
+* streaming
+* RPC
+Tokit should eventually support frontend development.
+Target:
+Tokit -> WebAssembly
+Provide DOM and browser APIs.
+Research whether a Tokit-native UI DSL should compile into:
+* HTML
+* CSS
+* JavaScript
+* WebAssembly
+* direct DOM operations
+Do not force HTML syntax itself into the core language unless strong evidence supports it.
+A UI representation conceptually like:
+ui App{
+h1"Hello"
+btn"Click"=>count++
+}
+may be investigated.
+Tokit should be able to bind to standard HTML/CSS where appropriate.
+INTEROPERABILITY
+Tokit must interoperate well with existing ecosystems.
+Prioritize:
+1. C ABI
+2. Rust interoperability
+3. C++
+4. JavaScript/WebAssembly
+5. Python
+6. Java/Kotlin
+7. Swift/Objective-C
+8. .NET/C#
+Investigate safe foreign-interface generation.
+Avoid requiring Tokit programmers to manually write large amounts of glue.
+Long term, investigate external dependency adapters such as conceptual forms:
+use npm
+use py
+but do not promise transparent compatibility when semantics make it unsafe or impractical.
+GPU COMPUTE
+Design Tokit so GPU computing can eventually become first-class.
+Investigate compiler annotations or execution domains that allow functions to target:
+* CUDA
+* ROCm
+* Metal
+* SPIR-V
+* WebGPU
+Conceptually:
+gpu f ...
+may be explored.
+The compiler should eventually be capable of choosing CPU/GPU execution strategies when explicit semantics permit it.
+EMBEDDED AND SYSTEMS
+Tokit must eventually support no-runtime or minimal-runtime environments.
+Provide a mode conceptually equivalent to:
+no_std
+Support:
+* raw pointers
+* custom allocators
+* memory-mapped IO
+* inline assembly
+* explicit alignment
+* layout control
+* ABI control
+* linker control
+* embedded targets
+* ARM
+* RISC-V
+* ESP-class hardware where toolchains allow it
+This should make it theoretically possible to build kernels and embedded firmware in Tokit.
+SECURITY
+Security must be architectural.
+Consider capability-based permissions.
+A function or module may declare operations such as:
+filesystem read
+filesystem write
+network access
+environment access
+process execution
+Design token-efficient capability declarations.
+Runtime sandboxing should be supported.
+Conceptually:
+tok run app.tok --allow net
+Support least-privilege execution where applicable.
+TESTING
+Testing must be integrated.
+Support:
+tok test
+Also design:
+tok bench
+tok fuzz
+Support:
+* unit tests
+* integration tests
+* property-based tests
+* fuzzing
+* benchmarks
+Testing syntax must remain compact.
+FORMAL METHODS
+Design Tokit so stronger correctness tools can be added later.
+Investigate:
+* contracts
+* invariants
+* preconditions
+* postconditions
+* compile-time proofs
+* model checking
+* static verification
+Do not burden normal application development with excessive proof syntax.
+Allow safety-critical code to opt into stronger verification.
+DATABASES
+Provide strong database tooling.
+Investigate compile-time checked SQL.
+Tokit should ideally be capable of validating:
+* SQL syntax
+* parameter types
+* result types
+* schema compatibility
+when schemas are available during compilation.
+Research unified data models capable of generating:
+* database schemas
+* serializers
+* API schemas
+* validation
+* OpenAPI
+* frontend types
+SERIALIZATION
+Support efficient serialization.
+At minimum:
+* JSON
+* compact binary formats
+* interoperability with Protobuf or similar schema systems
+Avoid manually repeating field definitions across multiple layers.
+TOOLING
+Tokit must eventually include:
+* compiler
+* package manager
+* formatter
+* linter
+* debugger integration
+* REPL
+* benchmark tool
+* profiler integration
+* documentation generator
+* language server
+* VS Code extension
+* syntax highlighting
+* semantic highlighting
+* autocomplete
+* rename
+* refactoring
+* go-to-definition
+* dependency inspection
+* AST inspection
+HUMAN TRANSLATION
+This is central to Tokit.
+Provide bidirectional conceptual tooling between canonical Tokit and human understanding.
+For example:
+tok explain file.tok
+should provide natural-language explanation.
+tok expand file.tok
+should produce verbose pseudocode-like representation.
+tok graph file.tok
+may visualize relationships.
+Humans should be able to audit Tokit without mastering the compressed syntax.
+The source language may therefore optimize much more aggressively for machines.
+REPRODUCIBILITY
+Builds should be deterministic whenever technically possible.
+Same:
+* source
+* compiler version
+* target
+* dependencies
+* build configuration
+should produce reproducible output.
+LANGUAGE EVOLUTION
+Before 1.0:
+Breaking changes are acceptable when justified by substantial gains.
+After 1.0:
+Prioritize compatibility.
+Use an edition system if useful.
+Possible model:
+Tokit 2027
+Tokit 2028
+Do not accumulate legacy syntax indefinitely.
+Remove failed experiments.
+LANGUAGE SIZE
+Keep the core grammar small.
+Do not set arbitrary keyword limits before benchmarking, but treat every keyword and grammar production as a cost.
+Prefer orthogonal primitives that combine cleanly.
+Avoid adding syntax merely because another language has it.
+COMMENTS AND DOCUMENTATION
+Human prose comments may be expensive for LLM context.
+Investigate structured documentation metadata that lets AI tools selectively load:
+* purpose
+* preconditions
+* invariants
+* side effects
+* examples
+* security notes
+Do not prohibit comments.
+Provide mechanisms for tools to exclude irrelevant prose from agent contexts.
+PROJECT STRUCTURE
+Create the Tokit project as a serious repository.
+At minimum plan directories for:
+compiler/
+runtime/
+stdlib/
+packages/
+tools/
+lsp/
+docs/
+spec/
+rfcs/
+benchmarks/
+tests/
+examples/
+editors/
+ai/
+scripts/
+Use an RFC process for major language changes.
+For example:
+rfcs/0001-language-core.md
+rfcs/0002-token-metric.md
+rfcs/0003-memory-model.md
+RESEARCH FIRST
+Do not immediately freeze syntax.
+First research the problem.
+The initial phases must be:
+PHASE 0 - Problem definition
+Define measurable objectives.
+PHASE 1 - Tokenizer research
+Analyze tokenization behavior.
+PHASE 2 - Syntax experiments
+Construct candidate grammars.
+PHASE 3 - Benchmark candidate syntax
+Measure token efficiency.
+PHASE 4 - Language specification
+Freeze an initial coherent subset.
+PHASE 5 - Parser
+Implement lexer/parser.
+PHASE 6 - Semantic model
+Implement type checking and semantic analysis.
+PHASE 7 - Interpreter
+Optionally implement a reference interpreter if useful for validating semantics.
+PHASE 8 - Tokit IR
+Design an optimization-friendly intermediate representation.
+PHASE 9 - Native backend
+Implement LLVM or another suitable backend.
+PHASE 10 - Runtime
+Implement GC and required runtime functionality.
+PHASE 11 - Standard library
+Implement essential APIs.
+PHASE 12 - Toolchain
+Package manager, formatter, tests, benchmarks.
+PHASE 13 - AI interfaces
+AST patching, compact diagnostics, project indexing.
+PHASE 14 - IDE
+LSP and editor tooling.
+PHASE 15 - Self-hosting
+Begin compiler migration to Tokit.
+REQUIRED SPECIFICATION DOCUMENTS
+Before considering the language architecture stable, create detailed specifications for:
+1. Language philosophy
+2. Lexical grammar
+3. Formal grammar / EBNF
+4. Type system
+5. Numeric semantics
+6. String semantics
+7. Memory model
+8. GC model
+9. concurrency model
+10. error model
+11. module system
+12. generics
+13. traits/interfaces
+14. unsafe model
+15. capability model
+16. FFI
+17. compiler architecture
+18. Tokit IR
+19. optimization pipeline
+20. standard library
+21. package manager
+22. build system
+23. AI protocol
+24. AST patch protocol
+25. compiler diagnostics
+26. canonical formatting
+27. security model
+28. WebAssembly model
+29. GPU model
+30. embedded model
+31. testing model
+32. benchmark methodology
+DESIGN DECISION RULE
+When facing a language-design choice, evaluate it against the following weighted objectives:
+Token efficiency: critical
+Runtime performance: critical
+Reliability: critical
+Determinism: very high
+Compiler analyzability: very high
+Security: very high
+Compile time: high
+Binary size: high
+Interoperability: high
+Human readability: secondary
+Do not choose syntax merely because humans find it familiar.
+Ask instead:
+How many LLM tokens does it require?
+How accurately can models generate it?
+How deterministic is it?
+How easy is it to parse?
+How expensive is semantic analysis?
+Does it hide dangerous behavior?
+Does it compile efficiently?
+Does it introduce runtime cost?
+Can the compiler provide a human explanation separately?
+LLM GENERATION BENCHMARK
+Token count alone is insufficient.
+A syntax that uses 8% fewer tokens but causes 30% more generation errors may be worse.
+Therefore benchmark models on:
+* generation accuracy
+* compile success
+* error frequency
+* repair token consumption
+* average retries
+* modification accuracy
+* hallucinated syntax frequency
+Define a metric combining source token cost with repair cost.
+For example, research something conceptually like:
+Effective Token Cost =
+initial generation tokens
+* compiler feedback tokens
+* repair tokens
+* regeneration tokens
+Optimize Tokit for total coding-session cost, not only file size.
+This is critical.
+COMPRESSED REPRESENTATION
+Investigate whether Tokit should eventually have more than one representation.
+Potential architecture:
+.tok
+canonical machine-oriented textual representation.
+Optional:
+.toki
+even more compact AI/IR-oriented representation.
+However, do not introduce dual syntax prematurely.
+First determine whether one representation can satisfy both needs.
+An even more radical alternative is allowing LLM agents to communicate in serialized AST operations while .tok remains the persistent textual form.
+Explore this scientifically.
+PARSING
+Prefer deterministic parsing.
+Avoid significant ambiguity.
+Avoid parser behavior where small token changes drastically alter distant meaning.
+Investigate parser-friendly grammars such as:
+* Pratt parsing
+* PEG
+* LL
+* LR
+Choose based on Tokit's grammar rather than ideology.
+SOURCE FILE EXTENSION
+Use:
+.tok
+as the default source extension.
+CLI:
+tok
+Language:
+Tokit
+Package registry naming may be determined later.
+BRANDING
+Technical development comes first.
+A later branding phase may define:
+* logo
+* visual identity
+* website
+* documentation theme
+* slogan
+* GitHub README
+The official meaning should primarily be:
+Tokit = Token + Kit
+The "took it" interpretation may be used playfully but should not undermine the technical identity.
+LICENSING
+Prefer an open-source license suitable for broad compiler and ecosystem adoption.
+Evaluate MIT, Apache 2.0, or a dual-license model.
+Document the reasoning before final selection.
+AUTONOMY
+You may independently choose minor engineering details.
+Do not stop execution for trivial preferences.
+If an unresolved issue materially affects:
+* language semantics
+* public syntax
+* safety guarantees
+* compatibility
+* package architecture
+* runtime architecture
+* major performance characteristics
+* long-term compiler architecture
+ask the project owner before permanently freezing the decision.
+For ordinary implementation details, choose the technically strongest reasonable option and document it.
+DO NOT merely endlessly theorize.
+The goal is a working language.
+At each phase:
+1. design
+2. implement
+3. test
+4. benchmark
+5. document
+6. evaluate
+7. refine
+Never claim that a feature works without testing it.
+Never claim performance superiority without benchmarks.
+Never claim token superiority without tokenizer measurements.
+Never claim safety guarantees that have not been implemented or formally specified.
+MVP
+The first usable milestone should include:
+* .tok files
+* defined lexical syntax
+* parser
+* AST
+* static type checker
+* explicit primitive types
+* functions
+* variables
+* arrays
+* structs
+* enums
+* branching
+* loops
+* basic generics
+* typed errors
+* imports/modules
+* GC runtime
+* native compilation
+* basic standard library
+* filesystem
+* networking
+* HTTP server capability
+* JSON
+* concurrency primitives
+* package manager prototype
+* formatter
+* compiler diagnostics
+* test runner
+* token statistics command
+Build example applications demonstrating:
+Hello World
+CLI calculator
+file processor
+JSON parser/use
+HTTP API
+concurrent HTTP service
+WebSocket example
+CRUD service
+binary data processing
+benchmark program
+TOKEN-EFFICIENCY ACCEPTANCE TEST
+For equivalent implementations, Tokit should seek substantial reductions compared with existing systems/application languages.
+Do not establish fake victory conditions.
+Benchmark fairly.
+Compare identical functionality.
+Track at minimum Tokit against:
+Rust
+Go
+TypeScript
+Python
+If Tokit does not materially reduce token use, determine why and redesign it.
+PERFORMANCE ACCEPTANCE TEST
+For CPU-native workloads, Tokit must aim toward Rust/C/Go performance territory depending on abstraction and GC use.
+Where Tokit's GC causes measurable overhead, document it.
+Do not hide tradeoffs.
+Create benchmark dashboards over time.
+FINAL PRINCIPLE
+Tokit is based on the hypothesis that programming languages optimized for human authors are not necessarily optimal for machine authors.
+Test that hypothesis rigorously.
+The desired future workflow is not:
+human manually writes enormous amounts of Tokit.
+It is:
+human expresses intent
+-> LLM plans
+-> LLM emits compact Tokit
+-> compiler validates
+-> AI-readable diagnostics guide repair
+-> tests verify behavior
+-> compiler creates optimized native output
+-> human can inspect semantic translations when required.
+Tokit source should therefore be considered an efficient communication protocol between code-generating intelligence and deterministic compiler infrastructure.
+The human interacts primarily at the semantic level.
+The LLM interacts primarily at the program-representation level.
+The compiler acts as the authority on correctness.
+Do not optimize for appearances.
+Optimize for measurable information density.
+Do not optimize only for the number of characters.
+Optimize for total token consumption.
+Do not optimize only for token consumption.
+Preserve performance.
+Do not obtain performance by abandoning safety unnecessarily.
+Do not obtain safety through enormous syntax overhead.
+Search for designs where compiler intelligence replaces source-code verbosity.
+The ultimate objective is:
+maximum executable meaning per LLM token, at near-native performance, with strong correctness guarantees.
+Begin by creating the research and architecture foundation before committing to the first Tokit grammar.
+Your first concrete output must contain:
+1. VISION.md
+2. DESIGN_GOALS.md
+3. RESEARCH_PLAN.md
+4. TOKEN_BENCHMARK_SPEC.md
+5. COMPILER_ARCHITECTURE.md
+6. LANGUAGE_CANDIDATES.md
+7. at least three radically different candidate Tokit syntaxes
+8. tokenizer-cost comparison methodology
+9. preliminary compiler architecture
+10. a staged implementation roadmap
+11. major unresolved architectural decisions that require owner input
+For the three syntax candidates, do not create cosmetic variations.
+Make them fundamentally different.
+At minimum explore:
+Candidate A:
+compressed conventional textual syntax
+Candidate B:
+extremely symbolic machine-oriented syntax
+Candidate C:
+AST-like or positional representation optimized specifically for LLM generation
+For each candidate, implement equivalent examples including:
+* variable declarations
+* primitive types
+* function definitions
+* generics
+* structures
+* conditions
+* loops
+* error handling
+* HTTP handler
+* concurrency
+* JSON serialization
+* module import
+Then compare them empirically.
+After that research phase, recommend the strongest architecture based on measured tradeoffs.
+Do not finalize the Tokit syntax until evidence exists.
+Once the architecture is approved, begin implementing the compiler and continue iteratively toward the MVP.
+The project is successful only if Tokit becomes a real, testable language rather than a language-design thought experiment.
+
