@@ -24,6 +24,7 @@ pub enum Type {
     Unit,
     Never,
     Array(Box<Type>),
+    Task(Box<Type>),
     EmptyArray,
     Result(Box<Type>, Box<Type>),
 }
@@ -49,6 +50,7 @@ impl std::fmt::Display for Type {
             Self::Unit => "Unit",
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
+            Self::Task(result) => return write!(f, "Task<{result}>"),
             Self::EmptyArray => "empty array",
             Self::Result(ok, err) => return write!(f, "Result<{ok},{err}>"),
         };
@@ -105,6 +107,7 @@ pub enum ExprKind {
     Var(String),
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
+    Spawn(Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     Match(Box<Expr>, Vec<(Pattern, Expr)>),
     Block(Vec<Stmt>, Option<Box<Expr>>),

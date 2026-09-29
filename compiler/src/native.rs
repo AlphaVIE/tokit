@@ -76,6 +76,33 @@ impl __TokRender for __TokIoError {
         }.to_owned()
     }
 }
+#[derive(Clone)] enum __TokTaskError { Failed }
+impl __TokRender for __TokTaskError {
+    fn tok_render(&self) -> String { "TaskError::Failed".to_owned() }
+}
+struct __TokTaskState<T> {
+    handle: Option<std::thread::JoinHandle<T>>,
+    result: Option<Result<T, __TokTaskError>>,
+}
+#[derive(Clone)] struct __TokTask<T>(std::sync::Arc<std::sync::Mutex<__TokTaskState<T>>>);
+impl<T> __TokRender for __TokTask<T> {
+    fn tok_render(&self) -> String { "<task>".to_owned() }
+}
+fn __tok_spawn<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> __TokTask<T> {
+    __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState {
+        handle: Some(std::thread::spawn(job)), result: None,
+    })))
+}
+fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
+    let mut state = task.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.result.is_none() {
+        state.result = Some(match state.handle.take() {
+            Some(handle) => handle.join().map_err(|_| __TokTaskError::Failed),
+            None => Err(__TokTaskError::Failed),
+        });
+    }
+    state.result.as_ref().expect("task result").clone()
+}
 thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
 fn __tok_configure_read() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -117,6 +144,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         Type::Named(name) if name == builtins::IO_ERROR => "__TokIoError".to_owned(),
+        Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
         Type::Named(name) => user_name(name),
         Type::Applied(name, args) => format!(
             "{}<{}>",
@@ -126,6 +154,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Param(name) => user_name(name),
         Type::Unit => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
+        Type::Task(result) => format!("__TokTask<{}>", rust_type(result)),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
         Type::Never => "!".to_owned(),
         Type::EmptyArray => "Vec<()>".to_owned(),
@@ -143,6 +172,8 @@ fn user_name(name: &str) -> String {
 fn enum_path(name: &str, variant: &str) -> String {
     if name == builtins::IO_ERROR {
         format!("__TokIoError::{variant}")
+    } else if name == builtins::TASK_ERROR {
+        format!("__TokTaskError::{variant}")
     } else {
         format!("{}::{}", user_name(name), user_name(variant))
     }
@@ -152,6 +183,7 @@ fn rust_type_fallback(ty: &Type) -> String {
     match ty {
         Type::Never => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type_fallback(element)),
+        Type::Task(result) => format!("__TokTask<{}>", rust_type_fallback(result)),
         Type::Result(ok, err) => format!(
             "Result<{},{}>",
             rust_type_fallback(ok),
@@ -219,6 +251,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
             let callee = match name.as_str() {
                 builtins::READ_TEXT => "__tok_read_text".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
+                builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
             format!(
@@ -228,6 +261,27 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                     .collect::<Vec<_>>()
                     .join(",")
             )
+        }
+        ExprKind::Spawn(call) => {
+            let ExprKind::Call(name, args) = &call.kind else {
+                unreachable!("checked spawn call")
+            };
+            let mut out = String::from("{");
+            for (index, arg) in args.iter().enumerate() {
+                write!(
+                    out,
+                    "let __tok_arg{index} = {};",
+                    emit_expr(arg, source, types)
+                )
+                .expect("writing to String cannot fail");
+            }
+            let args = (0..args.len())
+                .map(|index| format!("__tok_arg{index}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            write!(out, "__tok_spawn(move || {}({args})) }}", user_name(name))
+                .expect("writing to String cannot fail");
+            out
         }
         ExprKind::Binary(left, op, right) => {
             let left_type = types.get(&left.span);

@@ -17,6 +17,7 @@ pub enum Value {
     Enum(String, String, Option<Box<Value>>),
     Ok(Box<Value>),
     Err(Box<Value>),
+    Task(Box<Value>),
     Unit,
 }
 
@@ -55,6 +56,7 @@ impl std::fmt::Display for Value {
             }
             Self::Ok(value) => write!(f, "Ok({value})"),
             Self::Err(value) => write!(f, "Err({value})"),
+            Self::Task(_) => f.write_str("<task>"),
             Self::Unit => f.write_str("()"),
         }
     }
@@ -239,6 +241,12 @@ fn eval(
                         .collect(),
                 )));
             }
+            if name == builtins::JOIN {
+                let [Value::Task(value)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid join call"));
+                };
+                return Ok(Flow::Value(Value::Ok(value.clone())));
+            }
             if let Some(record) = program.records.iter().find(|record| record.name == *name) {
                 return Ok(Flow::Value(Value::Record(
                     name.clone(),
@@ -262,6 +270,10 @@ fn eval(
                     )
                 })?;
             invoke(program, function, values, depth + 1, policy)?
+        }
+        ExprKind::Spawn(call) => {
+            let value = take_value!(eval(call, env, program, depth, policy));
+            Value::Task(Box::new(value))
         }
         ExprKind::If(condition, yes, no) => {
             let condition = take_value!(eval(condition, env, program, depth, policy));
