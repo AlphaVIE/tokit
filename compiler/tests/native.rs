@@ -39,6 +39,7 @@ fn native_output_matches_reference_interpreter() {
         "parse_argument",
         "parse_numbers",
         "iterative_factorial",
+        "loop_control",
         "task_square",
     ] {
         let source =

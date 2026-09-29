@@ -9,6 +9,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     type_params: Vec<String>,
+    loop_depth: usize,
 }
 
 impl Parser {
@@ -17,6 +18,7 @@ impl Parser {
             tokens,
             pos: 0,
             type_params: Vec::new(),
+            loop_depth: 0,
         }
     }
 
@@ -291,7 +293,7 @@ impl Parser {
                 let (name, _) = self.ident()?;
                 self.expect(Kind::In)?;
                 let iterable = self.expr(0)?;
-                let body = self.block()?;
+                let body = self.loop_block()?;
                 let span = first.join(body.span);
                 stmts.push(Stmt::For {
                     name,
@@ -302,7 +304,7 @@ impl Parser {
             } else if self.at(&Kind::While) {
                 let first = self.bump().span;
                 let condition = self.expr(0)?;
-                let body = self.block()?;
+                let body = self.loop_block()?;
                 let span = first.join(body.span);
                 stmts.push(Stmt::While {
                     condition,
@@ -332,6 +334,22 @@ impl Parser {
                     value,
                     span: first.join(end),
                 });
+            } else if self.at(&Kind::Break) || self.at(&Kind::Continue) {
+                let token = self.bump();
+                if self.loop_depth == 0 {
+                    return Err(Diagnostic::new(
+                        "E002",
+                        token.span,
+                        "break and continue require a loop body",
+                    ));
+                }
+                let end = self.expect(Kind::Semicolon)?.span;
+                let span = token.span.join(end);
+                stmts.push(if token.kind == Kind::Break {
+                    Stmt::Break { span }
+                } else {
+                    Stmt::Continue { span }
+                });
             } else if self.at(&Kind::Return) {
                 let first = self.bump().span;
                 let value = self.expr(0)?;
@@ -356,6 +374,13 @@ impl Parser {
             kind: ExprKind::Block(stmts, tail),
             span: start.join(end),
         })
+    }
+
+    fn loop_block(&mut self) -> Result<Expr, Diagnostic> {
+        self.loop_depth += 1;
+        let result = self.block();
+        self.loop_depth -= 1;
+        result
     }
 
     fn expr(&mut self, min_prec: u8) -> Result<Expr, Diagnostic> {
