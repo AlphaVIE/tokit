@@ -18,6 +18,7 @@ Effect labels currently mean:
 | Label | Meaning |
 | --- | --- |
 | `fs.read` | Calls `read_text`; execution needs a path grant. |
+| `fs.write` | Calls `write_text`; execution needs a separate write grant. |
 | `env.args` | Reads program arguments with `args`. |
 | `task.spawn` | Starts a task with `spawn`. |
 | `task.join` | Joins a task with `join`. |
@@ -26,6 +27,6 @@ The index summarizes possible calls, including branches that might not run.
 It does not claim that an effect occurs on every execution. It describes one
 file because modules and imports are not implemented yet. It does not contain
 exports, data-flow proofs, ownership analysis, stable node IDs, or a project
-dependency graph. The four effect labels do not enumerate arithmetic or bounds
+dependency graph. These effect labels do not enumerate arithmetic or bounds
 failures, allocation, or local mutation. Those require later compiler and
 language work.

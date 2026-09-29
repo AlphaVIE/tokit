@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use tokit_compiler::test_runner::{Outcome, run};
+use tokit_compiler::test_runner::{Outcome, run, run_with_capabilities};
 
 fn temporary_directory() -> PathBuf {
     let nonce = std::time::SystemTime::now()
@@ -99,6 +99,41 @@ fn file_read_test_needs_an_explicit_grant() {
     assert!(output.status.success());
     assert!(
         String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 passed; 0 failed")
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn file_write_test_needs_a_separate_write_grant() {
+    let directory = temporary_directory();
+    let target = directory.join("result.txt");
+    let source = format!(
+        "fn test_write()->Result<bool,IoError>{{let saved:Unit=write_text({},\"done\")?;Ok(true)}}",
+        literal(&target)
+    );
+    assert_eq!(run(&source, Some(&directory)).unwrap().failed(), 1);
+    assert!(!target.exists());
+    assert_eq!(
+        run_with_capabilities(&source, None, Some(&directory))
+            .unwrap()
+            .failed(),
+        0
+    );
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "done");
+    let suite = directory.join("writes.tok");
+    std::fs::write(&suite, source).unwrap();
+    let cli = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .arg("test")
+        .arg("--allow-write")
+        .arg(&directory)
+        .arg(&suite)
+        .output()
+        .unwrap();
+    assert!(cli.status.success());
+    assert!(
+        String::from_utf8(cli.stdout)
             .unwrap()
             .contains("1 passed; 0 failed")
     );

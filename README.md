@@ -6,7 +6,7 @@ The project brief is in [PROMPT.txt](PROMPT.txt). Start with [VISION.md](VISION.
 
 An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can parse, type-check, interpret, explain, [format source](spec/FORMATTER.md), [measure structural density](research/STRUCTURAL_METRICS.md), and [build native executables](spec/NATIVE_BOOTSTRAP.md) from a small `.tok` subset. With Rust installed, run `cargo test --workspace`, `cargo run -p tokit-compiler --bin tok -- run examples/answer.tok`, or `cargo run -p tokit-compiler --bin tok -- explain examples/match_result.tok`. The source grammar and bootstrap backend are not yet production language commitments.
 
-An [experimental filesystem-read capability](spec/FILESYSTEM_CAPABILITY.md) lets `tok run --allow-read examples examples/line_count.tok` process UTF-8 files with explicit access to a path.
+Experimental [filesystem capabilities](spec/FILESYSTEM_CAPABILITY.md) let Tokit read and write UTF-8 files through separate path grants. See [file_copy.tok](examples/file_copy.tok) for a two-grant example.
 
 An experimental typed task primitive lets `spawn f(args)` start a pure function and `join(task)` recover its result. See [the task example](examples/task_square.tok) and [subset contract](spec/EXPERIMENTAL_SUBSET.md).
 

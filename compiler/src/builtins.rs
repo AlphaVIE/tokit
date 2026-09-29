@@ -1,6 +1,7 @@
 use crate::ast::{EnumDecl, EnumVariant, Span, Type};
 
 pub const READ_TEXT: &str = "read_text";
+pub const WRITE_TEXT: &str = "write_text";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const LEN: &str = "len";
@@ -28,6 +29,13 @@ pub fn io_error_decl() -> EnumDecl {
 pub fn read_text_result() -> Type {
     Type::Result(
         Box::new(Type::String),
+        Box::new(Type::Named(IO_ERROR.to_owned())),
+    )
+}
+
+pub fn write_text_result() -> Type {
+    Type::Result(
+        Box::new(Type::Unit),
         Box::new(Type::Named(IO_ERROR.to_owned())),
     )
 }

@@ -3,28 +3,29 @@ use std::{env, fs, path::Path, process};
 fn run_command(args: &[String]) {
     let mut index = 0;
     let mut json = false;
-    let mut root = None;
+    let mut read_root = None;
+    let mut write_root = None;
     while let Some(flag) = args.get(index) {
         match flag.as_str() {
             "--json" if !json => {
                 json = true;
                 index += 1;
             }
-            "--allow-read" if root.is_none() => {
-                root = args.get(index + 1).map(String::as_str);
-                if root.is_none() {
-                    eprintln!(
-                        "usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]"
-                    );
-                    process::exit(2);
-                }
+            "--allow-read" if read_root.is_none() && args.get(index + 1).is_some() => {
+                read_root = args.get(index + 1).map(String::as_str);
+                index += 2;
+            }
+            "--allow-write" if write_root.is_none() && args.get(index + 1).is_some() => {
+                write_root = args.get(index + 1).map(String::as_str);
                 index += 2;
             }
             _ => break,
         }
     }
     let Some(path) = args.get(index) else {
-        eprintln!("usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]");
+        eprintln!(
+            "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...]"
+        );
         process::exit(2);
     };
     let remaining = &args[index + 1..];
@@ -32,7 +33,9 @@ fn run_command(args: &[String]) {
         [] => &[][..],
         [separator, rest @ ..] if separator == "--" => rest,
         _ => {
-            eprintln!("usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]");
+            eprintln!(
+                "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...]"
+            );
             process::exit(2);
         }
     };
@@ -43,7 +46,12 @@ fn run_command(args: &[String]) {
             process::exit(2);
         }
     };
-    let result = tokit_compiler::run_with_runtime_args(&source, root.map(Path::new), program_args);
+    let result = tokit_compiler::run_with_capabilities(
+        &source,
+        read_root.map(Path::new),
+        write_root.map(Path::new),
+        program_args,
+    );
     match result {
         Ok(value) if json => println!(
             "{{\"ok\":true,\"result\":\"{}\"}}",
@@ -62,13 +70,25 @@ fn run_command(args: &[String]) {
 }
 
 fn test_command(args: &[String]) {
-    let (root, path) = match args {
-        [path] => (None, path),
-        [flag, root, path] if flag == "--allow-read" => (Some(Path::new(root)), path),
-        _ => {
-            eprintln!("usage: tok test [--allow-read <path>] <file.tok>");
-            process::exit(2);
+    let mut index = 0;
+    let mut read_root = None;
+    let mut write_root = None;
+    while let Some(flag) = args.get(index) {
+        match flag.as_str() {
+            "--allow-read" if read_root.is_none() && args.get(index + 1).is_some() => {
+                read_root = args.get(index + 1).map(String::as_str);
+                index += 2;
+            }
+            "--allow-write" if write_root.is_none() && args.get(index + 1).is_some() => {
+                write_root = args.get(index + 1).map(String::as_str);
+                index += 2;
+            }
+            _ => break,
         }
+    }
+    let [path] = &args[index..] else {
+        eprintln!("usage: tok test [--allow-read <path>] [--allow-write <path>] <file.tok>");
+        process::exit(2);
     };
     let source = match fs::read_to_string(path) {
         Ok(source) => source,
@@ -77,7 +97,11 @@ fn test_command(args: &[String]) {
             process::exit(2);
         }
     };
-    match tokit_compiler::test_runner::run(&source, root) {
+    match tokit_compiler::test_runner::run_with_capabilities(
+        &source,
+        read_root.map(Path::new),
+        write_root.map(Path::new),
+    ) {
         Ok(report) => {
             println!("{}", report.display());
             if report.failed() > 0 {
@@ -177,7 +201,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }

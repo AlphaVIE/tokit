@@ -51,3 +51,10 @@ fn explanation_marks_filesystem_grant_requirement() {
     let report = explain::explain(&check(source).unwrap());
     assert!(report.contains("filesystem read (requires grant)"));
 }
+
+#[test]
+fn explanation_marks_write_grant_requirement() {
+    let source = "fn main()->Result<Unit,IoError>{write_text(\"output.txt\",\"ok\")}";
+    let report = explain::explain(&check(source).unwrap());
+    assert!(report.contains("filesystem write (requires grant)"));
+}

@@ -52,6 +52,14 @@ impl Report {
 
 /// Check a source file, validate all test signatures, then run each test.
 pub fn run(source: &str, root: Option<&Path>) -> Result<Report, Diagnostic> {
+    run_with_capabilities(source, root, None)
+}
+
+pub fn run_with_capabilities(
+    source: &str,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+) -> Result<Report, Diagnostic> {
     let program = crate::check(source)?;
     let tests = program
         .functions
@@ -83,7 +91,12 @@ pub fn run(source: &str, root: Option<&Path>) -> Result<Report, Diagnostic> {
     let cases = tests
         .iter()
         .map(|function| {
-            let outcome = match interpreter::run_named(&program, &function.name, root) {
+            let outcome = match interpreter::run_named_with_capabilities(
+                &program,
+                &function.name,
+                read_root,
+                write_root,
+            ) {
                 Ok(Value::Bool(true)) => Outcome::Passed,
                 Ok(Value::Ok(value)) if matches!(value.as_ref(), Value::Bool(true)) => {
                     Outcome::Passed

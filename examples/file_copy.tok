@@ -1,0 +1,1 @@
+fn main()->Result<Unit,IoError>{let paths:[String]=args();if len(paths)==2{let text:String=read_text(paths[0])?;write_text(paths[1],text)}else{Err(IoError::Other)}}

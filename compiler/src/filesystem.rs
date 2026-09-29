@@ -1,16 +1,18 @@
-//! Experimental path-scoped filesystem read capability.
+//! Experimental path-scoped filesystem capabilities.
 
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReadError {
+pub enum IoError {
     Denied,
     NotFound,
     InvalidUtf8,
     Other,
 }
 
-impl ReadError {
+pub use IoError as ReadError;
+
+impl IoError {
     pub fn variant(self) -> &'static str {
         match self {
             Self::Denied => "Denied",
@@ -24,6 +26,47 @@ impl ReadError {
 #[derive(Clone, Debug, Default)]
 pub struct ReadPolicy {
     root: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct WritePolicy {
+    root: Option<PathBuf>,
+}
+
+impl WritePolicy {
+    pub fn from_root(root: Option<&Path>) -> Self {
+        Self {
+            root: root.and_then(|path| path.canonicalize().ok()),
+        }
+    }
+
+    pub fn write_text(&self, path: &str, text: &str) -> Result<(), IoError> {
+        let root = self.root.as_ref().ok_or(IoError::Denied)?;
+        let requested = Path::new(path);
+        let target = match requested.canonicalize() {
+            Ok(target) => target,
+            Err(_) => {
+                // A dangling link must not turn into a write outside the grant.
+                if requested
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                {
+                    return Err(IoError::Denied);
+                }
+                let parent = requested
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or(Path::new("."));
+                let parent = parent.canonicalize().map_err(|_| IoError::Denied)?;
+                let name = requested.file_name().ok_or(IoError::Other)?;
+                parent.join(name)
+            }
+        };
+        if !target.starts_with(root) {
+            return Err(IoError::Denied);
+        }
+        std::fs::write(target, text.as_bytes()).map_err(|error| classify(error.kind()))
+    }
 }
 
 impl ReadPolicy {
