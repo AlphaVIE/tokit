@@ -1,5 +1,6 @@
 use crate::ast::{
-    EnumDecl, Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Record, Span, Stmt, Type,
+    EnumDecl, EnumVariant, Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Record,
+    Span, Stmt, Type,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
@@ -146,7 +147,16 @@ impl Parser {
         let mut variants = Vec::new();
         if !self.at(&Kind::RBrace) {
             loop {
-                variants.push(self.ident()?.0);
+                let (name, _) = self.ident()?;
+                let payload = if self.at(&Kind::LParen) {
+                    self.bump();
+                    let ty = self.ty()?;
+                    self.expect(Kind::RParen)?;
+                    Some(ty)
+                } else {
+                    None
+                };
+                variants.push(EnumVariant { name, payload });
                 if !self.at(&Kind::Comma) {
                     break;
                 }
@@ -399,8 +409,16 @@ impl Parser {
                 if self.at(&Kind::ColonColon) {
                     self.bump();
                     let (variant, end) = self.ident()?;
+                    let (payload, end) = if self.at(&Kind::LParen) {
+                        self.bump();
+                        let payload = self.expr(0)?;
+                        let end = self.expect(Kind::RParen)?.span;
+                        (Some(Box::new(payload)), end)
+                    } else {
+                        (None, end)
+                    };
                     Ok(Expr {
-                        kind: ExprKind::Variant(name, variant),
+                        kind: ExprKind::Variant(name, variant, payload),
                         span: token.span.join(end),
                     })
                 } else if self.at(&Kind::LParen) {
@@ -512,7 +530,18 @@ impl Parser {
             Kind::Ident(name) => {
                 self.expect(Kind::ColonColon)?;
                 let (variant, end) = self.ident()?;
-                (PatternKind::Variant(name, variant), token.span.join(end))
+                let (binding, end) = if self.at(&Kind::LParen) {
+                    self.bump();
+                    let (binding, _) = self.ident()?;
+                    let end = self.expect(Kind::RParen)?.span;
+                    (Some(binding), end)
+                } else {
+                    (None, end)
+                };
+                (
+                    PatternKind::Variant(name, variant, binding),
+                    token.span.join(end),
+                )
             }
             _ => {
                 return Err(Diagnostic::new(

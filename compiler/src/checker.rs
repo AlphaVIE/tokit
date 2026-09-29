@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::{Expr, ExprKind, Op, Pattern, PatternKind, Program, Span, Stmt, Type};
+use crate::ast::{
+    EnumVariant, Expr, ExprKind, Op, Pattern, PatternKind, Program, Span, Stmt, Type,
+};
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone)]
@@ -9,7 +11,7 @@ struct Signature {
     params: Vec<Type>,
     ret: Type,
     fields: Option<Vec<(String, Type)>>,
-    variants: Option<Vec<String>>,
+    variants: Option<Vec<EnumVariant>>,
 }
 #[derive(Clone)]
 struct Binding {
@@ -55,11 +57,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         arities.insert(enum_decl.name.clone(), 0);
         let mut names = HashSet::new();
         for variant in &enum_decl.variants {
-            if !names.insert(variant) {
+            if !names.insert(&variant.name) {
                 return Err(Diagnostic::new(
                     "E106",
                     enum_decl.span,
-                    format!("duplicate variant {variant}"),
+                    format!("duplicate variant {}", variant.name),
                 ));
             }
         }
@@ -73,6 +75,13 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 variants: Some(enum_decl.variants.clone()),
             },
         );
+    }
+    for enum_decl in &program.enums {
+        for variant in &enum_decl.variants {
+            if let Some(payload) = &variant.payload {
+                validate_type(payload, &arities, enum_decl.span)?;
+            }
+        }
     }
     for record in &program.records {
         validate_params(&record.type_params, &record_names, record.span)?;
@@ -126,6 +135,15 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 "E112",
                 record.span,
                 "recursive record value layout",
+            ));
+        }
+    }
+    for enum_decl in &program.enums {
+        if enum_has_cycle(&enum_decl.name, program, &mut HashSet::new()) {
+            return Err(Diagnostic::new(
+                "E112",
+                enum_decl.span,
+                "recursive enum value layout",
             ));
         }
     }
@@ -270,7 +288,7 @@ fn record_has_cycle(
     visiting: &mut HashSet<String>,
 ) -> bool {
     let Some(record) = program.records.iter().find(|record| record.name == name) else {
-        return false;
+        return enum_has_cycle(name, program, visiting);
     };
     if !visiting.insert(name.to_owned()) {
         return true;
@@ -285,6 +303,22 @@ fn record_has_cycle(
         .fields
         .iter()
         .any(|(_, ty)| type_has_cycle(&substitute(ty, &inferred), program, visiting));
+    visiting.remove(name);
+    cycle
+}
+
+fn enum_has_cycle(name: &str, program: &Program, visiting: &mut HashSet<String>) -> bool {
+    let Some(decl) = program.enums.iter().find(|decl| decl.name == name) else {
+        return false;
+    };
+    if !visiting.insert(name.to_owned()) {
+        return true;
+    }
+    let cycle = decl
+        .variants
+        .iter()
+        .filter_map(|variant| variant.payload.as_ref())
+        .any(|payload| type_has_cycle(payload, program, visiting));
     visiting.remove(name);
     cycle
 }
@@ -445,15 +479,15 @@ fn match_pattern(
             Ok(("Err".to_owned(), Some((name.clone(), *err.clone()))))
         }
         (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
-        (PatternKind::Variant(name, variant), Type::Named(actual)) if name == actual => {
-            let valid = signatures
+        (PatternKind::Variant(name, variant, binding), Type::Named(actual)) if name == actual => {
+            let declared = signatures
                 .get(name)
                 .and_then(|signature| signature.variants.as_ref())
-                .is_some_and(|variants| variants.contains(variant));
-            if valid {
-                Ok((variant.clone(), None))
-            } else {
-                Err(invalid())
+                .and_then(|variants| variants.iter().find(|item| item.name == *variant));
+            match (declared.and_then(|item| item.payload.as_ref()), binding) {
+                (None, None) if declared.is_some() => Ok((variant.clone(), None)),
+                (Some(ty), Some(name)) => Ok((variant.clone(), Some((name.clone(), ty.clone())))),
+                _ => Err(invalid()),
             }
         }
         _ => Err(invalid()),
@@ -483,7 +517,7 @@ fn infer(
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::Bool(_) => Ok(Type::Bool),
         ExprKind::String(_) => Ok(Type::String),
-        ExprKind::Variant(name, variant) => {
+        ExprKind::Variant(name, variant, payload) => {
             let signature = signatures.get(name).ok_or_else(|| {
                 Diagnostic::new("E103", expr.span, format!("unknown enum {name}"))
             })?;
@@ -494,15 +528,34 @@ fn infer(
                     format!("{name} is not an enum"),
                 ));
             };
-            if variants.contains(variant) {
-                Ok(Type::Named(name.clone()))
-            } else {
-                Err(Diagnostic::new(
-                    "E114",
-                    expr.span,
-                    format!("unknown variant {name}::{variant}"),
-                ))
+            let declared = variants
+                .iter()
+                .find(|item| item.name == *variant)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        "E114",
+                        expr.span,
+                        format!("unknown variant {name}::{variant}"),
+                    )
+                })?;
+            match (&declared.payload, payload) {
+                (None, None) => {}
+                (Some(expected), Some(value)) => {
+                    let actual = type_of(value, env, signatures, return_type, types)?;
+                    if actual == Type::Never {
+                        return Ok(Type::Never);
+                    }
+                    require(expected, &actual, value.span, "enum payload")?;
+                }
+                _ => {
+                    return Err(Diagnostic::new(
+                        "E114",
+                        expr.span,
+                        format!("wrong payload shape for {name}::{variant}"),
+                    ));
+                }
             }
+            Ok(Type::Named(name.clone()))
         }
         ExprKind::Array(values) => {
             let Some(first) = values.first() else {
@@ -727,7 +780,7 @@ fn infer(
                         )
                     })?
                     .iter()
-                    .cloned()
+                    .map(|variant| variant.name.clone())
                     .collect(),
                 _ => {
                     return Err(Diagnostic::new(
