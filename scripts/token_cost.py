@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import subprocess
 from collections.abc import Callable, Sized
 from pathlib import Path
 
@@ -37,10 +38,33 @@ def measure(path: Path, encodings: dict[str, Callable[[str], Sized]], region: st
     }
 
 
+def attach_stats(measurement: dict[str, object], stats: dict[str, int]) -> None:
+    """Join compiler structure counts with source tokens; zero denominators stay null."""
+    for key in ("bytes", "chars"):
+        if measurement[key] != stats[key]:
+            raise ValueError(f"source {key} differ between tokenizer and compiler")
+    denominators = {
+        "per_ast_node": stats["ast_nodes"],
+        "per_semantic_op": stats["semantic_ops"],
+        "per_function": stats["functions"],
+        "per_declaration": stats["declarations"],
+        "per_dependency": stats["dependencies"],
+    }
+    measurement["structure"] = stats
+    measurement["token_ratios"] = {
+        name: {metric: count / denom if denom else None for metric, denom in denominators.items()}
+        for name, count in measurement["tokens"].items()
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", type=Path, help="A file or directory of *.tok.txt files")
     parser.add_argument("--region", choices=["core"], help="count only content between BENCH markers")
+    parser.add_argument(
+        "--tok-stats-binary", type=Path, metavar="TOK",
+        help="run 'tok stats' on checked *.tok files and report token density",
+    )
     parser.add_argument(
         "--encoding", action="append", dest="encodings",
         help="tiktoken encoding name; repeat to compare (default: cl100k_base, o200k_base)",
@@ -50,11 +74,14 @@ def main() -> None:
         help="verified local Qwen2.5-Coder-0.5B-Instruct tokenizer.json",
     )
     args = parser.parse_args()
+    if args.tok_stats_binary and args.region:
+        parser.error("--tok-stats-binary measures whole checked files; --region is incompatible")
 
     import tiktoken
 
     names = args.encodings or ["cl100k_base", "o200k_base"]
-    paths = sorted(args.path.rglob("*.tok.txt")) if args.path.is_dir() else [args.path]
+    suffix = "*.tok" if args.tok_stats_binary else "*.tok.txt"
+    paths = sorted(args.path.rglob(suffix)) if args.path.is_dir() else [args.path]
     if not paths:
         parser.error("no candidate files found")
     encodings = {name: tiktoken.get_encoding(name).encode for name in names}
@@ -74,12 +101,22 @@ def main() -> None:
             "sha256": digest,
             "tokenizers_version": importlib.metadata.version("tokenizers"),
         }
+    measurements = [measure(path, encodings, args.region) for path in paths]
+    if args.tok_stats_binary:
+        for path, measurement in zip(paths, measurements, strict=True):
+            if path.suffix != ".tok":
+                parser.error(f"{path}: --tok-stats-binary requires a .tok source")
+            run = subprocess.run(
+                [str(args.tok_stats_binary.resolve()), "stats", str(path.resolve())],
+                capture_output=True, text=True, check=True,
+            )
+            attach_stats(measurement, json.loads(run.stdout))
     result = {
         "tool": "scripts/token_cost.py",
         "tiktoken_version": importlib.metadata.version("tiktoken"),
         "encodings": list(encodings),
         "artifacts": artifacts,
-        "measurements": [measure(path, encodings, args.region) for path in paths],
+        "measurements": measurements,
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
