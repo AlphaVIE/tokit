@@ -36,3 +36,12 @@ pub fn run_with_read_root(source: &str, root: &Path) -> Result<Value, Diagnostic
     let program = check(source)?;
     interpreter::run_with_read_root(&program, Some(root))
 }
+
+pub fn run_with_runtime_args(
+    source: &str,
+    root: Option<&Path>,
+    args: &[String],
+) -> Result<Value, Diagnostic> {
+    let program = check(source)?;
+    interpreter::run_with_runtime_args(&program, root, args)
+}

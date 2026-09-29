@@ -109,13 +109,21 @@ fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
     state.result.as_ref().expect("task result").clone()
 }
 thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
-fn __tok_configure_read() {
-    let args = std::env::args().collect::<Vec<_>>();
-    if let [_, flag, root] = args.as_slice() {
-        if flag == "--allow-read" {
+thread_local! { static __TOK_ARGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
+fn __tok_configure_runtime() {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let mut start = 0;
+    if args.first().is_some_and(|arg| arg == "--allow-read") {
+        if let Some(root) = args.get(1) {
             __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+            start = 2;
         }
     }
+    if args.get(start).is_some_and(|arg| arg == "--") { start += 1; }
+    __TOK_ARGS.with(|cell| *cell.borrow_mut() = args[start..].to_vec());
+}
+fn __tok_args() -> Vec<String> {
+    __TOK_ARGS.with(|cell| cell.borrow().clone())
 }
 fn __tok_read_error(kind: std::io::ErrorKind) -> __TokIoError {
     if kind == std::io::ErrorKind::NotFound { __TokIoError::NotFound } else { __TokIoError::Other }
@@ -260,6 +268,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
             let callee = match name.as_str() {
                 builtins::READ_TEXT => "__tok_read_text".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
+                builtins::ARGS => "__tok_args".to_owned(),
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
@@ -595,7 +604,7 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
     }
     writeln!(
         out,
-        "fn main() {{ __tok_configure_read(); println!(\"{{}}\", {}().tok_render()); }}",
+        "fn main() {{ __tok_configure_runtime(); println!(\"{{}}\", {}().tok_render()); }}",
         user_name("main")
     )
     .expect("writing to String cannot fail");

@@ -2,6 +2,7 @@ use crate::ast::{EnumDecl, EnumVariant, Span, Type};
 
 pub const READ_TEXT: &str = "read_text";
 pub const LINES: &str = "lines";
+pub const ARGS: &str = "args";
 pub const IO_ERROR: &str = "IoError";
 pub const TASK_ERROR: &str = "TaskError";
 pub const JOIN: &str = "join";
