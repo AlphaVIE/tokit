@@ -82,6 +82,8 @@ pub struct Expr {
 
 #[derive(Clone, Debug)]
 pub enum PatternKind {
+    Int(i32),
+    Wildcard,
     Ok(String),
     Err(String),
     Some(String),

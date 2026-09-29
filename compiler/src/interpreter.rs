@@ -421,6 +421,10 @@ fn eval(
             let scrutinee = take_value!(eval(value, env, program, depth, runtime));
             for (pattern, body) in arms {
                 let binding = match (&pattern.kind, &scrutinee) {
+                    (PatternKind::Int(pattern), Value::I32(value)) if pattern == value => {
+                        Some(None)
+                    }
+                    (PatternKind::Wildcard, _) => Some(None),
                     (PatternKind::Ok(name), Value::Ok(value)) => {
                         Some(Some((name.clone(), *value.clone())))
                     }
