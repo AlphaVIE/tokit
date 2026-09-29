@@ -1,0 +1,11 @@
+enum Message{Stop,Number(i32),Text(String)}
+
+fn describe(message:Message)->String{
+    match message{
+        Message::Stop=>"stopped",
+        Message::Number(value)=>if value>0{"positive"}else{"zero"},
+        Message::Text(text)=>text
+    }
+}
+
+fn main()->String{describe(Message::Text("hello"))}

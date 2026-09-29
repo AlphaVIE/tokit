@@ -33,6 +33,7 @@ fn native_output_matches_reference_interpreter() {
         "checked_division_enum",
         "generic_pair",
         "match_result",
+        "payload_enum",
         "record",
     ] {
         let source =
@@ -61,6 +62,18 @@ fn native_output_matches_reference_interpreter() {
         (
             "match_enum",
             "enum Mode{Add,Sub} fn apply(m:Mode,a:i32,b:i32)->i32{match m{Mode::Add=>a+b,Mode::Sub=>a-b}} fn main()->i32{apply(Mode::Sub,7,2)}",
+        ),
+        (
+            "payload_enum_match",
+            "enum Shape{Point,Square(i32),Text(String)} fn describe(s:Shape)->String{match s{Shape::Point=>\"point\",Shape::Square(n)=>if n>0{\"square\"}else{\"empty\"},Shape::Text(label)=>label}} fn main()->String{describe(Shape::Text(\"hello\"))}",
+        ),
+        (
+            "payload_enum_render",
+            "enum Shape{Point,Square(i32)} fn main()->Shape{Shape::Square(7)}",
+        ),
+        (
+            "recursive_array_enum",
+            "enum List{Nil,Cons([List])} fn main()->List{List::Cons([List::Nil])}",
         ),
         ("match_bool", "fn main()->i32{match true{true=>1,false=>2}}"),
         (
