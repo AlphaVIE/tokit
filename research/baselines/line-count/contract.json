@@ -1,0 +1,17 @@
+{
+  "name": "line-count",
+  "input": "path to an existing valid UTF-8 file, or a missing path",
+  "output": "Ok(number of elements produced by Rust-style str.lines()) or Err(IoError::NotFound)",
+  "line_semantics": "split on LF, strip a CR immediately before LF, omit a final empty element after a trailing LF; empty input has zero lines",
+  "limits": "files fit in memory; line count fits i32; invalid UTF-8 and other I/O failures are outside this baseline contract",
+  "cases": [
+    {"name": "empty", "content": "", "expected": "Ok(0)"},
+    {"name": "single", "content": "solo", "expected": "Ok(1)"},
+    {"name": "trailing-lf", "content": "solo\n", "expected": "Ok(1)"},
+    {"name": "crlf", "content": "first\r\nsecond\n", "expected": "Ok(2)"},
+    {"name": "bare-cr", "content": "first\rsecond", "expected": "Ok(1)"},
+    {"name": "blank-lines", "content": "\n\n", "expected": "Ok(2)"},
+    {"name": "unicode", "content": "ä😀\n二", "expected": "Ok(2)"},
+    {"name": "missing", "missing": true, "expected": "Err(IoError::NotFound)"}
+  ]
+}
