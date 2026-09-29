@@ -85,7 +85,9 @@ fn eval(
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
-        ExprKind::Var(name) => env.get(name).cloned().expect("type checker resolved name"),
+        ExprKind::Var(name) => env.get(name).cloned().ok_or_else(|| {
+            Diagnostic::new("E204", expr.span, format!("unresolved runtime name {name}"))
+        })?,
         ExprKind::Binary(left, op, right) => {
             let left = take_value!(eval(left, env, program, depth));
             let right = take_value!(eval(right, env, program, depth));
@@ -100,7 +102,13 @@ fn eval(
                 .functions
                 .iter()
                 .find(|function| function.name == *name)
-                .expect("type checker resolved function");
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        format!("unresolved runtime function {name}"),
+                    )
+                })?;
             invoke(program, function, values, depth + 1)?
         }
         ExprKind::If(condition, yes, no) => {
@@ -147,7 +155,7 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         }));
     }
     let (Value::I32(a), Value::I32(b)) = (left, right) else {
-        unreachable!("type checker validated binary operands")
+        return Err(Diagnostic::new("E204", span, "invalid runtime operands"));
     };
     let number = match op {
         Op::Add => a.checked_add(b),
@@ -158,7 +166,7 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         Op::Le => return Ok(Value::Bool(a <= b)),
         Op::Gt => return Ok(Value::Bool(a > b)),
         Op::Ge => return Ok(Value::Bool(a >= b)),
-        Op::Eq | Op::Ne => unreachable!(),
+        Op::Eq | Op::Ne => return Err(Diagnostic::new("E204", span, "invalid runtime operator")),
     };
     number
         .map(Value::I32)

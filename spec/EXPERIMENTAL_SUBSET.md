@@ -27,7 +27,7 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 ## Diagnostics and commands
 
-`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` literal range, `E101` unknown name, `E102` type mismatch, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E201` arithmetic failure, `E202` call-depth limit, and `E203` invalid entry point. Error output contains a source line and column. No binary, native compilation, GC, standard library, imports, arrays, structs, or generics exist in this prototype.
+`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` literal range, `E101` unknown name, `E102` type mismatch, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, and `E204` interpreter invariant failure. Error output contains a source line and column. No binary, native compilation, GC, standard library, imports, arrays, structs, or generics exist in this prototype.
 
 ## Reproduce
 

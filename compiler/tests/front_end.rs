@@ -75,3 +75,20 @@ fn cli_emits_json_success() {
         r#"{"ok":true,"result":"ok"}"#
     );
 }
+
+#[test]
+fn malformed_short_inputs_do_not_panic() {
+    let alphabet = b"fn let if else return(){}:,+-*/=<>;0123abc \n";
+    let mut state = 0x839bc62bu32;
+    for _ in 0..2000 {
+        let mut source = String::new();
+        for _ in 0..48 {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            source.push(alphabet[(state as usize) % alphabet.len()] as char);
+        }
+        assert!(
+            std::panic::catch_unwind(|| check(&source)).is_ok(),
+            "{source:?}"
+        );
+    }
+}
