@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::ast::{Expr, ExprKind, Function, Op, Program, Span, Stmt};
 use crate::diagnostic::Diagnostic;
@@ -7,6 +8,7 @@ use crate::diagnostic::Diagnostic;
 pub enum Value {
     I32(i32),
     Bool(bool),
+    Array(Vec<Value>),
     Unit,
 }
 
@@ -15,6 +17,16 @@ impl std::fmt::Display for Value {
         match self {
             Self::I32(n) => write!(f, "{n}"),
             Self::Bool(value) => write!(f, "{value}"),
+            Self::Array(values) => {
+                f.write_str("[")?;
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{value}")?;
+                }
+                f.write_str("]")
+            }
             Self::Unit => f.write_str("()"),
         }
     }
@@ -24,6 +36,8 @@ enum Flow {
     Value(Value),
     Return(Value),
 }
+
+type Env = HashMap<String, Rc<RefCell<Value>>>;
 
 macro_rules! take_value {
     ($expr:expr) => {
@@ -65,29 +79,35 @@ fn invoke(
             "call depth limit exceeded",
         ));
     }
-    let env = function
+    let env: Env = function
         .params
         .iter()
         .zip(args)
-        .map(|((name, _), value)| (name.clone(), value))
+        .map(|((name, _), value)| (name.clone(), Rc::new(RefCell::new(value))))
         .collect();
     match eval(&function.body, &env, program, depth)? {
         Flow::Value(value) | Flow::Return(value) => Ok(value),
     }
 }
 
-fn eval(
-    expr: &Expr,
-    env: &HashMap<String, Value>,
-    program: &Program,
-    depth: usize,
-) -> Result<Flow, Diagnostic> {
+fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow, Diagnostic> {
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
-        ExprKind::Var(name) => env.get(name).cloned().ok_or_else(|| {
-            Diagnostic::new("E204", expr.span, format!("unresolved runtime name {name}"))
-        })?,
+        ExprKind::Array(items) => {
+            let mut values = Vec::new();
+            for item in items {
+                values.push(take_value!(eval(item, env, program, depth)));
+            }
+            Value::Array(values)
+        }
+        ExprKind::Var(name) => {
+            env.get(name)
+                .map(|cell| cell.borrow().clone())
+                .ok_or_else(|| {
+                    Diagnostic::new("E204", expr.span, format!("unresolved runtime name {name}"))
+                })?
+        }
         ExprKind::Binary(left, op, right) => {
             let left = take_value!(eval(left, env, program, depth));
             let right = take_value!(eval(right, env, program, depth));
@@ -126,7 +146,34 @@ fn eval(
                 match stmt {
                     Stmt::Let { name, value, .. } => {
                         let value = take_value!(eval(value, &scope, program, depth));
-                        scope.insert(name.clone(), value);
+                        scope.insert(name.clone(), Rc::new(RefCell::new(value)));
+                    }
+                    Stmt::Assign { name, value, span } => {
+                        let value = take_value!(eval(value, &scope, program, depth));
+                        let cell = scope.get(name).ok_or_else(|| {
+                            Diagnostic::new(
+                                "E204",
+                                *span,
+                                format!("unresolved runtime name {name}"),
+                            )
+                        })?;
+                        *cell.borrow_mut() = value;
+                    }
+                    Stmt::For {
+                        name,
+                        iterable,
+                        body,
+                        span,
+                    } => {
+                        let iterable = take_value!(eval(iterable, &scope, program, depth));
+                        let Value::Array(values) = iterable else {
+                            return Err(Diagnostic::new("E204", *span, "invalid runtime iterable"));
+                        };
+                        for value in values {
+                            let mut loop_scope = scope.clone();
+                            loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
+                            take_value!(eval(body, &loop_scope, program, depth));
+                        }
                     }
                     Stmt::Return { value, .. } => {
                         let value = take_value!(eval(value, &scope, program, depth));
