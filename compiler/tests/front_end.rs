@@ -9,6 +9,27 @@ fn executes_functions_bindings_and_branches() {
 }
 
 #[test]
+fn utf8_strings_escape_concatenate_and_compare() {
+    let source = r#"fn greet(x:String)->String{"Grüß, " + x + "\n"} fn main()->[String]{[greet("世界"),if "é"=="e"{"wrong"}else{"✓"}]}"#;
+    assert_eq!(
+        run(source).unwrap().to_string(),
+        "[\"Grüß, 世界\\n\",\"✓\"]"
+    );
+    assert_eq!(
+        check(r#"fn main()->String{"bad\q"}"#).unwrap_err().code,
+        "E004"
+    );
+    assert_eq!(
+        check("fn main()->String{\"unclosed}").unwrap_err().code,
+        "E004"
+    );
+    assert_eq!(
+        check(r#"fn main()->i32{"a"-"b"}"#).unwrap_err().code,
+        "E104"
+    );
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";

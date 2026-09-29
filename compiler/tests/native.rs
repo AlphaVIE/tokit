@@ -45,6 +45,10 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        (
+            "utf8_strings",
+            r#"fn greet(x:String)->String{"Grüß, "+x+"\n"} fn main()->[String]{[greet("世界"),"✓"]}"#,
+        ),
         ("discarded_result", "fn main()->i32{Ok(1);0}"),
         (
             "result_array",
