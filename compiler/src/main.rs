@@ -28,7 +28,7 @@ fn main() {
         return;
     }
     let (json, path) = match args.as_slice() {
-        [_, command, path] if matches!(command.as_str(), "check" | "run" | "explain") => {
+        [_, command, path] if matches!(command.as_str(), "check" | "run" | "explain" | "stats") => {
             (false, path)
         }
         [_, command, flag, path]
@@ -38,7 +38,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: tok <check|run> [--json] <file.tok> | tok explain <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok <check|run> [--json] <file.tok> | tok <explain|stats> <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
@@ -55,6 +55,8 @@ fn main() {
         "explain" => {
             tokit_compiler::check(&source).map(|program| tokit_compiler::explain::explain(&program))
         }
+        "stats" => tokit_compiler::check(&source)
+            .map(|program| tokit_compiler::stats::measure(&source, &program).json()),
         _ => tokit_compiler::run(&source).map(|value| value.to_string()),
     };
     match result {

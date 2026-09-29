@@ -6,6 +6,7 @@ pub mod interpreter;
 pub mod lexer;
 pub mod native;
 pub mod parser;
+pub mod stats;
 
 use ast::Program;
 use diagnostic::Diagnostic;
