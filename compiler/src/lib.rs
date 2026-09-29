@@ -11,6 +11,7 @@ pub mod lexer;
 pub mod native;
 pub mod parser;
 pub mod stats;
+pub mod test_runner;
 
 use ast::Program;
 use diagnostic::Diagnostic;

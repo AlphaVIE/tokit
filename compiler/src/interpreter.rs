@@ -105,25 +105,43 @@ pub fn run_with_runtime_args(
     root: Option<&Path>,
     args: &[String],
 ) -> Result<Value, Diagnostic> {
+    run_entry(program, "main", root, args)
+}
+
+/// Execute a checked, parameterless function in a fresh reference runtime.
+pub fn run_named(program: &Program, name: &str, root: Option<&Path>) -> Result<Value, Diagnostic> {
+    run_entry(program, name, root, &[])
+}
+
+fn run_entry(
+    program: &Program,
+    name: &str,
+    root: Option<&Path>,
+    args: &[String],
+) -> Result<Value, Diagnostic> {
     let runtime = Runtime {
         read: ReadPolicy::from_root(root),
         args,
     };
-    let main = program
+    let function = program
         .functions
         .iter()
-        .find(|function| function.name == "main")
+        .find(|function| function.name == name)
         .ok_or_else(|| {
-            Diagnostic::new("E203", Span { start: 0, end: 0 }, "missing main function")
+            Diagnostic::new(
+                "E203",
+                Span { start: 0, end: 0 },
+                format!("missing {name} function"),
+            )
         })?;
-    if !main.params.is_empty() || !main.type_params.is_empty() {
+    if !function.params.is_empty() || !function.type_params.is_empty() {
         return Err(Diagnostic::new(
             "E203",
-            main.span,
-            "main must have no parameters or type parameters",
+            function.span,
+            format!("{name} must have no parameters or type parameters"),
         ));
     }
-    invoke(program, main, Vec::new(), 0, &runtime)
+    invoke(program, function, Vec::new(), 0, &runtime)
 }
 
 fn invoke(

@@ -23,6 +23,8 @@ jobs:
         run: cargo +1.98.1 test --workspace
         env:
           TOKIT_REQUIRE_NATIVE: '1'
+      - name: Run Tokit example suite
+        run: cargo +1.98.1 run --quiet -p tokit-compiler --bin tok -- test examples/tests.tok
       - name: Research script tests
         run: python3 -m unittest discover -s tests -v
 
