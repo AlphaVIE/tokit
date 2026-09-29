@@ -1,0 +1,5 @@
+fn main()->Result<[i32],ParseError>{
+    var numbers:[i32]=[];
+    for raw in args(){numbers.push(parse_i32(raw)?);}
+    Ok(numbers)
+}

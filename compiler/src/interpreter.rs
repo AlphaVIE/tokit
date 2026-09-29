@@ -414,6 +414,21 @@ fn eval(
                         })?;
                         *cell.borrow_mut() = value;
                     }
+                    Stmt::Push { name, value, span } => {
+                        let value = take_value!(eval(value, &scope, program, depth, runtime));
+                        let cell = scope.get(name).ok_or_else(|| {
+                            Diagnostic::new(
+                                "E204",
+                                *span,
+                                format!("unresolved runtime name {name}"),
+                            )
+                        })?;
+                        let mut array = cell.borrow_mut();
+                        let Value::Array(items) = &mut *array else {
+                            return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
+                        };
+                        items.push(value);
+                    }
                     Stmt::For {
                         name,
                         iterable,

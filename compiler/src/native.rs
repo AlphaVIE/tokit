@@ -448,6 +448,11 @@ fn emit_stmt(stmt: &Stmt, source: &str, types: &HashMap<Span, Type>) -> String {
                 emit_expr(value, source, types)
             )
         }
+        Stmt::Push { name, value, .. } => format!(
+            "{{ let __tok_push_value = {}; {}.push(__tok_push_value); }}\n",
+            emit_expr(value, source, types),
+            user_name(name)
+        ),
         Stmt::For {
             name,
             iterable,

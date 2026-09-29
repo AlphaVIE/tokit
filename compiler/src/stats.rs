@@ -123,7 +123,7 @@ fn count_stmt(stmt: &Stmt, nodes: &mut usize, ops: &mut usize) {
             count_type(ty, nodes);
             count_expr(value, nodes, ops);
         }
-        Stmt::Assign { value, .. } | Stmt::Return { value, .. } => {
+        Stmt::Assign { value, .. } | Stmt::Push { value, .. } | Stmt::Return { value, .. } => {
             *ops += 1;
             count_expr(value, nodes, ops);
         }
