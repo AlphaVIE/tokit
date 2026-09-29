@@ -412,6 +412,12 @@ fn expression_is_spawn_safe(
                     expression_is_spawn_safe(iterable, program, visiting)
                         && expression_is_spawn_safe(body, program, visiting)
                 }
+                Stmt::While {
+                    condition, body, ..
+                } => {
+                    expression_is_spawn_safe(condition, program, visiting)
+                        && expression_is_spawn_safe(body, program, visiting)
+                }
             }) && tail
                 .as_ref()
                 .is_none_or(|value| expression_is_spawn_safe(value, program, visiting))
@@ -1179,6 +1185,22 @@ fn infer(
                             },
                         );
                         type_of(body, &loop_scope, signatures, return_type, types)?;
+                        (Type::Unit, *span)
+                    }
+                    Stmt::While {
+                        condition,
+                        body,
+                        span,
+                    } => {
+                        let condition_type =
+                            type_of(condition, &scope, signatures, return_type, types)?;
+                        require(
+                            &Type::Bool,
+                            &condition_type,
+                            condition.span,
+                            "while condition",
+                        )?;
+                        type_of(body, &scope, signatures, return_type, types)?;
                         (Type::Unit, *span)
                     }
                     Stmt::Return { value, span } => {

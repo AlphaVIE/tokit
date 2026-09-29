@@ -21,6 +21,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
           | identifier "=" expression ";"
           | identifier "." "push" "(" expression ")" ";"
           | "for" identifier "in" expression block
+          | "while" expression block
           | "return" expression ";"
           | expression ";" ;
 expression = integer | string | "true" | "false" | identifier | "[" arguments? "]"
@@ -41,6 +42,8 @@ binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
 
 Binary operators use normal arithmetic precedence, with equality below comparisons. Blocks return their final expression; a block without a final expression has type `Unit`. `return` exits the current function, including from a loop. `if` requires `else`, and both branches must have compatible types. Functions may call later functions and recurse. Local bindings require explicit types. `let` is immutable and `var` permits reassignment; shadowing an outer binding in a nested block is currently permitted, while duplicate names in one block are rejected. Arrays are homogeneous and can be empty when an expected array type provides context. `for` iterates over an array value snapshot; its loop variable is scoped to one iteration. Arrays are copied as values, so changing one binding does not mutate copies. Postfix `array[index]` reads an element; the index is `i32`, and negative or out-of-range indices report `E205`. `xs.push(value);` appends a typed element to a mutable `var` array binding, evaluating the value before mutation. A `let` binding reports `E109`, a non-array reports `E110`, and a wrong element type reports `E102`. This is currently a statement on a direct local name; indexed mutation and record-field mutation are not supported.
+
+`while condition { ... }` re-evaluates a `bool` condition before each iteration. A false initial condition skips the body, body-local bindings are scoped to each iteration, and mutation of outer `var` bindings remains visible to later conditions. `return` and `?` may exit the surrounding function from the condition or body. The checker validates the body even if a condition is literally false. There is no `break` or `continue` yet; loops can still run indefinitely if their condition never becomes false.
 
 `Result<T,E>` is a typed success/error value. `Ok(value)` and `Err(value)` produce the corresponding variant; the missing side of each constructor is inferred from the expected type or the other branch. Postfix `?` unwraps `Ok` and immediately returns `Err` from the current function. The enclosing function must return a `Result` with a compatible error type. Normal errors are values, while checked arithmetic failures still use the prototype's runtime diagnostic `E201`; unifying these models remains an open semantic decision.
 

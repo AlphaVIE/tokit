@@ -101,6 +101,13 @@ fn visit(expr: &Expr, facts: &mut Facts) {
                         visit(iterable, facts);
                         visit(body, facts);
                     }
+                    Stmt::While {
+                        condition, body, ..
+                    } => {
+                        facts.operations.insert("conditional iteration");
+                        visit(condition, facts);
+                        visit(body, facts);
+                    }
                     Stmt::Return { value, .. } => {
                         facts.operations.insert("early return");
                         visit(value, facts);

@@ -38,6 +38,7 @@ fn native_output_matches_reference_interpreter() {
         "option_lookup",
         "parse_argument",
         "parse_numbers",
+        "iterative_factorial",
         "task_square",
     ] {
         let source =

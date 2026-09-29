@@ -132,6 +132,13 @@ fn count_stmt(stmt: &Stmt, nodes: &mut usize, ops: &mut usize) {
             count_expr(iterable, nodes, ops);
             count_expr(body, nodes, ops);
         }
+        Stmt::While {
+            condition, body, ..
+        } => {
+            *ops += 1;
+            count_expr(condition, nodes, ops);
+            count_expr(body, nodes, ops);
+        }
         Stmt::Expr(expr) => count_expr(expr, nodes, ops),
     }
 }
