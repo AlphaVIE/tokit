@@ -64,9 +64,39 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
 }
 
 fn compatible(expected: &Type, actual: &Type) -> bool {
-    expected == actual
-        || *actual == Type::Never
-        || matches!((expected, actual), (Type::Array(_), Type::EmptyArray))
+    if expected == actual || *actual == Type::Never {
+        return true;
+    }
+    match (expected, actual) {
+        (Type::Array(_), Type::EmptyArray) => true,
+        (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::Result(expected_ok, expected_err), Type::Result(actual_ok, actual_err)) => {
+            compatible(expected_ok, actual_ok) && compatible(expected_err, actual_err)
+        }
+        _ => false,
+    }
+}
+
+fn join(left: &Type, right: &Type) -> Option<Type> {
+    if left == right {
+        return Some(left.clone());
+    }
+    if *left == Type::Never {
+        return Some(right.clone());
+    }
+    if *right == Type::Never {
+        return Some(left.clone());
+    }
+    match (left, right) {
+        (Type::Array(_), Type::EmptyArray) => Some(left.clone()),
+        (Type::EmptyArray, Type::Array(_)) => Some(right.clone()),
+        (Type::Array(left), Type::Array(right)) => Some(Type::Array(Box::new(join(left, right)?))),
+        (Type::Result(left_ok, left_err), Type::Result(right_ok, right_err)) => Some(Type::Result(
+            Box::new(join(left_ok, right_ok)?),
+            Box::new(join(left_err, right_err)?),
+        )),
+        _ => None,
+    }
 }
 
 fn require(expected: &Type, actual: &Type, span: Span, context: &str) -> Result<(), Diagnostic> {
@@ -94,15 +124,57 @@ fn type_of(
             let Some(first) = values.first() else {
                 return Ok(Type::EmptyArray);
             };
-            let element = type_of(first, env, signatures, return_type)?;
+            let mut element = type_of(first, env, signatures, return_type)?;
             if element == Type::Never {
                 return Ok(Type::Never);
             }
             for value in values.iter().skip(1) {
                 let actual = type_of(value, env, signatures, return_type)?;
-                require(&element, &actual, value.span, "array element")?;
+                element = join(&element, &actual).ok_or_else(|| {
+                    Diagnostic::new(
+                        "E102",
+                        value.span,
+                        format!("array elements have different types: {element} and {actual}"),
+                    )
+                })?;
             }
             Ok(Type::Array(Box::new(element)))
+        }
+        ExprKind::Ok(inner) => {
+            let inner = type_of(inner, env, signatures, return_type)?;
+            if inner == Type::Never {
+                return Ok(Type::Never);
+            }
+            Ok(Type::Result(Box::new(inner), Box::new(Type::Never)))
+        }
+        ExprKind::Err(inner) => {
+            let inner = type_of(inner, env, signatures, return_type)?;
+            if inner == Type::Never {
+                return Ok(Type::Never);
+            }
+            Ok(Type::Result(Box::new(Type::Never), Box::new(inner)))
+        }
+        ExprKind::Try(inner) => {
+            let actual = type_of(inner, env, signatures, return_type)?;
+            if actual == Type::Never {
+                return Ok(Type::Never);
+            }
+            let Type::Result(ok, err) = actual else {
+                return Err(Diagnostic::new(
+                    "E111",
+                    inner.span,
+                    "? requires a Result value",
+                ));
+            };
+            let Type::Result(_, expected_err) = return_type else {
+                return Err(Diagnostic::new(
+                    "E111",
+                    expr.span,
+                    "? requires a Result return type",
+                ));
+            };
+            require(expected_err, &err, expr.span, "propagated error")?;
+            Ok(*ok)
         }
         ExprKind::Var(name) => env
             .get(name)
@@ -160,21 +232,13 @@ fn type_of(
             require(&Type::Bool, &cond_type, condition.span, "condition")?;
             let yes_type = type_of(yes, env, signatures, return_type)?;
             let no_type = type_of(no, env, signatures, return_type)?;
-            if yes_type == Type::Never {
-                Ok(no_type)
-            } else if no_type == Type::Never || yes_type == no_type {
-                Ok(yes_type)
-            } else if yes_type == Type::EmptyArray && matches!(no_type, Type::Array(_)) {
-                Ok(no_type)
-            } else if no_type == Type::EmptyArray && matches!(yes_type, Type::Array(_)) {
-                Ok(yes_type)
-            } else {
-                Err(Diagnostic::new(
+            join(&yes_type, &no_type).ok_or_else(|| {
+                Diagnostic::new(
                     "E102",
                     expr.span,
                     format!("branches have different types: {yes_type} and {no_type}"),
-                ))
-            }
+                )
+            })
         }
         ExprKind::Block(stmts, tail) => {
             let mut scope = env.clone();

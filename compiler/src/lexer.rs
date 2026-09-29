@@ -15,6 +15,8 @@ pub enum Kind {
     Return,
     True,
     False,
+    Ok,
+    Err,
     LParen,
     RParen,
     LBrace,
@@ -36,6 +38,7 @@ pub enum Kind {
     Le,
     Gt,
     Ge,
+    Question,
     Eof,
 }
 
@@ -77,6 +80,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "return" => Kind::Return,
                 "true" => Kind::True,
                 "false" => Kind::False,
+                "Ok" => Kind::Ok,
+                "Err" => Kind::Err,
                 name => Kind::Ident(name.to_owned()),
             }
         } else if bytes[i].is_ascii_digit() {
@@ -124,6 +129,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                     Kind::Ge
                 }
                 b'>' => Kind::Gt,
+                b'?' => Kind::Question,
                 _ => {
                     return Err(Diagnostic::new(
                         "E001",

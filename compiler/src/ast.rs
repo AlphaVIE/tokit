@@ -21,6 +21,7 @@ pub enum Type {
     Never,
     Array(Box<Type>),
     EmptyArray,
+    Result(Box<Type>, Box<Type>),
 }
 
 impl std::fmt::Display for Type {
@@ -32,6 +33,7 @@ impl std::fmt::Display for Type {
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
             Self::EmptyArray => "empty array",
+            Self::Result(ok, err) => return write!(f, "Result<{ok},{err}>"),
         };
         f.write_str(name)
     }
@@ -62,6 +64,9 @@ pub enum ExprKind {
     Int(i32),
     Bool(bool),
     Array(Vec<Expr>),
+    Ok(Box<Expr>),
+    Err(Box<Expr>),
+    Try(Box<Expr>),
     Var(String),
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
