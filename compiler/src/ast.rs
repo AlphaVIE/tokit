@@ -18,6 +18,7 @@ pub enum Type {
     I32,
     Bool,
     String,
+    Named(String),
     Unit,
     Never,
     Array(Box<Type>),
@@ -31,6 +32,7 @@ impl std::fmt::Display for Type {
             Self::I32 => "i32",
             Self::Bool => "bool",
             Self::String => "String",
+            Self::Named(name) => return f.write_str(name),
             Self::Unit => "Unit",
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
@@ -68,6 +70,7 @@ pub enum ExprKind {
     String(String),
     Array(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
+    Field(Box<Expr>, String),
     Ok(Box<Expr>),
     Err(Box<Expr>),
     Try(Box<Expr>),
@@ -115,6 +118,14 @@ pub struct Function {
 }
 
 #[derive(Clone, Debug)]
+pub struct Record {
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Program {
+    pub records: Vec<Record>,
     pub functions: Vec<Function>,
 }

@@ -50,6 +50,43 @@ fn array_indexing_checks_type_and_bounds() {
 }
 
 #[test]
+fn records_construct_and_project_typed_fields() {
+    let source = r#"struct Point{x:i32,y:i32} struct Label{point:Point,text:String} fn make(n:i32)->Label{Label(Point(n,n+1),"✓")} fn main()->i32{make(4).point.y}"#;
+    assert_eq!(run(source).unwrap(), Value::I32(5));
+    let source = r#"struct Pair{left:i32,right:String} fn main()->Pair{Pair(3,"x")}"#;
+    assert_eq!(run(source).unwrap().to_string(), "Pair(left:3,right:\"x\")");
+    assert_eq!(
+        run("struct Empty{} fn main()->Empty{Empty()}")
+            .unwrap()
+            .to_string(),
+        "Empty()"
+    );
+    let source = "struct Node{children:[Node]} fn main()->Node{Node([Node([])])}";
+    assert_eq!(
+        run(source).unwrap().to_string(),
+        "Node(children:[Node(children:[])])"
+    );
+}
+
+#[test]
+fn invalid_records_are_rejected_before_execution() {
+    for (source, code) in [
+        ("struct Bad{x:Missing} fn main()->i32{0}", "E103"),
+        ("fn main()->Missing{0}", "E103"),
+        ("struct Bad{x:i32,x:bool} fn main()->i32{0}", "E106"),
+        ("struct A{x:A} fn main()->i32{0}", "E112"),
+        ("struct A{x:Result<A,i32>} fn main()->i32{0}", "E112"),
+        ("struct A{x:B} struct B{x:A} fn main()->i32{0}", "E112"),
+        ("struct A{x:i32} fn main()->A{A()}", "E105"),
+        ("struct A{x:i32} fn main()->i32{A(true).x}", "E102"),
+        ("struct A{x:i32} fn main()->i32{A(1).y}", "E113"),
+        ("fn main()->i32{1.x}", "E113"),
+    ] {
+        assert_eq!(check(source).unwrap_err().code, code, "{source}");
+    }
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";

@@ -5,11 +5,12 @@ This document describes exactly what the current Rust prototype accepts. It is a
 ## Accepted constructs
 
 ```text
-program  = function+ ;
+program  = (function | record)+ ;
 function = "fn" identifier "(" parameters? ")" "->" type block ;
+record   = "struct" identifier "{" (identifier ":" type ("," identifier ":" type)*)? "}" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
 type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
-         | "Result" "<" type "," type ">" ;
+         | "Result" "<" type "," type ">" | identifier ;
 block    = "{" statement* expression? "}" ;
 statement = ("let" | "var") identifier ":" type "=" expression ";"
           | identifier "=" expression ";"
@@ -21,7 +22,7 @@ expression = integer | string | "true" | "false" | identifier | "[" arguments? "
            | identifier "(" arguments? ")"
            | "(" expression ")" | block
            | "if" expression block "else" (block | expression-if)
-           | expression "?" | expression "[" expression "]"
+           | expression "?" | expression "[" expression "]" | expression "." identifier
            | expression binary-op expression ;
 binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
@@ -34,9 +35,11 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
 
+Named records declare typed fields in order. Calling the record name constructs a value with one argument per field; postfix `.field` reads a field. Records are value types, copied when passed or read. Unknown type names report `E103`, duplicate names or fields `E106`, direct recursive value layouts `E112`, and invalid field access `E113`. Recursion through an array is permitted because the array's storage is indirect.
+
 ## Diagnostics and commands
 
-`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports, structs, and user-defined generics do not yet exist in this prototype.
+`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E103` unknown type, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E112` recursive record, `E113` invalid field access, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports, enums, and user-defined generics do not yet exist in this prototype.
 
 ## Reproduce
 

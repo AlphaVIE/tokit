@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprKind, Function, Op, Program, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, Function, Op, Program, Record, Span, Stmt, Type};
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
 
@@ -56,7 +56,7 @@ impl Parser {
             self.expect(Kind::RBracket)?;
             return Ok(Type::Array(Box::new(element)));
         }
-        let (name, span) = self.ident()?;
+        let (name, _) = self.ident()?;
         match name.as_str() {
             "i32" => Ok(Type::I32),
             "bool" => Ok(Type::Bool),
@@ -70,27 +70,52 @@ impl Parser {
                 self.expect(Kind::Gt)?;
                 Ok(Type::Result(Box::new(ok), Box::new(err)))
             }
-            _ => Err(Diagnostic::new(
-                "E002",
-                span,
-                format!("unknown type {name}"),
-            )),
+            _ => Ok(Type::Named(name)),
         }
     }
 
     pub fn program(&mut self) -> Result<Program, Diagnostic> {
         let mut functions = Vec::new();
+        let mut records = Vec::new();
         while !self.at(&Kind::Eof) {
-            functions.push(self.function()?);
+            if self.at(&Kind::Struct) {
+                records.push(self.record()?);
+            } else {
+                functions.push(self.function()?);
+            }
         }
-        if functions.is_empty() {
+        if functions.is_empty() && records.is_empty() {
             return Err(Diagnostic::new(
                 "E002",
                 self.current().span,
-                "expected a function",
+                "expected a function or record",
             ));
         }
-        Ok(Program { functions })
+        Ok(Program { records, functions })
+    }
+
+    fn record(&mut self) -> Result<Record, Diagnostic> {
+        let start = self.expect(Kind::Struct)?.span;
+        let (name, _) = self.ident()?;
+        self.expect(Kind::LBrace)?;
+        let mut fields = Vec::new();
+        if !self.at(&Kind::RBrace) {
+            loop {
+                let (field, _) = self.ident()?;
+                self.expect(Kind::Colon)?;
+                fields.push((field, self.ty()?));
+                if !self.at(&Kind::Comma) {
+                    break;
+                }
+                self.bump();
+            }
+        }
+        let end = self.expect(Kind::RBrace)?.span;
+        Ok(Record {
+            name,
+            fields,
+            span: start.join(end),
+        })
     }
 
     fn function(&mut self) -> Result<Function, Diagnostic> {
@@ -204,6 +229,16 @@ impl Parser {
     fn expr(&mut self, min_prec: u8) -> Result<Expr, Diagnostic> {
         let mut left = self.atom()?;
         loop {
+            if self.at(&Kind::Dot) {
+                self.bump();
+                let (field, end) = self.ident()?;
+                let span = left.span.join(end);
+                left = Expr {
+                    kind: ExprKind::Field(Box::new(left), field),
+                    span,
+                };
+                continue;
+            }
             if self.at(&Kind::LBracket) {
                 self.bump();
                 let index = self.expr(0)?;

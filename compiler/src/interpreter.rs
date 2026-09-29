@@ -10,6 +10,7 @@ pub enum Value {
     Bool(bool),
     String(String),
     Array(Vec<Value>),
+    Record(String, Vec<(String, Value)>),
     Ok(Box<Value>),
     Err(Box<Value>),
     Unit,
@@ -30,6 +31,16 @@ impl std::fmt::Display for Value {
                     write!(f, "{value}")?;
                 }
                 f.write_str("]")
+            }
+            Self::Record(name, fields) => {
+                write!(f, "{name}(")?;
+                for (index, (field, value)) in fields.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{field}:{value}")?;
+                }
+                f.write_str(")")
             }
             Self::Ok(value) => write!(f, "Ok({value})"),
             Self::Err(value) => write!(f, "Err({value})"),
@@ -121,6 +132,21 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 .cloned()
                 .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
         }
+        ExprKind::Field(value, field) => {
+            let value = take_value!(eval(value, env, program, depth));
+            let Value::Record(_, fields) = value else {
+                return Err(Diagnostic::new(
+                    "E204",
+                    expr.span,
+                    "invalid runtime field access",
+                ));
+            };
+            fields
+                .into_iter()
+                .find(|(name, _)| name == field)
+                .map(|(_, value)| value)
+                .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?
+        }
         ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(inner, env, program, depth)))),
         ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(inner, env, program, depth)))),
         ExprKind::Try(inner) => {
@@ -153,6 +179,17 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
             let mut values = Vec::new();
             for arg in args {
                 values.push(take_value!(eval(arg, env, program, depth)));
+            }
+            if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+                return Ok(Flow::Value(Value::Record(
+                    name.clone(),
+                    record
+                        .fields
+                        .iter()
+                        .map(|(name, _)| name.clone())
+                        .zip(values)
+                        .collect(),
+                )));
             }
             let function = program
                 .functions
