@@ -133,6 +133,11 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    Push {
+        name: String,
+        value: Expr,
+        span: Span,
+    },
     For {
         name: String,
         iterable: Expr,

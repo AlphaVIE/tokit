@@ -28,6 +28,18 @@ impl Parser {
             std::mem::discriminant(&token.kind) == std::mem::discriminant(kind)
         })
     }
+    fn at_push_statement(&self) -> bool {
+        matches!(&self.current().kind, Kind::Ident(_))
+            && self.next_is(&Kind::Dot)
+            && self
+                .tokens
+                .get(self.pos + 2)
+                .is_some_and(|token| matches!(&token.kind, Kind::Ident(method) if method == "push"))
+            && self
+                .tokens
+                .get(self.pos + 3)
+                .is_some_and(|token| matches!(&token.kind, Kind::LParen))
+    }
     fn at(&self, kind: &Kind) -> bool {
         std::mem::discriminant(&self.current().kind) == std::mem::discriminant(kind)
     }
@@ -293,6 +305,19 @@ impl Parser {
                 let value = self.expr(0)?;
                 let end = self.expect(Kind::Semicolon)?.span;
                 stmts.push(Stmt::Assign {
+                    name,
+                    value,
+                    span: first.join(end),
+                });
+            } else if self.at_push_statement() {
+                let (name, first) = self.ident()?;
+                self.expect(Kind::Dot)?;
+                self.ident()?;
+                self.expect(Kind::LParen)?;
+                let value = self.expr(0)?;
+                self.expect(Kind::RParen)?;
+                let end = self.expect(Kind::Semicolon)?.span;
+                stmts.push(Stmt::Push {
                     name,
                     value,
                     span: first.join(end),

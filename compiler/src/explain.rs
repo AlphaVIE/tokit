@@ -92,6 +92,10 @@ fn visit(expr: &Expr, facts: &mut Facts) {
             for statement in statements {
                 match statement {
                     Stmt::Let { value, .. } | Stmt::Assign { value, .. } => visit(value, facts),
+                    Stmt::Push { value, .. } => {
+                        facts.operations.insert("array append");
+                        visit(value, facts);
+                    }
                     Stmt::For { iterable, body, .. } => {
                         facts.operations.insert("array iteration");
                         visit(iterable, facts);

@@ -405,6 +405,7 @@ fn expression_is_spawn_safe(
             stmts.iter().all(|stmt| match stmt {
                 Stmt::Let { value, .. }
                 | Stmt::Assign { value, .. }
+                | Stmt::Push { value, .. }
                 | Stmt::Return { value, .. }
                 | Stmt::Expr(value) => expression_is_spawn_safe(value, program, visiting),
                 Stmt::For { iterable, body, .. } => {
@@ -1132,6 +1133,28 @@ fn infer(
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
                         require(&binding.ty, &actual, value.span, "assignment")?;
                         (actual, *span)
+                    }
+                    Stmt::Push { name, value, span } => {
+                        let binding = scope.get(name).ok_or_else(|| {
+                            Diagnostic::new("E101", *span, format!("unknown name {name}"))
+                        })?;
+                        if !binding.mutable {
+                            return Err(Diagnostic::new(
+                                "E109",
+                                *span,
+                                format!("cannot push to immutable binding {name}"),
+                            ));
+                        }
+                        let Type::Array(element) = &binding.ty else {
+                            return Err(Diagnostic::new(
+                                "E110",
+                                *span,
+                                format!("push requires an array, got {}", binding.ty),
+                            ));
+                        };
+                        let actual = type_of(value, &scope, signatures, return_type, types)?;
+                        require(element, &actual, value.span, "array element")?;
+                        (Type::Unit, *span)
                     }
                     Stmt::For {
                         name,
