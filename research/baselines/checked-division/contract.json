@@ -1,0 +1,15 @@
+{
+  "name": "checked-division",
+  "input": "two signed i32 values a and b",
+  "output": "Ok(a / b) with truncation toward zero, or Err(DivError::DivZero) when b is zero",
+  "overflow": "i32::MIN / -1 excluded; arithmetic overflow is outside this contract",
+  "cases": [
+    {"input": [7, 2], "expected": "Ok(3)"},
+    {"input": [-7, 2], "expected": "Ok(-3)"},
+    {"input": [7, -2], "expected": "Ok(-3)"},
+    {"input": [-7, -2], "expected": "Ok(3)"},
+    {"input": [7, 0], "expected": "Err(DivError::DivZero)"},
+    {"input": [0, 0], "expected": "Err(DivError::DivZero)"},
+    {"input": [2147483647, 1], "expected": "Ok(2147483647)"}
+  ]
+}

@@ -46,3 +46,5 @@ jobs:
           package-manager-cache: false
       - name: Verify all sum-positive baselines
         run: python3 scripts/verify_sum_positive.py --require-all
+      - name: Verify all checked-division baselines
+        run: python3 scripts/verify_checked_division.py --require-all
