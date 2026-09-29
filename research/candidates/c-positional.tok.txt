@@ -1,0 +1,17 @@
+@1|M|http
+@2|M|json
+@3|M|task
+@4|S|User|id:i32,name:str
+@5|F|identity|T|x:T|T|x
+@6|F|users_response||users:[User]|?Response,Error|7,8,11,12
+@7|V|selected|[User]|[]
+@8|L|user|users|9
+@9|I|>(.user,id,0)|10
+@10|C|selected.push|identity(user)
+@11|V|body|str|try(json.encode(selected))
+@12|R|http.response(200,body)
+@13|F|main|||?Unit,Error|14,15,16,17
+@14|V|server|Server|http.server()
+@15|C|http.get|server,"GET","/users",users_response
+@16|V|worker|Task<?Unit,Error>|task.spawn(lambda: http.run(server))
+@17|R|try(task.join(worker))
