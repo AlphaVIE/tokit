@@ -25,7 +25,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
           | "break" ";" | "continue" ";"
           | "return" expression ";"
           | expression ";" ;
-expression = integer | string | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | "-" integer | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
            | "Some" "(" expression ")" | "None"
@@ -39,7 +39,7 @@ expression = integer | string | "true" | "false" | identifier | "[" arguments? "
 pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
         | "Some" "(" identifier ")" | "None"
         | identifier "::" identifier ("(" identifier ")")? | "true" | "false"
-        | integer | "_" ;
+        | integer | "-" integer | "_" ;
 binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
 
@@ -51,7 +51,7 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 `Option<T>` represents a present value with `Some(value)` or an absent value with `None`; there is no unrestricted null value. `None` gets its element type from a declared return, binding, field, or another expression. Matching an untyped bare `None` reports `E115`. A match on `Option<T>` must cover both `Some(binding)` and `None`, either explicitly or with a final `_` arm. `Option<T>` has an inline value layout, so directly recursive records or enums through `Option` report `E112`; arrays and tasks provide indirection. `?` currently applies only to `Result`, not `Option`.
 
-`i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`. This subset has no unary minus, so negative literals cannot currently be written directly; subtraction can produce negative values. These are prototype limitations, not final numeric semantics.
+`i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`, including `-2147483648`; the minus sign and digits of a negative literal must be adjacent. General unary negation of a computed expression is not yet supported. These are prototype limitations, not final numeric semantics.
 
 Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
 
@@ -61,7 +61,7 @@ Records and functions can declare type parameters, as in `struct Pair<T>{left:T,
 
 Enums declare named variants, including an optional empty variant set. A variant may carry one typed value, for example `enum Event{Stop,Number(i32)}`. `Event::Stop` and `Event::Number(7)` construct values, which may also serve as typed `Result` errors. Missing, extra, or incorrectly typed payloads are rejected. Unknown variants or using an enum name as a function report `E114`. Direct recursive value layouts across records and enums report `E112`; recursion through an array is permitted because its storage is indirect. Generic enums and variants with multiple payload fields are not yet supported.
 
-`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, `Option` with `Some(name)` and `None`, enums with qualified `Enum::Variant` and `Enum::Variant(name)` patterns, `bool` with `true` and `false`, and `i32` with nonnegative literal patterns. A final `_` arm covers remaining cases of any supported match type; it is required for `i32`, whose domain cannot be enumerated in source. For closed types, explicit patterns may instead cover every case. Missing, duplicate, inapplicable, or unreachable patterns report `E116`. Integer patterns outside `i32` report `E003`. Negative integer literals cannot yet be written directly, so negative values currently reach `_`. A payload binding is scoped to its arm and has the declared payload type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
+`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, `Option` with `Some(name)` and `None`, enums with qualified `Enum::Variant` and `Enum::Variant(name)` patterns, `bool` with `true` and `false`, and `i32` with signed literal patterns. A final `_` arm covers remaining cases of any supported match type; it is required for `i32`, whose domain cannot be enumerated in source. For closed types, explicit patterns may instead cover every case. Missing, duplicate, inapplicable, or unreachable patterns report `E116`. Out-of-range integer patterns report `E003`. A payload binding is scoped to its arm and has the declared payload type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
 
 The provisional library includes `read_text(String)->Result<String,IoError>`, `write_text(String,String)->Result<Unit,IoError>`, and `lines(String)->[String]`. `IoError` is a reserved enum with `Denied`, `NotFound`, `InvalidUtf8`, and `Other` variants. Reads and writes require separate `--allow-read <path>` and `--allow-write <path>` grants on the interpreter or generated binary. See the [filesystem capability contract](FILESYSTEM_CAPABILITY.md); this is not an OS sandbox.
 
