@@ -1,0 +1,173 @@
+//! Deterministic, source-independent summaries of checked Tokit programs.
+
+use std::collections::BTreeSet;
+
+use crate::ast::{Expr, ExprKind, Op, Program, Stmt};
+
+#[derive(Default)]
+struct Facts {
+    calls: BTreeSet<String>,
+    constructors: BTreeSet<String>,
+    record_names: BTreeSet<String>,
+    operations: BTreeSet<&'static str>,
+}
+
+fn visit(expr: &Expr, facts: &mut Facts) {
+    match &expr.kind {
+        ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => {}
+        ExprKind::Variant(_, _) => {}
+        ExprKind::Array(values) => {
+            for value in values {
+                visit(value, facts);
+            }
+        }
+        ExprKind::Index(array, index) => {
+            facts.operations.insert("checked array indexing");
+            visit(array, facts);
+            visit(index, facts);
+        }
+        ExprKind::Field(value, _) => visit(value, facts),
+        ExprKind::Ok(value) | ExprKind::Err(value) => visit(value, facts),
+        ExprKind::Try(value) => {
+            facts.operations.insert("error propagation");
+            visit(value, facts);
+        }
+        ExprKind::Binary(left, op, right) => {
+            if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
+                facts.operations.insert("arithmetic or concatenation");
+            }
+            visit(left, facts);
+            visit(right, facts);
+        }
+        ExprKind::Call(name, args) => {
+            if facts.record_names.contains(name) {
+                facts.constructors.insert(name.clone());
+            } else {
+                facts.calls.insert(name.clone());
+            }
+            for arg in args {
+                visit(arg, facts);
+            }
+        }
+        ExprKind::If(condition, yes, no) => {
+            facts.operations.insert("branching");
+            visit(condition, facts);
+            visit(yes, facts);
+            visit(no, facts);
+        }
+        ExprKind::Match(value, arms) => {
+            facts.operations.insert("exhaustive matching");
+            visit(value, facts);
+            for (_, body) in arms {
+                visit(body, facts);
+            }
+        }
+        ExprKind::Block(statements, tail) => {
+            for statement in statements {
+                match statement {
+                    Stmt::Let { value, .. } | Stmt::Assign { value, .. } => visit(value, facts),
+                    Stmt::For { iterable, body, .. } => {
+                        facts.operations.insert("array iteration");
+                        visit(iterable, facts);
+                        visit(body, facts);
+                    }
+                    Stmt::Return { value, .. } => {
+                        facts.operations.insert("early return");
+                        visit(value, facts);
+                    }
+                    Stmt::Expr(value) => visit(value, facts),
+                }
+            }
+            if let Some(tail) = tail {
+                visit(tail, facts);
+            }
+        }
+    }
+}
+
+fn list<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
+    let values: Vec<_> = values.into_iter().collect();
+    if values.is_empty() {
+        "none".to_owned()
+    } else {
+        values.join(", ")
+    }
+}
+
+/// Describe a program only after it has passed static checking.
+pub fn explain(program: &Program) -> String {
+    let mut out = String::from("Tokit program\n");
+    out.push_str("\nRecords\n");
+    if program.records.is_empty() {
+        out.push_str("  none\n");
+    }
+    for record in &program.records {
+        out.push_str(&format!(
+            "  {}{}\n",
+            record.name,
+            type_params(&record.type_params)
+        ));
+        for (name, ty) in &record.fields {
+            out.push_str(&format!("    {name}: {ty}\n"));
+        }
+    }
+    out.push_str("\nEnums\n");
+    if program.enums.is_empty() {
+        out.push_str("  none\n");
+    }
+    for decl in &program.enums {
+        out.push_str(&format!(
+            "  {}: {}\n",
+            decl.name,
+            list(decl.variants.iter().map(String::as_str))
+        ));
+    }
+    out.push_str("\nFunctions\n");
+    if program.functions.is_empty() {
+        out.push_str("  none\n");
+    }
+    for function in &program.functions {
+        let params = function
+            .params
+            .iter()
+            .map(|(name, ty)| format!("{name}: {ty}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!(
+            "  {}{}({params}) -> {}\n",
+            function.name,
+            type_params(&function.type_params),
+            function.ret
+        ));
+        let mut facts = Facts {
+            record_names: program
+                .records
+                .iter()
+                .map(|record| record.name.clone())
+                .collect(),
+            ..Facts::default()
+        };
+        visit(&function.body, &mut facts);
+        out.push_str(&format!(
+            "    calls: {}\n",
+            list(facts.calls.iter().map(String::as_str))
+        ));
+        out.push_str(&format!(
+            "    constructs: {}\n",
+            list(facts.constructors.iter().map(String::as_str))
+        ));
+        out.push_str(&format!(
+            "    operations: {}\n",
+            list(facts.operations.iter().copied())
+        ));
+    }
+    out
+}
+
+fn type_params(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", params.join(", "))
+    }
+}
