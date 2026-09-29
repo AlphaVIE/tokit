@@ -133,6 +133,10 @@ fn native_output_matches_reference_interpreter() {
             "struct Node{children:[Node]} fn main()->Node{Node([Node([])])}",
         ),
         ("array_index", "fn main()->String{[\"a\",\"✓\"][1]}"),
+        (
+            "array_read_after_push",
+            "fn main()->String{var xs:[String]=[\"a\"];let first:String=xs[0];xs.push(\"b\");first+xs[len(xs)-1]}",
+        ),
         ("nested_array_index", "fn main()->i32{[[1,2],[3,4]][1][0]}"),
         (
             "utf8_strings",

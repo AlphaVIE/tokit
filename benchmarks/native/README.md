@@ -7,6 +7,11 @@ multiples of three up to 100 million iterations, so the expected sum is exactly
 twice the iteration count and does not overflow. It checks both outputs before
 timing and after every timed run.
 
+`array_cycle.tok` and `array_cycle.rs` use the same cycle and result, but read
+each value from a three-element array and call `len` in the loop. Select it
+with `--workload array-cycle`. This workload exercises native array reads;
+the default remains `cycle-sum`.
+
 Run from the repository root:
 
 ```sh
@@ -44,3 +49,11 @@ were 50.7 ms and 50.9 ms, respectively; their sample ranges overlap. Native
 binaries were 4,978,899 and 4,962,890 bytes. These observations motivate
 tracking bootstrap build overhead. The runtime samples do not support a claim
 that either implementation is faster on this workload.
+
+The array-read optimization has [before](array-before.json) and
+[after](array-after.json) measurements with identical source hashes and three
+million iterations. Tokit's median process time fell from 87.9 ms to 8.5 ms;
+Rust's median was around 9 ms in both runs. At this size, process startup is
+a substantial part of the after result. A [longer after run](array-after-long.json)
+at 99,999,999 iterations measured 52.4 ms for Tokit and 50.6 ms for Rust.
+These are local observations for one workload, not a general performance claim.

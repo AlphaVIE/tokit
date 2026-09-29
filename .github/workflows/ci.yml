@@ -56,3 +56,5 @@ jobs:
         run: python3 scripts/verify_task_square.py --require-all
       - name: Smoke-test native benchmark harness
         run: python3 scripts/bench_native.py --rust-toolchain 1.98.1 --iterations 30000 --warmups 0 --samples 1 --build-samples 1
+      - name: Smoke-test array-read benchmark
+        run: python3 scripts/bench_native.py --workload array-cycle --rust-toolchain 1.98.1 --iterations 30000 --warmups 0 --samples 1 --build-samples 1

@@ -1,0 +1,2 @@
+fn array_sum(n:i32)->i32{let xs:[i32]=[1,2,3];var i:i32=0;var index:i32=0;var total:i32=0;while i<n{total=total+xs[index];if index==len(xs)-1{index=0;}else{index=index+1;};i=i+1;}total}
+fn main()->Result<i32,ParseError>{let values:[String]=args();if len(values)==1{let n:i32=parse_i32(values[0])?;Ok(array_sum(n))}else{Err(ParseError::Invalid)}}
