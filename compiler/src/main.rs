@@ -135,13 +135,15 @@ fn main() {
         return;
     }
     let (json, path) = match args.as_slice() {
-        [_, command, path] if matches!(command.as_str(), "check" | "explain" | "stats") => {
+        [_, command, path]
+            if matches!(command.as_str(), "check" | "explain" | "stats" | "ai-index") =>
+        {
             (false, path)
         }
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
@@ -153,15 +155,13 @@ fn main() {
             process::exit(2);
         }
     };
-    let result = match args[1].as_str() {
-        "check" => tokit_compiler::check(&source).map(|_| "ok".to_owned()),
-        "explain" => {
-            tokit_compiler::check(&source).map(|program| tokit_compiler::explain::explain(&program))
-        }
-        "stats" => tokit_compiler::check(&source)
-            .map(|program| tokit_compiler::stats::measure(&source, &program).json()),
+    let result = tokit_compiler::check(&source).map(|program| match args[1].as_str() {
+        "check" => "ok".to_owned(),
+        "explain" => tokit_compiler::explain::explain(&program),
+        "stats" => tokit_compiler::stats::measure(&source, &program).json(),
+        "ai-index" => tokit_compiler::ai_index::index(&program),
         _ => unreachable!("run is handled before this command match"),
-    };
+    });
     match result {
         Ok(output) if json => println!(
             "{{\"ok\":true,\"result\":\"{}\"}}",
