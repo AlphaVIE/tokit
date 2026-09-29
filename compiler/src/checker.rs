@@ -5,6 +5,7 @@ use crate::diagnostic::Diagnostic;
 
 #[derive(Clone)]
 struct Signature {
+    type_params: Vec<String>,
     params: Vec<Type>,
     ret: Type,
     fields: Option<Vec<(String, Type)>>,
@@ -24,6 +25,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     let mut signatures = HashMap::new();
     let mut types = HashMap::new();
     let mut record_names = HashSet::new();
+    let mut arities = HashMap::new();
     for record in &program.records {
         if matches!(
             record.name.as_str(),
@@ -36,6 +38,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 format!("duplicate or reserved type {}", record.name),
             ));
         }
+        arities.insert(record.name.clone(), record.type_params.len());
     }
     for enum_decl in &program.enums {
         if matches!(
@@ -49,6 +52,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 format!("duplicate or reserved type {}", enum_decl.name),
             ));
         }
+        arities.insert(enum_decl.name.clone(), 0);
         let mut names = HashSet::new();
         for variant in &enum_decl.variants {
             if !names.insert(variant) {
@@ -62,6 +66,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         signatures.insert(
             enum_decl.name.clone(),
             Signature {
+                type_params: Vec::new(),
                 params: Vec::new(),
                 ret: Type::Named(enum_decl.name.clone()),
                 fields: None,
@@ -70,6 +75,20 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         );
     }
     for record in &program.records {
+        validate_params(&record.type_params, &record_names, record.span)?;
+        for param in &record.type_params {
+            if !record
+                .fields
+                .iter()
+                .any(|(_, ty)| mentions_param(ty, param))
+            {
+                return Err(Diagnostic::new(
+                    "E115",
+                    record.span,
+                    format!("unused record type parameter {param}"),
+                ));
+            }
+        }
         let mut names = HashSet::new();
         for (name, ty) in &record.fields {
             if !names.insert(name) {
@@ -79,11 +98,23 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                     format!("duplicate field {name}"),
                 ));
             }
-            validate_type(ty, &record_names, record.span)?;
+            validate_type(ty, &arities, record.span)?;
         }
         let signature = Signature {
+            type_params: record.type_params.clone(),
             params: record.fields.iter().map(|(_, ty)| ty.clone()).collect(),
-            ret: Type::Named(record.name.clone()),
+            ret: if record.type_params.is_empty() {
+                Type::Named(record.name.clone())
+            } else {
+                Type::Applied(
+                    record.name.clone(),
+                    record
+                        .type_params
+                        .iter()
+                        .map(|name| Type::Param(name.clone()))
+                        .collect(),
+                )
+            },
             fields: Some(record.fields.clone()),
             variants: None,
         };
@@ -99,11 +130,13 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         }
     }
     for function in &program.functions {
+        validate_params(&function.type_params, &record_names, function.span)?;
         for (_, ty) in &function.params {
-            validate_type(ty, &record_names, function.span)?;
+            validate_type(ty, &arities, function.span)?;
         }
-        validate_type(&function.ret, &record_names, function.span)?;
+        validate_type(&function.ret, &arities, function.span)?;
         let signature = Signature {
+            type_params: function.type_params.clone(),
             params: function.params.iter().map(|(_, ty)| ty.clone()).collect(),
             ret: function.ret.clone(),
             fields: None,
@@ -151,45 +184,115 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     Ok(types)
 }
 
-fn validate_type(ty: &Type, names: &HashSet<String>, span: Span) -> Result<(), Diagnostic> {
+fn validate_params(
+    params: &[String],
+    names: &HashSet<String>,
+    span: Span,
+) -> Result<(), Diagnostic> {
+    let mut seen = HashSet::new();
+    for param in params {
+        if !seen.insert(param)
+            || names.contains(param)
+            || matches!(
+                param.as_str(),
+                "i32" | "bool" | "String" | "Unit" | "Result"
+            )
+        {
+            return Err(Diagnostic::new(
+                "E106",
+                span,
+                format!("duplicate or reserved type parameter {param}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn mentions_param(ty: &Type, param: &str) -> bool {
     match ty {
-        Type::Named(name) if !names.contains(name) => Err(Diagnostic::new(
+        Type::Param(name) => name == param,
+        Type::Applied(_, args) => args.iter().any(|arg| mentions_param(arg, param)),
+        Type::Array(element) => mentions_param(element, param),
+        Type::Result(ok, err) => mentions_param(ok, param) || mentions_param(err, param),
+        _ => false,
+    }
+}
+
+fn validate_type(
+    ty: &Type,
+    arities: &HashMap<String, usize>,
+    span: Span,
+) -> Result<(), Diagnostic> {
+    match ty {
+        Type::Named(name) if arities.get(name) != Some(&0) => Err(Diagnostic::new(
             "E103",
             span,
-            format!("unknown type {name}"),
+            format!("unknown or unapplied type {name}"),
         )),
-        Type::Array(element) => validate_type(element, names, span),
+        Type::Applied(name, args) => {
+            if arities.get(name) != Some(&args.len()) {
+                return Err(Diagnostic::new(
+                    "E103",
+                    span,
+                    format!("invalid type arguments for {name}"),
+                ));
+            }
+            for arg in args {
+                validate_type(arg, arities, span)?;
+            }
+            Ok(())
+        }
+        Type::Array(element) => validate_type(element, arities, span),
         Type::Result(ok, err) => {
-            validate_type(ok, names, span)?;
-            validate_type(err, names, span)
+            validate_type(ok, arities, span)?;
+            validate_type(err, arities, span)
         }
         _ => Ok(()),
     }
 }
 
 fn has_record_cycle(name: &str, program: &Program, visiting: &mut HashSet<String>) -> bool {
-    if !program.records.iter().any(|record| record.name == name) {
+    let Some(record) = program.records.iter().find(|record| record.name == name) else {
         return false;
-    }
+    };
+    let args = record
+        .type_params
+        .iter()
+        .map(|param| Type::Param(param.clone()))
+        .collect::<Vec<_>>();
+    record_has_cycle(name, &args, program, visiting)
+}
+
+fn record_has_cycle(
+    name: &str,
+    args: &[Type],
+    program: &Program,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    let Some(record) = program.records.iter().find(|record| record.name == name) else {
+        return false;
+    };
     if !visiting.insert(name.to_owned()) {
         return true;
     }
-    let record = program
-        .records
+    let inferred: HashMap<String, Type> = record
+        .type_params
         .iter()
-        .find(|record| record.name == name)
-        .expect("validated record name");
+        .cloned()
+        .zip(args.iter().cloned())
+        .collect();
     let cycle = record
         .fields
         .iter()
-        .any(|(_, ty)| type_has_cycle(ty, program, visiting));
+        .any(|(_, ty)| type_has_cycle(&substitute(ty, &inferred), program, visiting));
     visiting.remove(name);
     cycle
 }
 
 fn type_has_cycle(ty: &Type, program: &Program, visiting: &mut HashSet<String>) -> bool {
     match ty {
-        Type::Named(name) => has_record_cycle(name, program, visiting),
+        Type::Named(name) => record_has_cycle(name, &[], program, visiting),
+        Type::Applied(name, args) => record_has_cycle(name, args, program, visiting),
         Type::Array(_) => false,
         Type::Result(ok, err) => {
             type_has_cycle(ok, program, visiting) || type_has_cycle(err, program, visiting)
@@ -205,6 +308,11 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
     match (expected, actual) {
         (Type::Array(_), Type::EmptyArray) => true,
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
+            if a_name == b_name && a_args.len() == b_args.len() =>
+        {
+            a_args.iter().zip(b_args).all(|(a, b)| compatible(a, b))
+        }
         (Type::Result(expected_ok, expected_err), Type::Result(actual_ok, actual_err)) => {
             compatible(expected_ok, actual_ok) && compatible(expected_err, actual_err)
         }
@@ -226,6 +334,18 @@ fn join(left: &Type, right: &Type) -> Option<Type> {
         (Type::Array(_), Type::EmptyArray) => Some(left.clone()),
         (Type::EmptyArray, Type::Array(_)) => Some(right.clone()),
         (Type::Array(left), Type::Array(right)) => Some(Type::Array(Box::new(join(left, right)?))),
+        (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
+            if a_name == b_name && a_args.len() == b_args.len() =>
+        {
+            Some(Type::Applied(
+                a_name.clone(),
+                a_args
+                    .iter()
+                    .zip(b_args)
+                    .map(|(a, b)| join(a, b))
+                    .collect::<Option<Vec<_>>>()?,
+            ))
+        }
         (Type::Result(left_ok, left_err), Type::Result(right_ok, right_err)) => Some(Type::Result(
             Box::new(join(left_ok, right_ok)?),
             Box::new(join(left_err, right_err)?),
@@ -243,6 +363,65 @@ fn require(expected: &Type, actual: &Type, span: Span, context: &str) -> Result<
             span,
             format!("{context}: expected {expected}, got {actual}"),
         ))
+    }
+}
+
+fn substitute(ty: &Type, inferred: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Param(name) => inferred.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Type::Array(element) => Type::Array(Box::new(substitute(element, inferred))),
+        Type::Result(ok, err) => Type::Result(
+            Box::new(substitute(ok, inferred)),
+            Box::new(substitute(err, inferred)),
+        ),
+        Type::Applied(name, args) => Type::Applied(
+            name.clone(),
+            args.iter().map(|arg| substitute(arg, inferred)).collect(),
+        ),
+        _ => ty.clone(),
+    }
+}
+
+fn infer_params(
+    pattern: &Type,
+    actual: &Type,
+    inferred: &mut HashMap<String, Type>,
+    span: Span,
+) -> Result<(), Diagnostic> {
+    if matches!(actual, Type::Never | Type::EmptyArray) {
+        return Ok(());
+    }
+    match (pattern, actual) {
+        (Type::Param(name), actual) => {
+            if let Some(previous) = inferred.get(name) {
+                let common = join(previous, actual).ok_or_else(|| {
+                    Diagnostic::new(
+                        "E102",
+                        span,
+                        format!("incompatible type arguments {previous} and {actual}"),
+                    )
+                })?;
+                inferred.insert(name.clone(), common);
+                Ok(())
+            } else {
+                inferred.insert(name.clone(), actual.clone());
+                Ok(())
+            }
+        }
+        (Type::Array(a), Type::Array(b)) => infer_params(a, b, inferred, span),
+        (Type::Result(a_ok, a_err), Type::Result(b_ok, b_err)) => {
+            infer_params(a_ok, b_ok, inferred, span)?;
+            infer_params(a_err, b_err, inferred, span)
+        }
+        (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
+            if a_name == b_name && a_args.len() == b_args.len() =>
+        {
+            for (a, b) in a_args.iter().zip(b_args) {
+                infer_params(a, b, inferred, span)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -332,18 +511,27 @@ fn infer(
             if actual == Type::Never {
                 return Ok(Type::Never);
             }
-            let Type::Named(name) = actual else {
-                return Err(Diagnostic::new(
-                    "E113",
-                    value.span,
-                    "field access requires a record",
-                ));
+            let (name, args) = match actual {
+                Type::Named(name) => (name, Vec::new()),
+                Type::Applied(name, args) => (name, args),
+                _ => {
+                    return Err(Diagnostic::new(
+                        "E113",
+                        value.span,
+                        "field access requires a record",
+                    ));
+                }
             };
-            signatures
+            let signature = signatures
                 .get(&name)
-                .and_then(|signature| signature.fields.as_ref())
+                .ok_or_else(|| Diagnostic::new("E113", expr.span, "unknown record"))?;
+            let inferred: HashMap<String, Type> =
+                signature.type_params.iter().cloned().zip(args).collect();
+            signature
+                .fields
+                .as_ref()
                 .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
-                .map(|(_, ty)| ty.clone())
+                .map(|(_, ty)| substitute(ty, &inferred))
                 .ok_or_else(|| {
                     Diagnostic::new(
                         "E113",
@@ -443,11 +631,32 @@ fn infer(
                     ),
                 ));
             }
-            for (arg, expected) in args.iter().zip(&signature.params) {
-                let actual = type_of(arg, env, signatures, return_type, types)?;
-                require(expected, &actual, arg.span, "argument")?;
+            let actuals = args
+                .iter()
+                .map(|arg| type_of(arg, env, signatures, return_type, types))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut inferred = HashMap::new();
+            for ((arg, expected), actual) in args.iter().zip(&signature.params).zip(&actuals) {
+                infer_params(expected, actual, &mut inferred, arg.span)?;
             }
-            Ok(signature.ret.clone())
+            for name in &signature.type_params {
+                if !inferred.contains_key(name) {
+                    return Err(Diagnostic::new(
+                        "E115",
+                        expr.span,
+                        format!("cannot infer type argument {name}"),
+                    ));
+                }
+            }
+            for ((arg, expected), actual) in args.iter().zip(&signature.params).zip(&actuals) {
+                require(
+                    &substitute(expected, &inferred),
+                    actual,
+                    arg.span,
+                    "argument",
+                )?;
+            }
+            Ok(substitute(&signature.ret, &inferred))
         }
         ExprKind::If(condition, yes, no) => {
             let cond_type = type_of(condition, env, signatures, return_type, types)?;
@@ -483,14 +692,14 @@ fn infer(
                             ));
                         }
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
-                        let names: HashSet<String> = signatures
+                        let arities: HashMap<String, usize> = signatures
                             .iter()
                             .filter_map(|(name, signature)| {
                                 (signature.fields.is_some() || signature.variants.is_some())
-                                    .then_some(name.clone())
+                                    .then_some((name.clone(), signature.type_params.len()))
                             })
                             .collect();
-                        validate_type(ty, &names, *span)?;
+                        validate_type(ty, &arities, *span)?;
                         require(ty, &actual, value.span, "binding")?;
                         scope.insert(
                             name.clone(),

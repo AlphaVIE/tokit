@@ -72,6 +72,12 @@ fn rust_type(ty: &Type) -> String {
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         Type::Named(name) => user_name(name),
+        Type::Applied(name, args) => format!(
+            "{}<{}>",
+            user_name(name),
+            args.iter().map(rust_type).collect::<Vec<_>>().join(",")
+        ),
+        Type::Param(name) => user_name(name),
         Type::Unit => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
@@ -96,6 +102,14 @@ fn rust_type_fallback(ty: &Type) -> String {
             "Result<{},{}>",
             rust_type_fallback(ok),
             rust_type_fallback(err)
+        ),
+        Type::Applied(name, args) => format!(
+            "{}<{}>",
+            user_name(name),
+            args.iter()
+                .map(rust_type_fallback)
+                .collect::<Vec<_>>()
+                .join(",")
         ),
         other => rust_type(other),
     }
@@ -268,11 +282,11 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         .ok_or_else(|| {
             Diagnostic::new("E203", Span { start: 0, end: 0 }, "missing main function")
         })?;
-    if !main.params.is_empty() {
+    if !main.params.is_empty() || !main.type_params.is_empty() {
         return Err(Diagnostic::new(
             "E203",
             main.span,
-            "main must have no parameters",
+            "main must have no parameters or type parameters",
         ));
     }
     let mut out = String::from(PRELUDE);
@@ -308,14 +322,39 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
     }
     for record in &program.records {
         let name = user_name(&record.name);
+        let generic_names = record
+            .type_params
+            .iter()
+            .map(|param| user_name(param))
+            .collect::<Vec<_>>()
+            .join(",");
+        let generics = if generic_names.is_empty() {
+            String::new()
+        } else {
+            format!("<{generic_names}>")
+        };
+        let render_bounds = record
+            .type_params
+            .iter()
+            .map(|param| format!("{}: __TokRender", user_name(param)))
+            .collect::<Vec<_>>()
+            .join(",");
+        let render_generics = if render_bounds.is_empty() {
+            String::new()
+        } else {
+            format!("<{render_bounds}>")
+        };
         let fields = record
             .fields
             .iter()
             .map(|(field, ty)| format!("{}: {}", user_name(field), rust_type(ty)))
             .collect::<Vec<_>>()
             .join(",");
-        writeln!(out, "#[derive(Clone)] struct {name} {{ {fields} }}")
-            .expect("writing to String cannot fail");
+        writeln!(
+            out,
+            "#[derive(Clone)] struct {name}{generics} {{ {fields} }}"
+        )
+        .expect("writing to String cannot fail");
         let params = record
             .fields
             .iter()
@@ -330,7 +369,7 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
             .join(",");
         writeln!(
             out,
-            "fn {name}({params}) -> {name} {{ {name} {{ {init} }} }}"
+            "fn {name}{generics}({params}) -> {name}{generics} {{ {name} {{ {init} }} }}"
         )
         .expect("writing to String cannot fail");
         let rendered = record
@@ -353,10 +392,21 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
                 record.name
             )
         };
-        writeln!(out, "impl __TokRender for {name} {{ fn tok_render(&self) -> String {{ {render_expression} }} }}")
+        writeln!(out, "impl{render_generics} __TokRender for {name}{generics} {{ fn tok_render(&self) -> String {{ {render_expression} }} }}")
             .expect("writing to String cannot fail");
     }
     for function in &program.functions {
+        let bounds = function
+            .type_params
+            .iter()
+            .map(|param| format!("{}: Clone + __TokRender", user_name(param)))
+            .collect::<Vec<_>>()
+            .join(",");
+        let generics = if bounds.is_empty() {
+            String::new()
+        } else {
+            format!("<{bounds}>")
+        };
         let params = function
             .params
             .iter()
@@ -366,7 +416,7 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         let (line, column) = location(source, function.span);
         writeln!(
             out,
-            "fn {}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({line},{column}); {} }}",
+            "fn {}{generics}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({line},{column}); {} }}",
             user_name(&function.name),
             rust_type(&function.ret),
             emit_expr(&function.body, source, &types)

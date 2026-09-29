@@ -19,6 +19,8 @@ pub enum Type {
     Bool,
     String,
     Named(String),
+    Applied(String, Vec<Type>),
+    Param(String),
     Unit,
     Never,
     Array(Box<Type>),
@@ -33,6 +35,17 @@ impl std::fmt::Display for Type {
             Self::Bool => "bool",
             Self::String => "String",
             Self::Named(name) => return f.write_str(name),
+            Self::Applied(name, args) => {
+                write!(f, "{name}<")?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{arg}")?;
+                }
+                return f.write_str(">");
+            }
+            Self::Param(name) => return f.write_str(name),
             Self::Unit => "Unit",
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
@@ -112,6 +125,7 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
+    pub type_params: Vec<String>,
     pub params: Vec<(String, Type)>,
     pub ret: Type,
     pub body: Expr,
@@ -121,6 +135,7 @@ pub struct Function {
 #[derive(Clone, Debug)]
 pub struct Record {
     pub name: String,
+    pub type_params: Vec<String>,
     pub fields: Vec<(String, Type)>,
     pub span: Span,
 }
