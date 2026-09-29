@@ -2,6 +2,7 @@ pub mod ast;
 pub mod checker;
 pub mod diagnostic;
 pub mod explain;
+pub mod format;
 pub mod interpreter;
 pub mod lexer;
 pub mod native;

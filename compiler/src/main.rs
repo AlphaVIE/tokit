@@ -2,6 +2,48 @@ use std::{env, fs, process};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let fmt = match args.as_slice() {
+        [_, command, path] if command == "fmt" => Some(("print", path)),
+        [_, command, mode, path]
+            if command == "fmt" && matches!(mode.as_str(), "--check" | "--write") =>
+        {
+            Some((mode.as_str(), path))
+        }
+        _ => None,
+    };
+    if let Some((mode, path)) = fmt {
+        let source = match fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("could not read {path}: {error}");
+                process::exit(2);
+            }
+        };
+        let formatted = match tokit_compiler::format::format(&source) {
+            Ok(formatted) => formatted,
+            Err(diagnostic) => {
+                eprintln!("{}", diagnostic.display(&source));
+                process::exit(1);
+            }
+        };
+        match mode {
+            "--check" if source != formatted => {
+                eprintln!("{path} is not canonically formatted");
+                process::exit(1);
+            }
+            "--check" => {}
+            "--write" => {
+                if source != formatted
+                    && let Err(error) = fs::write(path, formatted)
+                {
+                    eprintln!("could not write {path}: {error}");
+                    process::exit(2);
+                }
+            }
+            _ => print!("{formatted}"),
+        }
+        return;
+    }
     if let [_, command, path, flag, output] = args.as_slice()
         && command == "build"
         && flag == "-o"
@@ -38,7 +80,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: tok <check|run> [--json] <file.tok> | tok <explain|stats> <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok <check|run> [--json] <file.tok> | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
