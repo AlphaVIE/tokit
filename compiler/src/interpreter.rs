@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::ast::{Expr, ExprKind, Function, Op, Program, Span, Stmt};
+use crate::ast::{Expr, ExprKind, Function, Op, PatternKind, Program, Span, Stmt};
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,6 +215,40 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 no
             };
             return eval(branch, env, program, depth);
+        }
+        ExprKind::Match(value, arms) => {
+            let scrutinee = take_value!(eval(value, env, program, depth));
+            for (pattern, body) in arms {
+                let binding = match (&pattern.kind, &scrutinee) {
+                    (PatternKind::Ok(name), Value::Ok(value)) => {
+                        Some(Some((name.clone(), *value.clone())))
+                    }
+                    (PatternKind::Err(name), Value::Err(value)) => {
+                        Some(Some((name.clone(), *value.clone())))
+                    }
+                    (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => {
+                        Some(None)
+                    }
+                    (PatternKind::Variant(name, variant), Value::Enum(actual, value))
+                        if name == actual && variant == value =>
+                    {
+                        Some(None)
+                    }
+                    _ => None,
+                };
+                if let Some(binding) = binding {
+                    let mut scope = env.clone();
+                    if let Some((name, value)) = binding {
+                        scope.insert(name, Rc::new(RefCell::new(value)));
+                    }
+                    return eval(body, &scope, program, depth);
+                }
+            }
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "unmatched runtime value",
+            ));
         }
         ExprKind::Block(stmts, tail) => {
             let mut scope = env.clone();

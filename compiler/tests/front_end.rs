@@ -161,6 +161,42 @@ fn invalid_generic_calls_are_rejected() {
 }
 
 #[test]
+fn exhaustive_matches_bind_payloads_and_return_values() {
+    let source = r#"fn describe(x:Result<i32,String>)->String{match x{Ok(v)=>if v>0{"positive"}else{"zero"},Err(e)=>e}} fn main()->String{describe(Err("bad"))}"#;
+    assert_eq!(run(source).unwrap(), Value::String("bad".to_owned()));
+    let source = "enum Mode{Add,Sub} fn apply(m:Mode,a:i32,b:i32)->i32{match m{Mode::Add=>a+b,Mode::Sub=>a-b}} fn main()->i32{apply(Mode::Sub,7,2)}";
+    assert_eq!(run(source).unwrap(), Value::I32(5));
+    assert_eq!(
+        run("fn main()->i32{match true{true=>1,false=>2}}").unwrap(),
+        Value::I32(1)
+    );
+    let source = "fn f(x:Result<i32,i32>)->i32{match x{Ok(v)=>{return v;},Err(e)=>e}} fn main()->i32{f(Ok(7))}";
+    assert_eq!(run(source).unwrap(), Value::I32(7));
+}
+
+#[test]
+fn match_requires_compatible_exhaustive_unique_arms() {
+    for (source, code) in [
+        ("fn main()->i32{match true{true=>1}}", "E116"),
+        (
+            "fn main()->i32{match true{true=>1,true=>2,false=>3}}",
+            "E116",
+        ),
+        ("enum E{A,B} fn main()->i32{match E::A{E::A=>1}}", "E116"),
+        (
+            "enum E{A,B} fn main()->i32{match E::A{E::A=>1,E::B=>2,true=>3}}",
+            "E116",
+        ),
+        ("fn main()->i32{match Ok(1){Ok(v)=>v}}", "E116"),
+        ("fn main()->i32{match 1{true=>1,false=>2}}", "E116"),
+        ("fn main()->i32{match true{true=>1,false=>false}}", "E102"),
+        ("fn main()->i32{match true{true=>1,false=>2};v}", "E101"),
+    ] {
+        assert_eq!(check(source).unwrap_err().code, code, "{source}");
+    }
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";

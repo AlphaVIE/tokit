@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::{Expr, ExprKind, Op, Program, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, Op, Pattern, PatternKind, Program, Span, Stmt, Type};
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone)]
@@ -425,6 +425,41 @@ fn infer_params(
     }
 }
 
+fn match_pattern(
+    pattern: &Pattern,
+    matched: &Type,
+    signatures: &HashMap<String, Signature>,
+) -> Result<(String, Option<(String, Type)>), Diagnostic> {
+    let invalid = || {
+        Diagnostic::new(
+            "E116",
+            pattern.span,
+            format!("pattern does not match {matched}"),
+        )
+    };
+    match (&pattern.kind, matched) {
+        (PatternKind::Ok(name), Type::Result(ok, _)) => {
+            Ok(("Ok".to_owned(), Some((name.clone(), *ok.clone()))))
+        }
+        (PatternKind::Err(name), Type::Result(_, err)) => {
+            Ok(("Err".to_owned(), Some((name.clone(), *err.clone()))))
+        }
+        (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
+        (PatternKind::Variant(name, variant), Type::Named(actual)) if name == actual => {
+            let valid = signatures
+                .get(name)
+                .and_then(|signature| signature.variants.as_ref())
+                .is_some_and(|variants| variants.contains(variant));
+            if valid {
+                Ok((variant.clone(), None))
+            } else {
+                Err(invalid())
+            }
+        }
+        _ => Err(invalid()),
+    }
+}
+
 fn type_of(
     expr: &Expr,
     env: &HashMap<String, Binding>,
@@ -670,6 +705,75 @@ fn infer(
                     format!("branches have different types: {yes_type} and {no_type}"),
                 )
             })
+        }
+        ExprKind::Match(value, arms) => {
+            let matched = type_of(value, env, signatures, return_type, types)?;
+            if matched == Type::Never {
+                return Ok(Type::Never);
+            }
+            let expected: HashSet<String> = match &matched {
+                Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
+                Type::Bool => ["true".to_owned(), "false".to_owned()]
+                    .into_iter()
+                    .collect(),
+                Type::Named(name) => signatures
+                    .get(name)
+                    .and_then(|signature| signature.variants.as_ref())
+                    .ok_or_else(|| {
+                        Diagnostic::new(
+                            "E116",
+                            value.span,
+                            "match requires a result, enum, or bool",
+                        )
+                    })?
+                    .iter()
+                    .cloned()
+                    .collect(),
+                _ => {
+                    return Err(Diagnostic::new(
+                        "E116",
+                        value.span,
+                        "match requires a result, enum, or bool",
+                    ));
+                }
+            };
+            let mut seen = HashSet::new();
+            let mut result = None;
+            for (pattern, body) in arms {
+                let (key, binding) = match_pattern(pattern, &matched, signatures)?;
+                if !seen.insert(key.clone()) {
+                    return Err(Diagnostic::new(
+                        "E116",
+                        pattern.span,
+                        format!("duplicate match arm {key}"),
+                    ));
+                }
+                let mut scope = env.clone();
+                if let Some((name, ty)) = binding {
+                    scope.insert(name, Binding { ty, mutable: false });
+                }
+                let branch = type_of(body, &scope, signatures, return_type, types)?;
+                result = Some(match result {
+                    Some(previous) => join(&previous, &branch).ok_or_else(|| {
+                        Diagnostic::new(
+                            "E102",
+                            body.span,
+                            format!("match arms have different types: {previous} and {branch}"),
+                        )
+                    })?,
+                    None => branch,
+                });
+            }
+            if seen != expected {
+                let mut missing: Vec<_> = expected.difference(&seen).cloned().collect();
+                missing.sort();
+                return Err(Diagnostic::new(
+                    "E116",
+                    expr.span,
+                    format!("non-exhaustive match: missing {}", missing.join(",")),
+                ));
+            }
+            Ok(result.unwrap_or(Type::Never))
         }
         ExprKind::Block(stmts, tail) => {
             let mut scope = env.clone();

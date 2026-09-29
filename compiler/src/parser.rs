@@ -1,4 +1,6 @@
-use crate::ast::{EnumDecl, Expr, ExprKind, Function, Op, Program, Record, Span, Stmt, Type};
+use crate::ast::{
+    EnumDecl, Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Record, Span, Stmt, Type,
+};
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
 
@@ -467,7 +469,59 @@ impl Parser {
                     span,
                 })
             }
+            Kind::Match => {
+                let value = self.expr(0)?;
+                self.expect(Kind::LBrace)?;
+                let mut arms = Vec::new();
+                while !self.at(&Kind::RBrace) {
+                    let pattern = self.pattern()?;
+                    self.expect(Kind::FatArrow)?;
+                    let body = self.expr(0)?;
+                    arms.push((pattern, body));
+                    if !self.at(&Kind::Comma) {
+                        break;
+                    }
+                    self.bump();
+                }
+                let end = self.expect(Kind::RBrace)?.span;
+                Ok(Expr {
+                    kind: ExprKind::Match(Box::new(value), arms),
+                    span: token.span.join(end),
+                })
+            }
             _ => Err(Diagnostic::new("E002", token.span, "expected expression")),
         }
+    }
+
+    fn pattern(&mut self) -> Result<Pattern, Diagnostic> {
+        let token = self.bump();
+        let (kind, span) = match token.kind {
+            Kind::True => (PatternKind::Bool(true), token.span),
+            Kind::False => (PatternKind::Bool(false), token.span),
+            Kind::Ok | Kind::Err => {
+                self.expect(Kind::LParen)?;
+                let (name, _) = self.ident()?;
+                let end = self.expect(Kind::RParen)?.span;
+                let kind = if token.kind == Kind::Ok {
+                    PatternKind::Ok(name)
+                } else {
+                    PatternKind::Err(name)
+                };
+                (kind, token.span.join(end))
+            }
+            Kind::Ident(name) => {
+                self.expect(Kind::ColonColon)?;
+                let (variant, end) = self.ident()?;
+                (PatternKind::Variant(name, variant), token.span.join(end))
+            }
+            _ => {
+                return Err(Diagnostic::new(
+                    "E002",
+                    token.span,
+                    "expected match pattern",
+                ));
+            }
+        };
+        Ok(Pattern { kind, span })
     }
 }

@@ -1,0 +1,12 @@
+enum DivError{DivZero}
+
+fn divide(a:i32,b:i32)->Result<i32,DivError>{
+    if b==0{Err(DivError::DivZero)}else{Ok(a/b)}
+}
+
+fn main()->String{
+    match divide(7,0){
+        Ok(value)=>"value",
+        Err(error)=>match error{DivError::DivZero=>"division by zero"}
+    }
+}

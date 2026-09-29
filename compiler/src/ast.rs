@@ -77,6 +77,20 @@ pub struct Expr {
 }
 
 #[derive(Clone, Debug)]
+pub enum PatternKind {
+    Ok(String),
+    Err(String),
+    Variant(String, String),
+    Bool(bool),
+}
+
+#[derive(Clone, Debug)]
+pub struct Pattern {
+    pub kind: PatternKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Int(i32),
     Bool(bool),
@@ -92,6 +106,7 @@ pub enum ExprKind {
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
+    Match(Box<Expr>, Vec<(Pattern, Expr)>),
     Block(Vec<Stmt>, Option<Box<Expr>>),
 }
 
