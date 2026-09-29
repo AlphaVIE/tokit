@@ -8,6 +8,7 @@ pub mod filesystem;
 pub mod format;
 pub mod interpreter;
 pub mod lexer;
+pub mod modules;
 pub mod native;
 pub mod parser;
 pub mod sources;

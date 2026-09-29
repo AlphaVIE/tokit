@@ -26,6 +26,13 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
 }
 
 pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagnostic> {
+    if let Some(import) = program.imports.first() {
+        return Err(Diagnostic::new(
+            "E118",
+            import.span,
+            "imports require a file-backed program loader",
+        ));
+    }
     let mut signatures = HashMap::new();
     let mut types = HashMap::new();
     let mut record_names = HashSet::new();

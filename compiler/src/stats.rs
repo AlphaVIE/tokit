@@ -1,6 +1,7 @@
 //! Structural counts for the checked experimental language subset.
 
 use crate::ast::{Expr, ExprKind, Program, Stmt, Type};
+use crate::sources::SourceMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stats {
@@ -182,4 +183,18 @@ pub fn measure(source: &str, program: &Program) -> Stats {
         declarations: program.records.len() + program.enums.len() + program.functions.len(),
         dependencies: 0, // Imports are not supported in this subset.
     }
+}
+
+pub fn measure_sources(sources: &SourceMap, program: &Program) -> Stats {
+    let mut stats = measure("", program);
+    for index in 0..sources.len() {
+        let text = &sources
+            .get(crate::ast::SourceId(index))
+            .expect("registered source")
+            .text;
+        stats.bytes += text.len();
+        stats.chars += text.chars().count();
+    }
+    stats.dependencies = sources.len().saturating_sub(1);
+    stats
 }

@@ -1,6 +1,6 @@
 use crate::ast::{
-    EnumDecl, EnumVariant, Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Record,
-    Span, Stmt, Type,
+    EnumDecl, EnumVariant, Expr, ExprKind, Function, ImportDecl, Op, Pattern, PatternKind, Program,
+    Record, Span, Stmt, Type,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
@@ -158,19 +158,46 @@ impl Parser {
     }
 
     pub fn program(&mut self) -> Result<Program, Diagnostic> {
+        let mut imports = Vec::new();
         let mut functions = Vec::new();
         let mut records = Vec::new();
         let mut enums = Vec::new();
+        let mut declarations_started = false;
         while !self.at(&Kind::Eof) {
-            if self.at(&Kind::Struct) {
+            if self.at(&Kind::Import) {
+                let start = self.bump().span;
+                if declarations_started {
+                    return Err(Diagnostic::new(
+                        "E002",
+                        start,
+                        "imports must precede declarations",
+                    ));
+                }
+                let path = self.bump();
+                let Kind::String(path_text) = path.kind else {
+                    return Err(Diagnostic::new(
+                        "E002",
+                        path.span,
+                        "expected import path string",
+                    ));
+                };
+                let end = self.expect(Kind::Semicolon)?.span;
+                imports.push(ImportDecl {
+                    path: path_text,
+                    span: start.join(end),
+                });
+            } else if self.at(&Kind::Struct) {
+                declarations_started = true;
                 records.push(self.record()?);
             } else if self.at(&Kind::Enum) {
+                declarations_started = true;
                 enums.push(self.enum_decl()?);
             } else {
+                declarations_started = true;
                 functions.push(self.function()?);
             }
         }
-        if functions.is_empty() && records.is_empty() && enums.is_empty() {
+        if functions.is_empty() && records.is_empty() && enums.is_empty() && imports.is_empty() {
             return Err(Diagnostic::new(
                 "E002",
                 self.current().span,
@@ -178,6 +205,7 @@ impl Parser {
             ));
         }
         Ok(Program {
+            imports,
             records,
             enums,
             functions,

@@ -218,7 +218,14 @@ pub struct EnumVariant {
 }
 
 #[derive(Clone, Debug)]
+pub struct ImportDecl {
+    pub path: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Program {
+    pub imports: Vec<ImportDecl>,
     pub records: Vec<Record>,
     pub enums: Vec<EnumDecl>,
     pub functions: Vec<Function>,

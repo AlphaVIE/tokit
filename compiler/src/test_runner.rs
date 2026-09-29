@@ -2,9 +2,10 @@
 
 use std::path::Path;
 
-use crate::ast::{Span, Type};
+use crate::ast::{Program, Span, Type};
 use crate::diagnostic::Diagnostic;
 use crate::interpreter::{self, Value};
+use crate::sources::SourceMap;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -61,6 +62,37 @@ pub fn run_with_capabilities(
     write_root: Option<&Path>,
 ) -> Result<Report, Diagnostic> {
     let program = crate::check(source)?;
+    run_checked(&program, read_root, write_root, |error| {
+        error.display(source)
+    })
+}
+
+pub fn run_loaded(
+    program: &Program,
+    sources: &SourceMap,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+) -> Result<Report, Diagnostic> {
+    run_checked(program, read_root, write_root, |error| {
+        if sources.len() == 1 {
+            error.display(
+                &sources
+                    .get(error.span.source_id)
+                    .expect("registered source")
+                    .text,
+            )
+        } else {
+            error.display_with_sources(sources)
+        }
+    })
+}
+
+fn run_checked(
+    program: &Program,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+    format_error: impl Fn(&Diagnostic) -> String,
+) -> Result<Report, Diagnostic> {
     let tests = program
         .functions
         .iter()
@@ -92,7 +124,7 @@ pub fn run_with_capabilities(
         .iter()
         .map(|function| {
             let outcome = match interpreter::run_named_with_capabilities(
-                &program,
+                program,
                 &function.name,
                 read_root,
                 write_root,
@@ -106,7 +138,7 @@ pub fn run_with_capabilities(
                 }
                 Ok(Value::Err(error)) => Outcome::Failed(format!("returned Err({error})")),
                 Ok(value) => Outcome::Failed(format!("unexpected result {value}")),
-                Err(error) => Outcome::Failed(error.display(source)),
+                Err(error) => Outcome::Failed(format_error(&error)),
             };
             TestCase {
                 name: function.name.clone(),

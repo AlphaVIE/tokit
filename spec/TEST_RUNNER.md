@@ -1,6 +1,6 @@
 # Experimental test runner
 
-`tok test [--allow-read <path>] [--allow-write <path>] file.tok` checks the whole file and discovers
+`tok test [--allow-read <path>] [--allow-write <path>] file.tok` checks the entry file and imports and discovers
 functions whose names begin with `test_`. Tests run in declaration order in the
 reference interpreter; a `main` function is unnecessary. A test must have no
 parameters or type parameters and return `bool` or `Result<bool,E>`. `true` and
@@ -15,6 +15,6 @@ Test functions see an empty `args()` list.
 See [tests.tok](../examples/tests.tok) for a runnable suite.
 
 The `test_` convention and interpreter execution are provisional. This is a
-single-file runner without fixtures, parallel scheduling, benchmarking,
+runner without fixtures, parallel scheduling, benchmarking,
 coverage, or native test execution. The interpreter's current call-depth and
 runtime limitations still apply.
