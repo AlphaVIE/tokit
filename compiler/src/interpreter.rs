@@ -11,6 +11,7 @@ pub enum Value {
     String(String),
     Array(Vec<Value>),
     Record(String, Vec<(String, Value)>),
+    Enum(String, String),
     Ok(Box<Value>),
     Err(Box<Value>),
     Unit,
@@ -42,6 +43,7 @@ impl std::fmt::Display for Value {
                 }
                 f.write_str(")")
             }
+            Self::Enum(name, variant) => write!(f, "{name}::{variant}"),
             Self::Ok(value) => write!(f, "Ok({value})"),
             Self::Err(value) => write!(f, "Err({value})"),
             Self::Unit => f.write_str("()"),
@@ -113,6 +115,7 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
         ExprKind::String(value) => Value::String(value.clone()),
+        ExprKind::Variant(name, variant) => Value::Enum(name.clone(), variant.clone()),
         ExprKind::Array(items) => {
             let mut values = Vec::new();
             for item in items {

@@ -8,6 +8,7 @@ struct Signature {
     params: Vec<Type>,
     ret: Type,
     fields: Option<Vec<(String, Type)>>,
+    variants: Option<Vec<String>>,
 }
 #[derive(Clone)]
 struct Binding {
@@ -36,6 +37,38 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             ));
         }
     }
+    for enum_decl in &program.enums {
+        if matches!(
+            enum_decl.name.as_str(),
+            "i32" | "bool" | "String" | "Unit" | "Result"
+        ) || !record_names.insert(enum_decl.name.clone())
+        {
+            return Err(Diagnostic::new(
+                "E106",
+                enum_decl.span,
+                format!("duplicate or reserved type {}", enum_decl.name),
+            ));
+        }
+        let mut names = HashSet::new();
+        for variant in &enum_decl.variants {
+            if !names.insert(variant) {
+                return Err(Diagnostic::new(
+                    "E106",
+                    enum_decl.span,
+                    format!("duplicate variant {variant}"),
+                ));
+            }
+        }
+        signatures.insert(
+            enum_decl.name.clone(),
+            Signature {
+                params: Vec::new(),
+                ret: Type::Named(enum_decl.name.clone()),
+                fields: None,
+                variants: Some(enum_decl.variants.clone()),
+            },
+        );
+    }
     for record in &program.records {
         let mut names = HashSet::new();
         for (name, ty) in &record.fields {
@@ -52,6 +85,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             params: record.fields.iter().map(|(_, ty)| ty.clone()).collect(),
             ret: Type::Named(record.name.clone()),
             fields: Some(record.fields.clone()),
+            variants: None,
         };
         signatures.insert(record.name.clone(), signature);
     }
@@ -73,6 +107,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             params: function.params.iter().map(|(_, ty)| ty.clone()).collect(),
             ret: function.ret.clone(),
             fields: None,
+            variants: None,
         };
         if signatures
             .insert(function.name.clone(), signature)
@@ -133,6 +168,9 @@ fn validate_type(ty: &Type, names: &HashSet<String>, span: Span) -> Result<(), D
 }
 
 fn has_record_cycle(name: &str, program: &Program, visiting: &mut HashSet<String>) -> bool {
+    if !program.records.iter().any(|record| record.name == name) {
+        return false;
+    }
     if !visiting.insert(name.to_owned()) {
         return true;
     }
@@ -231,6 +269,27 @@ fn infer(
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::Bool(_) => Ok(Type::Bool),
         ExprKind::String(_) => Ok(Type::String),
+        ExprKind::Variant(name, variant) => {
+            let signature = signatures.get(name).ok_or_else(|| {
+                Diagnostic::new("E103", expr.span, format!("unknown enum {name}"))
+            })?;
+            let Some(variants) = &signature.variants else {
+                return Err(Diagnostic::new(
+                    "E114",
+                    expr.span,
+                    format!("{name} is not an enum"),
+                ));
+            };
+            if variants.contains(variant) {
+                Ok(Type::Named(name.clone()))
+            } else {
+                Err(Diagnostic::new(
+                    "E114",
+                    expr.span,
+                    format!("unknown variant {name}::{variant}"),
+                ))
+            }
+        }
         ExprKind::Array(values) => {
             let Some(first) = values.first() else {
                 return Ok(Type::EmptyArray);
@@ -366,6 +425,13 @@ fn infer(
             let signature = signatures.get(name).ok_or_else(|| {
                 Diagnostic::new("E101", expr.span, format!("unknown function {name}"))
             })?;
+            if signature.variants.is_some() {
+                return Err(Diagnostic::new(
+                    "E114",
+                    expr.span,
+                    "enum values require a qualified variant",
+                ));
+            }
             if signature.params.len() != args.len() {
                 return Err(Diagnostic::new(
                     "E105",
@@ -420,7 +486,8 @@ fn infer(
                         let names: HashSet<String> = signatures
                             .iter()
                             .filter_map(|(name, signature)| {
-                                signature.fields.is_some().then_some(name.clone())
+                                (signature.fields.is_some() || signature.variants.is_some())
+                                    .then_some(name.clone())
                             })
                             .collect();
                         validate_type(ty, &names, *span)?;

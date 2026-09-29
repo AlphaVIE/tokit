@@ -30,6 +30,7 @@ fn native_output_matches_reference_interpreter() {
         "factorial",
         "sum_positive",
         "checked_division",
+        "checked_division_enum",
         "record",
     ] {
         let source =
@@ -51,6 +52,15 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        (
+            "enum_error",
+            "enum DivError{DivZero,Overflow} fn div(a:i32,b:i32)->Result<i32,DivError>{if b==0{Err(DivError::DivZero)}else{Ok(a/b)}} fn main()->Result<i32,DivError>{div(7,0)}",
+        ),
+        (
+            "enum_array",
+            "enum Flag{On,Off} fn main()->[Flag]{[Flag::On,Flag::Off]}",
+        ),
+        ("empty_enum", "enum Void{} fn main()->i32{1}"),
         (
             "record_project",
             r#"struct Point{x:i32,y:i32} struct Label{point:Point,text:String} fn make(n:i32)->Label{Label(Point(n,n+1),"✓")} fn main()->i32{make(4).point.y}"#,

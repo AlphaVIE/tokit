@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprKind, Function, Op, Program, Record, Span, Stmt, Type};
+use crate::ast::{EnumDecl, Expr, ExprKind, Function, Op, Program, Record, Span, Stmt, Type};
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
 
@@ -77,21 +77,50 @@ impl Parser {
     pub fn program(&mut self) -> Result<Program, Diagnostic> {
         let mut functions = Vec::new();
         let mut records = Vec::new();
+        let mut enums = Vec::new();
         while !self.at(&Kind::Eof) {
             if self.at(&Kind::Struct) {
                 records.push(self.record()?);
+            } else if self.at(&Kind::Enum) {
+                enums.push(self.enum_decl()?);
             } else {
                 functions.push(self.function()?);
             }
         }
-        if functions.is_empty() && records.is_empty() {
+        if functions.is_empty() && records.is_empty() && enums.is_empty() {
             return Err(Diagnostic::new(
                 "E002",
                 self.current().span,
-                "expected a function or record",
+                "expected a function, record, or enum",
             ));
         }
-        Ok(Program { records, functions })
+        Ok(Program {
+            records,
+            enums,
+            functions,
+        })
+    }
+
+    fn enum_decl(&mut self) -> Result<EnumDecl, Diagnostic> {
+        let start = self.expect(Kind::Enum)?.span;
+        let (name, _) = self.ident()?;
+        self.expect(Kind::LBrace)?;
+        let mut variants = Vec::new();
+        if !self.at(&Kind::RBrace) {
+            loop {
+                variants.push(self.ident()?.0);
+                if !self.at(&Kind::Comma) {
+                    break;
+                }
+                self.bump();
+            }
+        }
+        let end = self.expect(Kind::RBrace)?.span;
+        Ok(EnumDecl {
+            name,
+            variants,
+            span: start.join(end),
+        })
     }
 
     fn record(&mut self) -> Result<Record, Diagnostic> {
@@ -321,7 +350,14 @@ impl Parser {
                 })
             }
             Kind::Ident(name) => {
-                if self.at(&Kind::LParen) {
+                if self.at(&Kind::ColonColon) {
+                    self.bump();
+                    let (variant, end) = self.ident()?;
+                    Ok(Expr {
+                        kind: ExprKind::Variant(name, variant),
+                        span: token.span.join(end),
+                    })
+                } else if self.at(&Kind::LParen) {
                     self.bump();
                     let mut args = Vec::new();
                     if !self.at(&Kind::RParen) {

@@ -71,6 +71,7 @@ pub enum ExprKind {
     Array(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
     Field(Box<Expr>, String),
+    Variant(String, String),
     Ok(Box<Expr>),
     Err(Box<Expr>),
     Try(Box<Expr>),
@@ -125,7 +126,15 @@ pub struct Record {
 }
 
 #[derive(Clone, Debug)]
+pub struct EnumDecl {
+    pub name: String,
+    pub variants: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Program {
     pub records: Vec<Record>,
+    pub enums: Vec<EnumDecl>,
     pub functions: Vec<Function>,
 }
