@@ -1,0 +1,4 @@
+// BENCH_START
+struct Pair<T>{left:T,right:T}
+fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)}
+// BENCH_END
