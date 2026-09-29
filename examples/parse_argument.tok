@@ -1,0 +1,4 @@
+fn main()->Result<i32,ParseError>{
+    let values:[String]=args();
+    if len(values)>0{parse_i32(values[0])}else{Err(ParseError::Invalid)}
+}

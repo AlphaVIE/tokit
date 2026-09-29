@@ -55,6 +55,10 @@ fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("line splitting");
             } else if name == builtins::ARGS {
                 facts.operations.insert("program arguments");
+            } else if name == builtins::LEN {
+                facts.operations.insert("array length");
+            } else if name == builtins::PARSE_I32 {
+                facts.operations.insert("integer parsing");
             } else if name == builtins::JOIN {
                 facts.operations.insert("task join");
             }
