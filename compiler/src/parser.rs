@@ -15,6 +15,11 @@ impl Parser {
     fn current(&self) -> &Token {
         &self.tokens[self.pos]
     }
+    fn next_is(&self, kind: &Kind) -> bool {
+        self.tokens.get(self.pos + 1).is_some_and(|token| {
+            std::mem::discriminant(&token.kind) == std::mem::discriminant(kind)
+        })
+    }
     fn at(&self, kind: &Kind) -> bool {
         std::mem::discriminant(&self.current().kind) == std::mem::discriminant(kind)
     }
@@ -45,6 +50,12 @@ impl Parser {
         }
     }
     fn ty(&mut self) -> Result<Type, Diagnostic> {
+        if self.at(&Kind::LBracket) {
+            self.bump();
+            let element = self.ty()?;
+            self.expect(Kind::RBracket)?;
+            return Ok(Type::Array(Box::new(element)));
+        }
         let (name, span) = self.ident()?;
         match name.as_str() {
             "i32" => Ok(Type::I32),
@@ -116,7 +127,8 @@ impl Parser {
                     "unclosed block",
                 ));
             }
-            if self.at(&Kind::Let) {
+            if self.at(&Kind::Let) || self.at(&Kind::Var) {
+                let mutable = self.at(&Kind::Var);
                 let first = self.bump().span;
                 let (name, _) = self.ident()?;
                 self.expect(Kind::Colon)?;
@@ -127,6 +139,30 @@ impl Parser {
                 stmts.push(Stmt::Let {
                     name,
                     ty,
+                    value,
+                    mutable,
+                    span: first.join(end),
+                });
+            } else if self.at(&Kind::For) {
+                let first = self.bump().span;
+                let (name, _) = self.ident()?;
+                self.expect(Kind::In)?;
+                let iterable = self.expr(0)?;
+                let body = self.block()?;
+                let span = first.join(body.span);
+                stmts.push(Stmt::For {
+                    name,
+                    iterable,
+                    body,
+                    span,
+                });
+            } else if matches!(self.current().kind, Kind::Ident(_)) && self.next_is(&Kind::Eq) {
+                let (name, first) = self.ident()?;
+                self.bump();
+                let value = self.expr(0)?;
+                let end = self.expect(Kind::Semicolon)?.span;
+                stmts.push(Stmt::Assign {
+                    name,
                     value,
                     span: first.join(end),
                 });
@@ -226,6 +262,23 @@ impl Parser {
                         span: token.span,
                     })
                 }
+            }
+            Kind::LBracket => {
+                let mut values = Vec::new();
+                if !self.at(&Kind::RBracket) {
+                    loop {
+                        values.push(self.expr(0)?);
+                        if !self.at(&Kind::Comma) {
+                            break;
+                        }
+                        self.bump();
+                    }
+                }
+                let end = self.expect(Kind::RBracket)?.span;
+                Ok(Expr {
+                    kind: ExprKind::Array(values),
+                    span: token.span.join(end),
+                })
             }
             Kind::LParen => {
                 let mut value = self.expr(0)?;

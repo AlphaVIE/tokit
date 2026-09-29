@@ -8,18 +8,21 @@ struct Signature {
     params: Vec<Type>,
     ret: Type,
 }
+#[derive(Clone)]
+struct Binding {
+    ty: Type,
+    mutable: bool,
+}
 
 pub fn check(program: &Program) -> Result<(), Diagnostic> {
     let mut signatures = HashMap::new();
     for function in &program.functions {
+        let signature = Signature {
+            params: function.params.iter().map(|(_, ty)| ty.clone()).collect(),
+            ret: function.ret.clone(),
+        };
         if signatures
-            .insert(
-                function.name.clone(),
-                Signature {
-                    params: function.params.iter().map(|(_, ty)| *ty).collect(),
-                    ret: function.ret,
-                },
-            )
+            .insert(function.name.clone(), signature)
             .is_some()
         {
             return Err(Diagnostic::new(
@@ -32,7 +35,16 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
     for function in &program.functions {
         let mut env = HashMap::new();
         for (name, ty) in &function.params {
-            if env.insert(name.clone(), *ty).is_some() {
+            if env
+                .insert(
+                    name.clone(),
+                    Binding {
+                        ty: ty.clone(),
+                        mutable: false,
+                    },
+                )
+                .is_some()
+            {
                 return Err(Diagnostic::new(
                     "E106",
                     function.span,
@@ -40,10 +52,10 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
                 ));
             }
         }
-        let body_type = type_of(&function.body, &env, &signatures, function.ret)?;
+        let body_type = type_of(&function.body, &env, &signatures, &function.ret)?;
         require(
-            function.ret,
-            body_type,
+            &function.ret,
+            &body_type,
             function.body.span,
             "function result",
         )?;
@@ -51,8 +63,14 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-fn require(expected: Type, actual: Type, span: Span, context: &str) -> Result<(), Diagnostic> {
-    if expected == actual || actual == Type::Never {
+fn compatible(expected: &Type, actual: &Type) -> bool {
+    expected == actual
+        || *actual == Type::Never
+        || matches!((expected, actual), (Type::Array(_), Type::EmptyArray))
+}
+
+fn require(expected: &Type, actual: &Type, span: Span, context: &str) -> Result<(), Diagnostic> {
+    if compatible(expected, actual) {
         Ok(())
     } else {
         Err(Diagnostic::new(
@@ -65,16 +83,30 @@ fn require(expected: Type, actual: Type, span: Span, context: &str) -> Result<()
 
 fn type_of(
     expr: &Expr,
-    env: &HashMap<String, Type>,
+    env: &HashMap<String, Binding>,
     signatures: &HashMap<String, Signature>,
-    return_type: Type,
+    return_type: &Type,
 ) -> Result<Type, Diagnostic> {
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::Bool(_) => Ok(Type::Bool),
+        ExprKind::Array(values) => {
+            let Some(first) = values.first() else {
+                return Ok(Type::EmptyArray);
+            };
+            let element = type_of(first, env, signatures, return_type)?;
+            if element == Type::Never {
+                return Ok(Type::Never);
+            }
+            for value in values.iter().skip(1) {
+                let actual = type_of(value, env, signatures, return_type)?;
+                require(&element, &actual, value.span, "array element")?;
+            }
+            Ok(Type::Array(Box::new(element)))
+        }
         ExprKind::Var(name) => env
             .get(name)
-            .copied()
+            .map(|binding| binding.ty.clone())
             .ok_or_else(|| Diagnostic::new("E101", expr.span, format!("unknown name {name}"))),
         ExprKind::Binary(left, op, right) => {
             let lhs = type_of(left, env, signatures, return_type)?;
@@ -82,28 +114,25 @@ fn type_of(
             if lhs == Type::Never || rhs == Type::Never {
                 return Ok(Type::Never);
             }
-            let result = match op {
+            match op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Lt | Op::Le | Op::Gt | Op::Ge
                     if lhs == Type::I32 && rhs == Type::I32 =>
                 {
                     if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
-                        Type::I32
+                        Ok(Type::I32)
                     } else {
-                        Type::Bool
+                        Ok(Type::Bool)
                     }
                 }
                 Op::Eq | Op::Ne if lhs == rhs && matches!(lhs, Type::I32 | Type::Bool) => {
-                    Type::Bool
+                    Ok(Type::Bool)
                 }
-                _ => {
-                    return Err(Diagnostic::new(
-                        "E104",
-                        expr.span,
-                        format!("invalid operands {lhs} and {rhs} for {op:?}"),
-                    ));
-                }
-            };
-            Ok(result)
+                _ => Err(Diagnostic::new(
+                    "E104",
+                    expr.span,
+                    format!("invalid operands {lhs} and {rhs} for {op:?}"),
+                )),
+            }
         }
         ExprKind::Call(name, args) => {
             let signature = signatures.get(name).ok_or_else(|| {
@@ -122,18 +151,22 @@ fn type_of(
             }
             for (arg, expected) in args.iter().zip(&signature.params) {
                 let actual = type_of(arg, env, signatures, return_type)?;
-                require(*expected, actual, arg.span, "argument")?;
+                require(expected, &actual, arg.span, "argument")?;
             }
-            Ok(signature.ret)
+            Ok(signature.ret.clone())
         }
         ExprKind::If(condition, yes, no) => {
             let cond_type = type_of(condition, env, signatures, return_type)?;
-            require(Type::Bool, cond_type, condition.span, "condition")?;
+            require(&Type::Bool, &cond_type, condition.span, "condition")?;
             let yes_type = type_of(yes, env, signatures, return_type)?;
             let no_type = type_of(no, env, signatures, return_type)?;
             if yes_type == Type::Never {
                 Ok(no_type)
             } else if no_type == Type::Never || yes_type == no_type {
+                Ok(yes_type)
+            } else if yes_type == Type::EmptyArray && matches!(no_type, Type::Array(_)) {
+                Ok(no_type)
+            } else if no_type == Type::EmptyArray && matches!(yes_type, Type::Array(_)) {
                 Ok(yes_type)
             } else {
                 Err(Diagnostic::new(
@@ -148,11 +181,12 @@ fn type_of(
             let mut declared = HashSet::new();
             for (index, stmt) in stmts.iter().enumerate() {
                 let has_following = index + 1 < stmts.len() || tail.is_some();
-                match stmt {
+                let (statement_type, span) = match stmt {
                     Stmt::Let {
                         name,
                         ty,
                         value,
+                        mutable,
                         span,
                     } => {
                         if !declared.insert(name.clone()) {
@@ -163,35 +197,70 @@ fn type_of(
                             ));
                         }
                         let actual = type_of(value, &scope, signatures, return_type)?;
-                        require(*ty, actual, value.span, "binding")?;
-                        if actual == Type::Never {
-                            if has_following {
-                                return Err(Diagnostic::new("E107", *span, "unreachable code"));
-                            }
-                            return Ok(Type::Never);
+                        require(ty, &actual, value.span, "binding")?;
+                        scope.insert(
+                            name.clone(),
+                            Binding {
+                                ty: ty.clone(),
+                                mutable: *mutable,
+                            },
+                        );
+                        (actual, *span)
+                    }
+                    Stmt::Assign { name, value, span } => {
+                        let binding = scope.get(name).ok_or_else(|| {
+                            Diagnostic::new("E101", *span, format!("unknown name {name}"))
+                        })?;
+                        if !binding.mutable {
+                            return Err(Diagnostic::new(
+                                "E109",
+                                *span,
+                                format!("cannot assign immutable binding {name}"),
+                            ));
                         }
-                        scope.insert(name.clone(), *ty);
+                        let actual = type_of(value, &scope, signatures, return_type)?;
+                        require(&binding.ty, &actual, value.span, "assignment")?;
+                        (actual, *span)
+                    }
+                    Stmt::For {
+                        name,
+                        iterable,
+                        body,
+                        span,
+                    } => {
+                        let iter_type = type_of(iterable, &scope, signatures, return_type)?;
+                        let Type::Array(element) = iter_type else {
+                            return Err(Diagnostic::new(
+                                "E110",
+                                iterable.span,
+                                format!("for requires an array, got {iter_type}"),
+                            ));
+                        };
+                        let mut loop_scope = scope.clone();
+                        loop_scope.insert(
+                            name.clone(),
+                            Binding {
+                                ty: *element,
+                                mutable: false,
+                            },
+                        );
+                        type_of(body, &loop_scope, signatures, return_type)?;
+                        (Type::Unit, *span)
                     }
                     Stmt::Return { value, span } => {
                         let actual = type_of(value, &scope, signatures, return_type)?;
-                        require(return_type, actual, value.span, "return")?;
-                        if has_following {
-                            return Err(Diagnostic::new("E107", *span, "unreachable code"));
-                        }
-                        return Ok(Type::Never);
+                        require(return_type, &actual, value.span, "return")?;
+                        (Type::Never, *span)
                     }
                     Stmt::Expr(value) => {
-                        if type_of(value, &scope, signatures, return_type)? == Type::Never {
-                            if has_following {
-                                return Err(Diagnostic::new(
-                                    "E107",
-                                    value.span,
-                                    "unreachable code",
-                                ));
-                            }
-                            return Ok(Type::Never);
-                        }
+                        (type_of(value, &scope, signatures, return_type)?, value.span)
                     }
+                };
+                if statement_type == Type::Never {
+                    if has_following {
+                        return Err(Diagnostic::new("E107", span, "unreachable code"));
+                    }
+                    return Ok(Type::Never);
                 }
             }
             if let Some(tail) = tail {

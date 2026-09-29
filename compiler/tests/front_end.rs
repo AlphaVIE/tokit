@@ -92,3 +92,31 @@ fn malformed_short_inputs_do_not_panic() {
         );
     }
 }
+
+#[test]
+fn arrays_loops_and_mutation_execute() {
+    let source = "fn sum(xs:[i32])->i32{var total:i32=0;for x in xs{total=total+x;}total} fn main()->i32{sum([3,4,5])}";
+    assert_eq!(run(source).unwrap(), Value::I32(12));
+    let source = "fn main()->[i32]{let xs:[i32]=[];xs}";
+    assert_eq!(run(source).unwrap(), Value::Array(vec![]));
+}
+
+#[test]
+fn return_inside_loop_exits_function() {
+    let source = "fn main()->i32{for x in [1,2]{if x==2{return x;}else{};}0}";
+    assert_eq!(run(source).unwrap(), Value::I32(2));
+}
+
+#[test]
+fn invalid_arrays_and_mutation_are_rejected() {
+    let cases = [
+        ("fn main()->i32{let xs:[i32]=[1,true];0}", "E102"),
+        ("fn main()->i32{let x:i32=1;x=2;x}", "E109"),
+        ("fn main()->i32{var x:i32=1;x=true;x}", "E102"),
+        ("fn main()->i32{for x in 1{}0}", "E110"),
+        ("fn main()->i32{for x in [1]{}x}", "E101"),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(check(source).unwrap_err().code, expected, "{source}");
+    }
+}

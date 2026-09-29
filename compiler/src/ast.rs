@@ -13,12 +13,14 @@ impl Span {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     I32,
     Bool,
     Unit,
     Never,
+    Array(Box<Type>),
+    EmptyArray,
 }
 
 impl std::fmt::Display for Type {
@@ -28,6 +30,8 @@ impl std::fmt::Display for Type {
             Self::Bool => "bool",
             Self::Unit => "Unit",
             Self::Never => "never",
+            Self::Array(element) => return write!(f, "[{element}]"),
+            Self::EmptyArray => "empty array",
         };
         f.write_str(name)
     }
@@ -57,6 +61,7 @@ pub struct Expr {
 pub enum ExprKind {
     Int(i32),
     Bool(bool),
+    Array(Vec<Expr>),
     Var(String),
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
@@ -70,6 +75,18 @@ pub enum Stmt {
         name: String,
         ty: Type,
         value: Expr,
+        mutable: bool,
+        span: Span,
+    },
+    Assign {
+        name: String,
+        value: Expr,
+        span: Span,
+    },
+    For {
+        name: String,
+        iterable: Expr,
+        body: Expr,
         span: Span,
     },
     Return {
