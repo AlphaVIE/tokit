@@ -1,6 +1,6 @@
 # Sum-positive executable baseline
 
-The [contract](contract.json) specifies five bounded input/output cases. The verifier compiles or runs each language and compares actual stdout with the expected result. On the Windows development machine, Tokit, Rust, Python, TypeScript, and Java passed all five cases. C, C++, and Go were unavailable locally; the CI job requires all eight languages and is the authoritative cross-language validation once it passes.
+The [contract](contract.json) specifies five bounded input/output cases. The verifier compiles or runs each language and compares actual stdout with the expected result. On the Windows development machine, Tokit, Rust, Python, TypeScript, and Java passed all five cases. C, C++, and Go were unavailable locally. The [CI baseline run](https://github.com/AlphaVIE/tokit/actions/runs/36504796041) verified all eight languages against all five cases and reported `skipped: []`.
 
 The source region between `BENCH_START` and `BENCH_END` contains each core function, excluding argument parsing and output wrappers. Measured on 2026-09-29 with `tiktoken==0.14.0`, `tokenizers==0.23.2`, and the pinned Qwen tokenizer documented in [the cross-family report](../../CROSS_FAMILY_RESULTS.md):
 
