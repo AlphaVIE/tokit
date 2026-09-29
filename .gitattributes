@@ -6,3 +6,9 @@
 *.toml text eol=lf
 *.tok text eol=lf
 *.yml text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.go text eol=lf
+*.java text eol=lf
+*.ts text eol=lf
+*.json text eol=lf

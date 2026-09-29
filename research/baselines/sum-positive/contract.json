@@ -1,0 +1,13 @@
+{
+  "name": "sum-positive",
+  "input": "array of signed i32 values",
+  "output": "signed i32 sum of strictly positive elements",
+  "overflow": "excluded from this fixture; checked behavior requires a separate contract",
+  "cases": [
+    {"input": [3, 0, 4], "expected": 7},
+    {"input": [], "expected": 0},
+    {"input": [-2, -1], "expected": 0},
+    {"input": [-2, 5, 7], "expected": 12},
+    {"input": [2147483647, 0], "expected": 2147483647}
+  ]
+}

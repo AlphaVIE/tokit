@@ -17,11 +17,20 @@ QWEN_REVISION = "ea3f2471cf1b1f0db85067f1ef93848e38e88c25"
 QWEN_SHA256 = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
 
 
-def measure(path: Path, encodings: dict[str, Callable[[str], Sized]]) -> dict[str, object]:
+def measure(path: Path, encodings: dict[str, Callable[[str], Sized]], region: str | None = None) -> dict[str, object]:
     data = path.read_bytes()
     source = data.decode("utf-8")
+    if region == "core":
+        lines = source.splitlines(keepends=True)
+        starts = [i for i, line in enumerate(lines) if "BENCH_START" in line]
+        ends = [i for i, line in enumerate(lines) if "BENCH_END" in line]
+        if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
+            raise ValueError(f"{path}: expected one ordered BENCH_START/BENCH_END pair")
+        source = "".join(lines[starts[0] + 1:ends[0]])
+        data = source.encode("utf-8")
     return {
         "file": path.as_posix(),
+        "region": region or "whole",
         "bytes": len(data),
         "chars": len(source),
         "tokens": {name: len(encode(source)) for name, encode in encodings.items()},
@@ -31,6 +40,7 @@ def measure(path: Path, encodings: dict[str, Callable[[str], Sized]]) -> dict[st
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", type=Path, help="A file or directory of *.tok.txt files")
+    parser.add_argument("--region", choices=["core"], help="count only content between BENCH markers")
     parser.add_argument(
         "--encoding", action="append", dest="encodings",
         help="tiktoken encoding name; repeat to compare (default: cl100k_base, o200k_base)",
@@ -69,7 +79,7 @@ def main() -> None:
         "tiktoken_version": importlib.metadata.version("tiktoken"),
         "encodings": list(encodings),
         "artifacts": artifacts,
-        "measurements": [measure(path, encodings) for path in paths],
+        "measurements": [measure(path, encodings, args.region) for path in paths],
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
