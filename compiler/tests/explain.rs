@@ -44,3 +44,10 @@ fn explanation_includes_enum_payload_types() {
     let report = explain::explain(&check(source).unwrap());
     assert!(report.contains("Message: Stop, Number(i32), Text(String)"));
 }
+
+#[test]
+fn explanation_marks_filesystem_grant_requirement() {
+    let source = "fn main()->Result<String,IoError>{read_text(\"input.txt\")}";
+    let report = explain::explain(&check(source).unwrap());
+    assert!(report.contains("filesystem read (requires grant)"));
+}
