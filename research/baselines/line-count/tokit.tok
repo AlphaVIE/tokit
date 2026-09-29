@@ -1,0 +1,8 @@
+// BENCH_START
+fn line_count(path:String)->Result<i32,IoError>{
+    let text:String=read_text(path)?;
+    var count:i32=0;
+    for line in lines(text){count=count+1;}
+    Ok(count)
+}
+// BENCH_END
