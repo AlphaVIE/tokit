@@ -25,7 +25,13 @@ fn native_output_matches_reference_interpreter() {
     }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let directory = temporary_directory("native-test");
-    for name in ["answer", "factorial", "sum_positive", "checked_division"] {
+    for name in [
+        "answer",
+        "factorial",
+        "sum_positive",
+        "checked_division",
+        "record",
+    ] {
         let source =
             std::fs::read_to_string(root.join("examples").join(format!("{name}.tok"))).unwrap();
         let expected = run(&source).unwrap().to_string();
@@ -45,6 +51,19 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        (
+            "record_project",
+            r#"struct Point{x:i32,y:i32} struct Label{point:Point,text:String} fn make(n:i32)->Label{Label(Point(n,n+1),"✓")} fn main()->i32{make(4).point.y}"#,
+        ),
+        (
+            "record_render",
+            r#"struct Pair{left:i32,right:String} fn main()->Pair{Pair(3,"x")}"#,
+        ),
+        ("empty_record", "struct Empty{} fn main()->Empty{Empty()}"),
+        (
+            "recursive_array_record",
+            "struct Node{children:[Node]} fn main()->Node{Node([Node([])])}",
+        ),
         ("array_index", "fn main()->String{[\"a\",\"✓\"][1]}"),
         ("nested_array_index", "fn main()->i32{[[1,2],[3,4]][1][0]}"),
         (

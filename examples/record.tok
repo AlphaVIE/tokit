@@ -1,0 +1,5 @@
+struct Point{x:i32,y:i32}
+struct Label{point:Point,text:String}
+
+fn shift(point:Point,dx:i32)->Point{Point(point.x+dx,point.y)}
+fn main()->Label{Label(shift(Point(2,3),4),"ready")}
