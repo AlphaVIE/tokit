@@ -8,6 +8,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ast::{Expr, ExprKind, Op, PatternKind, Program, Span, Stmt, Type};
+use crate::builtins;
 use crate::diagnostic::Diagnostic;
 
 const PRELUDE: &str = r#"trait __TokRender { fn tok_render(&self) -> String; }
@@ -64,6 +65,50 @@ impl __TokDepthGuard {
 impl Drop for __TokDepthGuard {
     fn drop(&mut self) { __TOK_DEPTH.with(|depth| depth.set(depth.get() - 1)); }
 }
+#[derive(Clone)] enum __TokIoError { Denied, NotFound, InvalidUtf8, Other }
+impl __TokRender for __TokIoError {
+    fn tok_render(&self) -> String {
+        match self {
+            Self::Denied => "IoError::Denied",
+            Self::NotFound => "IoError::NotFound",
+            Self::InvalidUtf8 => "IoError::InvalidUtf8",
+            Self::Other => "IoError::Other",
+        }.to_owned()
+    }
+}
+thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
+fn __tok_configure_read() {
+    let args = std::env::args().collect::<Vec<_>>();
+    if let [_, flag, root] = args.as_slice() {
+        if flag == "--allow-read" {
+            __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+        }
+    }
+}
+fn __tok_read_error(kind: std::io::ErrorKind) -> __TokIoError {
+    if kind == std::io::ErrorKind::NotFound { __TokIoError::NotFound } else { __TokIoError::Other }
+}
+fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
+    let root = __TOK_READ_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
+    let requested = std::path::Path::new(&path);
+    let resolved = match requested.canonicalize() {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            let parent = requested.parent().filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            if parent.canonicalize().is_ok_and(|resolved| resolved.starts_with(&root)) {
+                return Err(__tok_read_error(error.kind()));
+            }
+            return Err(__TokIoError::Denied);
+        }
+    };
+    if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
+    let bytes = std::fs::read(resolved).map_err(|error| __tok_read_error(error.kind()))?;
+    String::from_utf8(bytes).map_err(|_| __TokIoError::InvalidUtf8)
+}
+fn __tok_lines(text: String) -> Vec<String> {
+    text.lines().map(str::to_owned).collect()
+}
 "#;
 
 fn rust_type(ty: &Type) -> String {
@@ -71,6 +116,7 @@ fn rust_type(ty: &Type) -> String {
         Type::I32 => "i32".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
+        Type::Named(name) if name == builtins::IO_ERROR => "__TokIoError".to_owned(),
         Type::Named(name) => user_name(name),
         Type::Applied(name, args) => format!(
             "{}<{}>",
@@ -92,6 +138,14 @@ fn user_name(name: &str) -> String {
         write!(output, "{byte:02x}").expect("writing to String cannot fail");
     }
     output
+}
+
+fn enum_path(name: &str, variant: &str) -> String {
+    if name == builtins::IO_ERROR {
+        format!("__TokIoError::{variant}")
+    } else {
+        format!("{}::{}", user_name(name), user_name(variant))
+    }
 }
 
 fn rust_type_fallback(ty: &Type) -> String {
@@ -128,7 +182,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         ExprKind::Bool(value) => value.to_string(),
         ExprKind::String(value) => format!("{:?}.to_owned()", value),
         ExprKind::Variant(name, variant, payload) => {
-            let prefix = format!("{}::{}", user_name(name), user_name(variant));
+            let prefix = enum_path(name, variant);
             match payload {
                 Some(value) => format!("{prefix}({})", emit_expr(value, source, types)),
                 None => prefix,
@@ -161,14 +215,20 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         ExprKind::Err(inner) => format!("Err({})", emit_expr(inner, source, types)),
         ExprKind::Try(inner) => format!("({}?)", emit_expr(inner, source, types)),
         ExprKind::Var(name) => format!("{}.clone()", user_name(name)),
-        ExprKind::Call(name, args) => format!(
-            "{}({})",
-            user_name(name),
-            args.iter()
-                .map(|x| emit_expr(x, source, types))
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
+        ExprKind::Call(name, args) => {
+            let callee = match name.as_str() {
+                builtins::READ_TEXT => "__tok_read_text".to_owned(),
+                builtins::LINES => "__tok_lines".to_owned(),
+                _ => user_name(name),
+            };
+            format!(
+                "{callee}({})",
+                args.iter()
+                    .map(|x| emit_expr(x, source, types))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
         ExprKind::Binary(left, op, right) => {
             let left_type = types.get(&left.span);
             let left = emit_expr(left, source, types);
@@ -217,7 +277,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                         PatternKind::Err(name) => format!("Err({})", user_name(name)),
                         PatternKind::Bool(value) => value.to_string(),
                         PatternKind::Variant(name, variant, binding) => {
-                            let prefix = format!("{}::{}", user_name(name), user_name(variant));
+                            let prefix = enum_path(name, variant);
                             match binding {
                                 Some(name) => format!("{prefix}({})", user_name(name)),
                                 None => prefix,
@@ -470,7 +530,7 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
     }
     writeln!(
         out,
-        "fn main() {{ println!(\"{{}}\", {}().tok_render()); }}",
+        "fn main() {{ __tok_configure_read(); println!(\"{{}}\", {}().tok_render()); }}",
         user_name("main")
     )
     .expect("writing to String cannot fail");
