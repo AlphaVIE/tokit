@@ -53,6 +53,12 @@ fn __tok_index<T: Clone>(values: Vec<T>, index: i32, line: usize, column: usize)
         std::process::exit(1)
     })
 }
+fn __tok_len<T>(values: Vec<T>, line: usize, column: usize) -> i32 {
+    i32::try_from(values.len()).unwrap_or_else(|_| {
+        eprintln!("E206@{}:{} array length exceeds i32", line, column);
+        std::process::exit(1)
+    })
+}
 thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 struct __TokDepthGuard;
 impl __TokDepthGuard {
@@ -80,6 +86,25 @@ impl __TokRender for __TokIoError {
             Self::Other => "IoError::Other",
         }.to_owned()
     }
+}
+#[derive(Clone)] enum __TokParseError { Invalid, OutOfRange }
+impl __TokRender for __TokParseError {
+    fn tok_render(&self) -> String {
+        match self {
+            Self::Invalid => "ParseError::Invalid",
+            Self::OutOfRange => "ParseError::OutOfRange",
+        }.to_owned()
+    }
+}
+fn __tok_parse_i32(text: String) -> Result<i32, __TokParseError> {
+    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(&text);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(__TokParseError::Invalid);
+    }
+    text.parse::<i32>().map_err(|error| match error.kind() {
+        std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => __TokParseError::OutOfRange,
+        _ => __TokParseError::Invalid,
+    })
 }
 #[derive(Clone)] enum __TokTaskError { Failed }
 impl __TokRender for __TokTaskError {
@@ -157,6 +182,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         Type::Named(name) if name == builtins::IO_ERROR => "__TokIoError".to_owned(),
+        Type::Named(name) if name == builtins::PARSE_ERROR => "__TokParseError".to_owned(),
         Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
         Type::Named(name) => user_name(name),
         Type::Applied(name, args) => format!(
@@ -186,6 +212,8 @@ fn user_name(name: &str) -> String {
 fn enum_path(name: &str, variant: &str) -> String {
     if name == builtins::IO_ERROR {
         format!("__TokIoError::{variant}")
+    } else if name == builtins::PARSE_ERROR {
+        format!("__TokParseError::{variant}")
     } else if name == builtins::TASK_ERROR {
         format!("__TokTaskError::{variant}")
     } else {
@@ -269,9 +297,18 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 builtins::READ_TEXT => "__tok_read_text".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
+                builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
+                builtins::LEN => "__tok_len".to_owned(),
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
+            if name == builtins::LEN {
+                let (line, column) = location(source, expr.span);
+                return format!(
+                    "__tok_len({},{line},{column})",
+                    emit_expr(&args[0], source, types)
+                );
+            }
             format!(
                 "{callee}({})",
                 args.iter()

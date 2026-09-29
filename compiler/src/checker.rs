@@ -30,7 +30,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     let mut types = HashMap::new();
     let mut record_names = HashSet::new();
     let mut arities = HashMap::new();
-    for builtin in [builtins::io_error_decl(), builtins::task_error_decl()] {
+    for builtin in [
+        builtins::io_error_decl(),
+        builtins::task_error_decl(),
+        builtins::parse_error_decl(),
+    ] {
         record_names.insert(builtin.name.clone());
         arities.insert(builtin.name.clone(), 0);
         signatures.insert(
@@ -61,6 +65,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Vec::new(),
             Type::Array(Box::new(Type::String)),
         ),
+        (
+            builtins::PARSE_I32,
+            vec![Type::String],
+            builtins::parse_i32_result(),
+        ),
     ] {
         signatures.insert(
             name.to_owned(),
@@ -74,6 +83,17 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             },
         );
     }
+    signatures.insert(
+        builtins::LEN.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Array(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::I32,
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
     signatures.insert(
         builtins::JOIN.to_owned(),
         Signature {
@@ -101,6 +121,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "read_text"
                 | "lines"
                 | "args"
+                | "len"
+                | "parse_i32"
                 | "join"
         ) || !record_names.insert(record.name.clone())
         {
@@ -125,6 +147,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "read_text"
                 | "lines"
                 | "args"
+                | "len"
+                | "parse_i32"
                 | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
@@ -358,8 +382,10 @@ fn expression_is_spawn_safe(
             name != builtins::READ_TEXT
                 && name != builtins::ARGS
                 && name != builtins::JOIN
-                && (name == builtins::LINES
-                    || program.records.iter().any(|record| record.name == *name)
+                && (matches!(
+                    name.as_str(),
+                    builtins::LINES | builtins::LEN | builtins::PARSE_I32
+                ) || program.records.iter().any(|record| record.name == *name)
                     || function_is_spawn_safe(name, program, visiting))
                 && args
                     .iter()

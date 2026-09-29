@@ -270,6 +270,45 @@ fn eval(
                     runtime.args.iter().cloned().map(Value::String).collect(),
                 )));
             }
+            if name == builtins::LEN {
+                let [Value::Array(items)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid len call"));
+                };
+                let length = i32::try_from(items.len())
+                    .map_err(|_| Diagnostic::new("E206", expr.span, "array length exceeds i32"))?;
+                return Ok(Flow::Value(Value::I32(length)));
+            }
+            if name == builtins::PARSE_I32 {
+                let [Value::String(text)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid parse_i32 call"));
+                };
+                let digits = text
+                    .strip_prefix('+')
+                    .or_else(|| text.strip_prefix('-'))
+                    .unwrap_or(text);
+                if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Ok(Flow::Value(Value::Err(Box::new(Value::Enum(
+                        builtins::PARSE_ERROR.to_owned(),
+                        "Invalid".to_owned(),
+                        None,
+                    )))));
+                }
+                return Ok(Flow::Value(match text.parse::<i32>() {
+                    Ok(number) => Value::Ok(Box::new(Value::I32(number))),
+                    Err(error) => {
+                        let variant = match error.kind() {
+                            std::num::IntErrorKind::PosOverflow
+                            | std::num::IntErrorKind::NegOverflow => "OutOfRange",
+                            _ => "Invalid",
+                        };
+                        Value::Err(Box::new(Value::Enum(
+                            builtins::PARSE_ERROR.to_owned(),
+                            variant.to_owned(),
+                            None,
+                        )))
+                    }
+                }));
+            }
             if name == builtins::JOIN {
                 let [Value::Task(value)] = values.as_slice() else {
                     return Err(Diagnostic::new("E204", expr.span, "invalid join call"));

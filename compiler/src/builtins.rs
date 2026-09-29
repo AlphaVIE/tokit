@@ -3,7 +3,10 @@ use crate::ast::{EnumDecl, EnumVariant, Span, Type};
 pub const READ_TEXT: &str = "read_text";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
+pub const LEN: &str = "len";
+pub const PARSE_I32: &str = "parse_i32";
 pub const IO_ERROR: &str = "IoError";
+pub const PARSE_ERROR: &str = "ParseError";
 pub const TASK_ERROR: &str = "TaskError";
 pub const JOIN: &str = "join";
 pub const IO_ERROR_VARIANTS: [&str; 4] = ["Denied", "NotFound", "InvalidUtf8", "Other"];
@@ -38,4 +41,25 @@ pub fn task_error_decl() -> EnumDecl {
         }],
         span: Span { start: 0, end: 0 },
     }
+}
+
+pub fn parse_error_decl() -> EnumDecl {
+    EnumDecl {
+        name: PARSE_ERROR.to_owned(),
+        variants: ["Invalid", "OutOfRange"]
+            .into_iter()
+            .map(|name| EnumVariant {
+                name: name.to_owned(),
+                payload: None,
+            })
+            .collect(),
+        span: Span { start: 0, end: 0 },
+    }
+}
+
+pub fn parse_i32_result() -> Type {
+    Type::Result(
+        Box::new(Type::I32),
+        Box::new(Type::Named(PARSE_ERROR.to_owned())),
+    )
 }
