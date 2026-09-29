@@ -1,0 +1,7 @@
+// BENCH_START
+fn sum_positive(xs:[i32])->i32{
+  var total:i32=0;
+  for x in xs{if x>0{total=total+x;}else{};}
+  total
+}
+// BENCH_END
