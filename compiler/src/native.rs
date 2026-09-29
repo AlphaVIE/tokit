@@ -71,6 +71,7 @@ fn rust_type(ty: &Type) -> String {
         Type::I32 => "i32".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
+        Type::Named(name) => user_name(name),
         Type::Unit => "()".to_owned(),
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
@@ -126,6 +127,13 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 "__tok_index({},{},{line},{column})",
                 emit_expr(array, source, types),
                 emit_expr(index, source, types)
+            )
+        }
+        ExprKind::Field(value, field) => {
+            format!(
+                "({}).{}.clone()",
+                emit_expr(value, source, types),
+                user_name(field)
             )
         }
         ExprKind::Ok(inner) => format!("Ok({})", emit_expr(inner, source, types)),
@@ -267,6 +275,56 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         ));
     }
     let mut out = String::from(PRELUDE);
+    for record in &program.records {
+        let name = user_name(&record.name);
+        let fields = record
+            .fields
+            .iter()
+            .map(|(field, ty)| format!("{}: {}", user_name(field), rust_type(ty)))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(out, "#[derive(Clone)] struct {name} {{ {fields} }}")
+            .expect("writing to String cannot fail");
+        let params = record
+            .fields
+            .iter()
+            .map(|(field, ty)| format!("{}: {}", user_name(field), rust_type(ty)))
+            .collect::<Vec<_>>()
+            .join(",");
+        let init = record
+            .fields
+            .iter()
+            .map(|(field, _)| user_name(field))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(
+            out,
+            "fn {name}({params}) -> {name} {{ {name} {{ {init} }} }}"
+        )
+        .expect("writing to String cannot fail");
+        let rendered = record
+            .fields
+            .iter()
+            .map(|(field, _)| {
+                format!(
+                    "format!(\"{}:{{}}\", self.{}.tok_render())",
+                    field,
+                    user_name(field)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let render_expression = if record.fields.is_empty() {
+            format!("{:?}.to_owned()", format!("{}()", record.name))
+        } else {
+            format!(
+                "format!(\"{}({{}})\", vec![{rendered}].join(\",\"))",
+                record.name
+            )
+        };
+        writeln!(out, "impl __TokRender for {name} {{ fn tok_render(&self) -> String {{ {render_expression} }} }}")
+            .expect("writing to String cannot fail");
+    }
     for function in &program.functions {
         let params = function
             .params

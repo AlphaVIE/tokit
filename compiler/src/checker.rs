@@ -7,6 +7,7 @@ use crate::diagnostic::Diagnostic;
 struct Signature {
     params: Vec<Type>,
     ret: Type,
+    fields: Option<Vec<(String, Type)>>,
 }
 #[derive(Clone)]
 struct Binding {
@@ -21,10 +22,57 @@ pub fn check(program: &Program) -> Result<(), Diagnostic> {
 pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagnostic> {
     let mut signatures = HashMap::new();
     let mut types = HashMap::new();
+    let mut record_names = HashSet::new();
+    for record in &program.records {
+        if matches!(
+            record.name.as_str(),
+            "i32" | "bool" | "String" | "Unit" | "Result"
+        ) || !record_names.insert(record.name.clone())
+        {
+            return Err(Diagnostic::new(
+                "E106",
+                record.span,
+                format!("duplicate or reserved type {}", record.name),
+            ));
+        }
+    }
+    for record in &program.records {
+        let mut names = HashSet::new();
+        for (name, ty) in &record.fields {
+            if !names.insert(name) {
+                return Err(Diagnostic::new(
+                    "E106",
+                    record.span,
+                    format!("duplicate field {name}"),
+                ));
+            }
+            validate_type(ty, &record_names, record.span)?;
+        }
+        let signature = Signature {
+            params: record.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+            ret: Type::Named(record.name.clone()),
+            fields: Some(record.fields.clone()),
+        };
+        signatures.insert(record.name.clone(), signature);
+    }
+    for record in &program.records {
+        if has_record_cycle(&record.name, program, &mut HashSet::new()) {
+            return Err(Diagnostic::new(
+                "E112",
+                record.span,
+                "recursive record value layout",
+            ));
+        }
+    }
     for function in &program.functions {
+        for (_, ty) in &function.params {
+            validate_type(ty, &record_names, function.span)?;
+        }
+        validate_type(&function.ret, &record_names, function.span)?;
         let signature = Signature {
             params: function.params.iter().map(|(_, ty)| ty.clone()).collect(),
             ret: function.ret.clone(),
+            fields: None,
         };
         if signatures
             .insert(function.name.clone(), signature)
@@ -66,6 +114,50 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         )?;
     }
     Ok(types)
+}
+
+fn validate_type(ty: &Type, names: &HashSet<String>, span: Span) -> Result<(), Diagnostic> {
+    match ty {
+        Type::Named(name) if !names.contains(name) => Err(Diagnostic::new(
+            "E103",
+            span,
+            format!("unknown type {name}"),
+        )),
+        Type::Array(element) => validate_type(element, names, span),
+        Type::Result(ok, err) => {
+            validate_type(ok, names, span)?;
+            validate_type(err, names, span)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn has_record_cycle(name: &str, program: &Program, visiting: &mut HashSet<String>) -> bool {
+    if !visiting.insert(name.to_owned()) {
+        return true;
+    }
+    let record = program
+        .records
+        .iter()
+        .find(|record| record.name == name)
+        .expect("validated record name");
+    let cycle = record
+        .fields
+        .iter()
+        .any(|(_, ty)| type_has_cycle(ty, program, visiting));
+    visiting.remove(name);
+    cycle
+}
+
+fn type_has_cycle(ty: &Type, program: &Program, visiting: &mut HashSet<String>) -> bool {
+    match ty {
+        Type::Named(name) => has_record_cycle(name, program, visiting),
+        Type::Array(_) => false,
+        Type::Result(ok, err) => {
+            type_has_cycle(ok, program, visiting) || type_has_cycle(err, program, visiting)
+        }
+        _ => false,
+    }
 }
 
 fn compatible(expected: &Type, actual: &Type) -> bool {
@@ -175,6 +267,31 @@ fn infer(
                     "indexing requires an array",
                 ))
             }
+        }
+        ExprKind::Field(value, field) => {
+            let actual = type_of(value, env, signatures, return_type, types)?;
+            if actual == Type::Never {
+                return Ok(Type::Never);
+            }
+            let Type::Named(name) = actual else {
+                return Err(Diagnostic::new(
+                    "E113",
+                    value.span,
+                    "field access requires a record",
+                ));
+            };
+            signatures
+                .get(&name)
+                .and_then(|signature| signature.fields.as_ref())
+                .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
+                .map(|(_, ty)| ty.clone())
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        "E113",
+                        expr.span,
+                        format!("unknown field {field} on {name}"),
+                    )
+                })
         }
         ExprKind::Ok(inner) => {
             let inner = type_of(inner, env, signatures, return_type, types)?;
@@ -300,6 +417,13 @@ fn infer(
                             ));
                         }
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
+                        let names: HashSet<String> = signatures
+                            .iter()
+                            .filter_map(|(name, signature)| {
+                                signature.fields.is_some().then_some(name.clone())
+                            })
+                            .collect();
+                        validate_type(ty, &names, *span)?;
                         require(ty, &actual, value.span, "binding")?;
                         scope.insert(
                             name.clone(),

@@ -7,6 +7,7 @@ pub enum Kind {
     Int(String),
     String(String),
     Fn,
+    Struct,
     Let,
     Var,
     For,
@@ -40,6 +41,7 @@ pub enum Kind {
     Gt,
     Ge,
     Question,
+    Dot,
     Eof,
 }
 
@@ -72,6 +74,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
             }
             match &source[start..i] {
                 "fn" => Kind::Fn,
+                "struct" => Kind::Struct,
                 "let" => Kind::Let,
                 "var" => Kind::Var,
                 "for" => Kind::For,
@@ -174,6 +177,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 }
                 b'>' => Kind::Gt,
                 b'?' => Kind::Question,
+                b'.' => Kind::Dot,
                 _ => {
                     return Err(Diagnostic::new(
                         "E001",
