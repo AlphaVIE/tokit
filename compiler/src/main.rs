@@ -1,5 +1,34 @@
 use std::{env, fs, path::Path, process};
 
+use tokit_compiler::diagnostic::Diagnostic;
+use tokit_compiler::sources::SourceMap;
+
+fn display_diagnostic(diagnostic: &Diagnostic, sources: &SourceMap) -> String {
+    if sources.len() == 1 {
+        diagnostic.display(
+            &sources
+                .get(diagnostic.span.source_id)
+                .expect("registered source")
+                .text,
+        )
+    } else {
+        diagnostic.display_with_sources(sources)
+    }
+}
+
+fn json_diagnostic(diagnostic: &Diagnostic, sources: &SourceMap) -> String {
+    if sources.len() == 1 {
+        diagnostic.json(
+            &sources
+                .get(diagnostic.span.source_id)
+                .expect("registered source")
+                .text,
+        )
+    } else {
+        diagnostic.json_with_sources(sources)
+    }
+}
+
 fn run_command(args: &[String]) {
     let mut index = 0;
     let mut json = false;
@@ -39,15 +68,22 @@ fn run_command(args: &[String]) {
             process::exit(2);
         }
     };
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
+    let loaded = match tokit_compiler::modules::load(Path::new(path)) {
+        Ok(loaded) => loaded,
+        Err(error) if json => {
+            println!(
+                "{{\"ok\":false,\"error\":{}}}",
+                json_diagnostic(&error.diagnostic, &error.sources)
+            );
+            process::exit(1);
+        }
         Err(error) => {
-            eprintln!("could not read {path}: {error}");
-            process::exit(2);
+            eprintln!("{}", display_diagnostic(&error.diagnostic, &error.sources));
+            process::exit(1);
         }
     };
-    let result = tokit_compiler::run_with_capabilities(
-        &source,
+    let result = tokit_compiler::interpreter::run_with_capabilities(
+        &loaded.program,
         read_root.map(Path::new),
         write_root.map(Path::new),
         program_args,
@@ -59,11 +95,14 @@ fn run_command(args: &[String]) {
         ),
         Ok(value) => println!("{value}"),
         Err(diagnostic) if json => {
-            println!("{{\"ok\":false,\"error\":{}}}", diagnostic.json(&source));
+            println!(
+                "{{\"ok\":false,\"error\":{}}}",
+                json_diagnostic(&diagnostic, &loaded.sources)
+            );
             process::exit(1);
         }
         Err(diagnostic) => {
-            eprintln!("{}", diagnostic.display(&source));
+            eprintln!("{}", display_diagnostic(&diagnostic, &loaded.sources));
             process::exit(1);
         }
     }
@@ -90,15 +129,16 @@ fn test_command(args: &[String]) {
         eprintln!("usage: tok test [--allow-read <path>] [--allow-write <path>] <file.tok>");
         process::exit(2);
     };
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
+    let loaded = match tokit_compiler::modules::load(Path::new(path)) {
+        Ok(loaded) => loaded,
         Err(error) => {
-            eprintln!("could not read {path}: {error}");
-            process::exit(2);
+            eprintln!("{}", display_diagnostic(&error.diagnostic, &error.sources));
+            process::exit(1);
         }
     };
-    match tokit_compiler::test_runner::run_with_capabilities(
-        &source,
+    match tokit_compiler::test_runner::run_loaded(
+        &loaded.program,
+        &loaded.sources,
         read_root.map(Path::new),
         write_root.map(Path::new),
     ) {
@@ -109,7 +149,7 @@ fn test_command(args: &[String]) {
             }
         }
         Err(diagnostic) => {
-            eprintln!("{}", diagnostic.display(&source));
+            eprintln!("{}", display_diagnostic(&diagnostic, &loaded.sources));
             process::exit(1);
         }
     }
@@ -171,21 +211,18 @@ fn main() {
         && command == "build"
         && flag == "-o"
     {
-        let source = match fs::read_to_string(path) {
-            Ok(source) => source,
+        let loaded = match tokit_compiler::modules::load(Path::new(path)) {
+            Ok(loaded) => loaded,
             Err(error) => {
-                eprintln!("could not read {path}: {error}");
-                process::exit(2);
-            }
-        };
-        let program = match tokit_compiler::check(&source) {
-            Ok(program) => program,
-            Err(diagnostic) => {
-                eprintln!("{}", diagnostic.display(&source));
+                eprintln!("{}", display_diagnostic(&error.diagnostic, &error.sources));
                 process::exit(1);
             }
         };
-        if let Err(error) = tokit_compiler::native::build(&program, &source, output.as_ref()) {
+        if let Err(error) = tokit_compiler::native::build_with_sources(
+            &loaded.program,
+            &loaded.sources,
+            output.as_ref(),
+        ) {
             eprintln!("{error}");
             process::exit(1);
         }
@@ -206,33 +243,35 @@ fn main() {
             process::exit(2);
         }
     };
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
+    let loaded = match tokit_compiler::modules::load(Path::new(path)) {
+        Ok(loaded) => loaded,
+        Err(error) if json => {
+            println!(
+                "{{\"ok\":false,\"error\":{}}}",
+                json_diagnostic(&error.diagnostic, &error.sources)
+            );
+            process::exit(1);
+        }
         Err(error) => {
-            eprintln!("could not read {path}: {error}");
-            process::exit(2);
+            eprintln!("{}", display_diagnostic(&error.diagnostic, &error.sources));
+            process::exit(1);
         }
     };
-    let result = tokit_compiler::check(&source).map(|program| match args[1].as_str() {
+    let output = match args[1].as_str() {
         "check" => "ok".to_owned(),
-        "explain" => tokit_compiler::explain::explain(&program),
-        "stats" => tokit_compiler::stats::measure(&source, &program).json(),
-        "ai-index" => tokit_compiler::ai_index::index(&program),
+        "explain" => tokit_compiler::explain::explain(&loaded.program),
+        "stats" => tokit_compiler::stats::measure_sources(&loaded.sources, &loaded.program).json(),
+        "ai-index" => {
+            tokit_compiler::ai_index::index_with_sources(&loaded.program, &loaded.sources)
+        }
         _ => unreachable!("run is handled before this command match"),
-    });
-    match result {
-        Ok(output) if json => println!(
+    };
+    if json {
+        println!(
             "{{\"ok\":true,\"result\":\"{}\"}}",
             tokit_compiler::diagnostic::escape_json(&output)
-        ),
-        Ok(output) => println!("{output}"),
-        Err(diagnostic) if json => {
-            println!("{{\"ok\":false,\"error\":{}}}", diagnostic.json(&source));
-            process::exit(1);
-        }
-        Err(diagnostic) => {
-            eprintln!("{}", diagnostic.display(&source));
-            process::exit(1);
-        }
+        );
+    } else {
+        println!("{output}");
     }
 }

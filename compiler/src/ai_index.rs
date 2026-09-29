@@ -1,4 +1,4 @@
-//! Compact, deterministic facts from a checked single-file Tokit program.
+//! Compact, deterministic facts from a checked Tokit program.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -6,6 +6,7 @@ use std::fmt::Write;
 use crate::ast::{Program, Span, Type};
 use crate::diagnostic::escape_json;
 use crate::explain::{Facts, visit};
+use crate::sources::SourceMap;
 
 fn string(value: &str) -> String {
     format!("\"{}\"", escape_json(value))
@@ -18,8 +19,12 @@ fn strings<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
     )
 }
 
-fn span(span: Span) -> String {
-    format!("[{},{}]", span.start, span.end)
+fn span(span: Span, multi_source: bool) -> String {
+    if multi_source {
+        format!("[{},{},{}]", span.source_id.0, span.start, span.end)
+    } else {
+        format!("[{},{}]", span.start, span.end)
+    }
 }
 
 fn fields(fields: &[(String, Type)]) -> String {
@@ -35,6 +40,19 @@ fn fields(fields: &[(String, Type)]) -> String {
 
 /// Return a source-order JSON index. Call only after static checking succeeds.
 pub fn index(program: &Program) -> String {
+    index_impl(program, None)
+}
+
+pub fn index_with_sources(program: &Program, sources: &SourceMap) -> String {
+    if sources.len() == 1 {
+        index(program)
+    } else {
+        index_impl(program, Some(sources))
+    }
+}
+
+fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
+    let multi_source = sources.is_some();
     let record_names = program
         .records
         .iter()
@@ -68,7 +86,20 @@ pub fn index(program: &Program) -> String {
         }
     }
 
-    let mut out = String::from("{\"version\":1,\"records\":[");
+    let mut out = if let Some(sources) = sources {
+        let paths = (0..sources.len())
+            .map(|id| {
+                let file = sources
+                    .get(crate::ast::SourceId(id))
+                    .expect("registered source");
+                string(&file.path.to_string_lossy())
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("{{\"version\":2,\"sources\":[{paths}],\"records\":[")
+    } else {
+        String::from("{\"version\":1,\"records\":[")
+    };
     for (index, record) in program.records.iter().enumerate() {
         if index > 0 {
             out.push(',');
@@ -77,7 +108,7 @@ pub fn index(program: &Program) -> String {
             out,
             "{{\"name\":{},\"span\":{},\"params\":{},\"fields\":{}}}",
             string(&record.name),
-            span(record.span),
+            span(record.span, multi_source),
             strings(record.type_params.iter().map(String::as_str)),
             fields(&record.fields)
         )
@@ -108,7 +139,7 @@ pub fn index(program: &Program) -> String {
             out,
             "{{\"name\":{},\"span\":{},\"variants\":[{}]}}",
             string(&decl.name),
-            span(decl.span),
+            span(decl.span, multi_source),
             variants
         )
         .expect("writing to String cannot fail");
@@ -132,7 +163,7 @@ pub fn index(program: &Program) -> String {
             out,
             "{{\"name\":{},\"span\":{},\"type_params\":{},\"params\":{},\"ret\":{},\"calls\":{},\"builtins\":{},\"constructs\":{},\"direct_effects\":{},\"effects\":{}}}",
             string(&function.name),
-            span(function.span),
+            span(function.span, multi_source),
             strings(function.type_params.iter().map(String::as_str)),
             fields(&function.params),
             string(&function.ret.to_string()),

@@ -1,10 +1,10 @@
 # Experimental AI index
 
-`tok ai-index file.tok` checks one source file and prints one compact JSON
+`tok ai-index file.tok` checks the entry file and its imports and prints one compact JSON
 object. If checking fails, it prints the normal diagnostic on stderr and no
 index. This command does not run user code.
 
-The current schema has `version: 1` and source-order `records`, `enums`, and
+The single-file schema has `version: 1` and source-order `records`, `enums`, and
 `functions`. Records include generic parameters and ordered fields. Enums
 include variants and optional payload types. Functions include their byte
 `span`, type parameters, parameter and return types, sorted direct `calls`,
@@ -12,6 +12,10 @@ include variants and optional payload types. Functions include their byte
 The call and effect sets are derived from the checked AST; recursion is handled
 to a fixed point. Byte spans identify the current source snapshot and are not
 stable AST identities.
+
+When imports load multiple files, the index uses `version: 2`. A `sources`
+array contains canonical file paths in loader order, and each declaration span
+becomes `[source_id,start,end]`. Source IDs are indexes into `sources`.
 
 Effect labels currently mean:
 
@@ -24,8 +28,7 @@ Effect labels currently mean:
 | `task.join` | Joins a task with `join`. |
 
 The index summarizes possible calls, including branches that might not run.
-It does not claim that an effect occurs on every execution. It describes one
-file because modules and imports are not implemented yet. It does not contain
+It does not claim that an effect occurs on every execution. It does not contain
 exports, data-flow proofs, ownership analysis, stable node IDs, or a project
 dependency graph. These effect labels do not enumerate arithmetic or bounds
 failures, allocation, or local mutation. Those require later compiler and

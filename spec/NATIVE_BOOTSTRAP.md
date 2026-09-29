@@ -2,6 +2,8 @@
 
 `tok build input.tok -o output` checks a Tokit program, emits Rust source from its AST and checked expression types, then calls `rustc` to produce a native executable. The generated source is created in a unique temporary file and removed after compilation. `TOKIT_RUSTC` can select the `rustc` executable. The selected rustup toolchain is inherited from the environment. This is a **bootstrap backend**, not a language specification or permanent Rust backend decision.
 
+The CLI also accepts relative `.tok` imports and compiles their checked declarations together. Native diagnostics use the correct imported source line and column; runtime errors do not yet include the imported file path.
+
 ```text
 Tokit source -> lexer/parser -> static checker -> typed expression map
              -> Rust emitter -> rustc -> host executable
