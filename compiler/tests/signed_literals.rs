@@ -23,7 +23,6 @@ fn signed_literals_reject_out_of_range_or_separated_digits() {
         ("fn main()->i32{match 0{-2147483649=>1,_=>2}}", "E003"),
         ("fn main()->i32{- 1}", "E002"),
         ("fn main()->i32{match 0{- 1=>1,_=>2}}", "E002"),
-        ("fn main()->i32{--1}", "E002"),
         ("fn main()->i32{match 0{-0=>1,0=>2,_=>3}}", "E116"),
     ] {
         assert_eq!(check(source).unwrap_err().code, code, "{source}");

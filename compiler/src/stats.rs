@@ -73,6 +73,7 @@ fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
             count_expr(index, nodes, ops);
         }
         ExprKind::Field(value, _)
+        | ExprKind::Neg(value)
         | ExprKind::Ok(value)
         | ExprKind::Err(value)
         | ExprKind::Some(value)

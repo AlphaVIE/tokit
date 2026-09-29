@@ -381,6 +381,7 @@ fn expression_is_spawn_safe(
                 && expression_is_spawn_safe(right, program, visiting)
         }
         ExprKind::Field(value, _)
+        | ExprKind::Neg(value)
         | ExprKind::Ok(value)
         | ExprKind::Err(value)
         | ExprKind::Some(value)
@@ -745,6 +746,14 @@ fn infer(
 ) -> Result<Type, Diagnostic> {
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
+        ExprKind::Neg(value) => {
+            let actual = type_of(value, env, signatures, return_type, types)?;
+            if actual == Type::I32 || actual == Type::Never {
+                Ok(actual)
+            } else {
+                Err(Diagnostic::new("E104", expr.span, "negation requires i32"))
+            }
+        }
         ExprKind::Bool(_) => Ok(Type::Bool),
         ExprKind::String(_) => Ok(Type::String),
         ExprKind::Variant(name, variant, payload) => {

@@ -113,6 +113,7 @@ pub enum ExprKind {
     None,
     Try(Box<Expr>),
     Var(String),
+    Neg(Box<Expr>),
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
     Spawn(Box<Expr>),
