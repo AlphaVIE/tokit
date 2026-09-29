@@ -52,3 +52,5 @@ jobs:
         run: python3 scripts/verify_generic_pair.py --require-all
       - name: Verify all line-count baselines
         run: python3 scripts/verify_line_count.py --require-all
+      - name: Verify all task-square baselines
+        run: python3 scripts/verify_task_square.py --require-all
