@@ -71,6 +71,24 @@ impl Parser {
             Err(Diagnostic::new("E002", token.span, "expected identifier"))
         }
     }
+    fn negative_literal(&mut self, minus: Span) -> Result<(i32, Span), Diagnostic> {
+        let number = self.expect(Kind::Int(String::new()))?;
+        let span = minus.join(number.span);
+        if minus.end != number.span.start {
+            return Err(Diagnostic::new(
+                "E002",
+                span,
+                "negative literal requires adjacent digits",
+            ));
+        }
+        let Kind::Int(digits) = number.kind else {
+            unreachable!()
+        };
+        let value = format!("-{digits}")
+            .parse::<i32>()
+            .map_err(|_| Diagnostic::new("E003", span, "i32 literal out of range"))?;
+        Ok((value, span))
+    }
     fn ty(&mut self) -> Result<Type, Diagnostic> {
         if self.at(&Kind::LBracket) {
             self.bump();
@@ -446,6 +464,13 @@ impl Parser {
     fn atom(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
         match token.kind {
+            Kind::Minus => {
+                let (number, span) = self.negative_literal(token.span)?;
+                Ok(Expr {
+                    kind: ExprKind::Int(number),
+                    span,
+                })
+            }
             Kind::Int(value) => {
                 let number = value
                     .parse::<i32>()
@@ -605,6 +630,10 @@ impl Parser {
     fn pattern(&mut self) -> Result<Pattern, Diagnostic> {
         let token = self.bump();
         let (kind, span) = match token.kind {
+            Kind::Minus => {
+                let (value, span) = self.negative_literal(token.span)?;
+                (PatternKind::Int(value), span)
+            }
             Kind::Int(value) => (
                 PatternKind::Int(value.parse::<i32>().map_err(|_| {
                     Diagnostic::new("E003", token.span, "integer literal outside i32 range")

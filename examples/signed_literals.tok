@@ -1,0 +1,2 @@
+fn classify(n:i32)->String{match n{-2147483648=>"min",-1=>"negative",_=>"other"}}
+fn main()->String{classify(-1)}

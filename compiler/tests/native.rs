@@ -34,6 +34,7 @@ fn native_output_matches_reference_interpreter() {
         "generic_pair",
         "match_result",
         "integer_match",
+        "signed_literals",
         "payload_enum",
         "record",
         "option_lookup",
