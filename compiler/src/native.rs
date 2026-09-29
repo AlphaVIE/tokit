@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::ast::{Expr, ExprKind, Op, PatternKind, Program, Span, Stmt, Type};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
+use crate::sources::SourceMap;
 
 const PRELUDE: &str = r#"trait __TokRender { fn tok_render(&self) -> String; }
 impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
@@ -280,21 +281,25 @@ fn rust_type_fallback(ty: &Type) -> String {
     }
 }
 
-fn location(source: &str, span: Span) -> (usize, usize) {
-    let before = source.get(..span.start).unwrap_or(source);
+fn location(source: &SourceMap, span: Span) -> (usize, usize) {
+    let text = &source
+        .get(span.source_id)
+        .expect("checked span source must be registered")
+        .text;
+    let before = text.get(..span.start).unwrap_or(text);
     let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
     let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
     (line, column)
 }
 
-fn emit_array_borrow(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
+fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Var(name) => format!("&{}", user_name(name)),
         _ => format!("&({})", emit_expr(expr, source, types)),
     }
 }
 
-fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
+fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::Neg(value) => {
@@ -479,7 +484,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
     }
 }
 
-fn emit_stmt(stmt: &Stmt, source: &str, types: &HashMap<Span, Type>) -> String {
+fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
     match stmt {
         Stmt::Let {
             name,
@@ -558,6 +563,10 @@ fn emit_stmt(stmt: &Stmt, source: &str, types: &HashMap<Span, Type>) -> String {
 }
 
 pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
+    emit_with_sources(program, &SourceMap::single(source))
+}
+
+pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String, Diagnostic> {
     let types = crate::checker::check_with_types(program)?;
     let main = program
         .functions
@@ -723,7 +732,21 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
 
 pub fn build(program: &Program, source: &str, output: &Path) -> Result<(), String> {
     let generated = emit(program, source).map_err(|diagnostic| diagnostic.display(source))?;
-    let generated_path = temporary_source(&generated)?;
+    compile_generated(&generated, output)
+}
+
+pub fn build_with_sources(
+    program: &Program,
+    sources: &SourceMap,
+    output: &Path,
+) -> Result<(), String> {
+    let generated = emit_with_sources(program, sources)
+        .map_err(|diagnostic| diagnostic.display_with_sources(sources))?;
+    compile_generated(&generated, output)
+}
+
+fn compile_generated(generated: &str, output: &Path) -> Result<(), String> {
+    let generated_path = temporary_source(generated)?;
     let rustc = std::env::var_os("TOKIT_RUSTC").unwrap_or_else(|| "rustc".into());
     let result = Command::new(rustc)
         .arg("--crate-name")

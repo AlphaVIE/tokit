@@ -1,4 +1,5 @@
 use crate::ast::Span;
+use crate::sources::SourceMap;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -21,6 +22,13 @@ impl Diagnostic {
         format!("{}@{}:{} {}", self.code, line, column, self.message)
     }
 
+    pub fn display_with_sources(&self, sources: &SourceMap) -> String {
+        let file = sources
+            .get(self.span.source_id)
+            .expect("diagnostic source ID must be registered");
+        format!("{}:{}", file.path.display(), self.display(&file.text))
+    }
+
     fn location(&self, source: &str) -> (usize, usize) {
         let before = &source[..self.span.start.min(source.len())];
         let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
@@ -33,6 +41,23 @@ impl Diagnostic {
         format!(
             "{{\"code\":\"{}\",\"span\":{{\"start\":{},\"end\":{}}},\"line\":{},\"column\":{},\"message\":\"{}\"}}",
             self.code,
+            self.span.start,
+            self.span.end,
+            line,
+            column,
+            escape_json(&self.message)
+        )
+    }
+
+    pub fn json_with_sources(&self, sources: &SourceMap) -> String {
+        let file = sources
+            .get(self.span.source_id)
+            .expect("diagnostic source ID must be registered");
+        let (line, column) = self.location(&file.text);
+        format!(
+            "{{\"code\":\"{}\",\"source\":\"{}\",\"span\":{{\"start\":{},\"end\":{}}},\"line\":{},\"column\":{},\"message\":\"{}\"}}",
+            self.code,
+            escape_json(&file.path.to_string_lossy()),
             self.span.start,
             self.span.end,
             line,
