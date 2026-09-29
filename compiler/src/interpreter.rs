@@ -8,6 +8,7 @@ use crate::diagnostic::Diagnostic;
 pub enum Value {
     I32(i32),
     Bool(bool),
+    String(String),
     Array(Vec<Value>),
     Ok(Box<Value>),
     Err(Box<Value>),
@@ -19,6 +20,7 @@ impl std::fmt::Display for Value {
         match self {
             Self::I32(n) => write!(f, "{n}"),
             Self::Bool(value) => write!(f, "{value}"),
+            Self::String(value) => write!(f, "{value:?}"),
             Self::Array(values) => {
                 f.write_str("[")?;
                 for (index, value) in values.iter().enumerate() {
@@ -99,6 +101,7 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
+        ExprKind::String(value) => Value::String(value.clone()),
         ExprKind::Array(items) => {
             let mut values = Vec::new();
             for item in items {
@@ -215,6 +218,9 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
 }
 
 fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagnostic> {
+    if let (Value::String(a), Op::Add, Value::String(b)) = (&left, op, &right) {
+        return Ok(Value::String(format!("{a}{b}")));
+    }
     if matches!(op, Op::Eq | Op::Ne) {
         return Ok(Value::Bool(if op == Op::Eq {
             left == right

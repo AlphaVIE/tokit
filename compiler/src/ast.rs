@@ -17,6 +17,7 @@ impl Span {
 pub enum Type {
     I32,
     Bool,
+    String,
     Unit,
     Never,
     Array(Box<Type>),
@@ -29,6 +30,7 @@ impl std::fmt::Display for Type {
         let name = match self {
             Self::I32 => "i32",
             Self::Bool => "bool",
+            Self::String => "String",
             Self::Unit => "Unit",
             Self::Never => "never",
             Self::Array(element) => return write!(f, "[{element}]"),
@@ -63,6 +65,7 @@ pub struct Expr {
 pub enum ExprKind {
     Int(i32),
     Bool(bool),
+    String(String),
     Array(Vec<Expr>),
     Ok(Box<Expr>),
     Err(Box<Expr>),

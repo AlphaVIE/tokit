@@ -5,6 +5,7 @@ use crate::diagnostic::Diagnostic;
 pub enum Kind {
     Ident(String),
     Int(String),
+    String(String),
     Fn,
     Let,
     Var,
@@ -84,6 +85,49 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 "Err" => Kind::Err,
                 name => Kind::Ident(name.to_owned()),
             }
+        } else if bytes[i] == b'"' {
+            i += 1;
+            let mut value = String::new();
+            loop {
+                if i >= bytes.len() || bytes[i] == b'\n' || bytes[i] == b'\r' {
+                    return Err(Diagnostic::new(
+                        "E004",
+                        Span { start, end: i },
+                        "unclosed string literal",
+                    ));
+                }
+                if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                if bytes[i] == b'\\' {
+                    i += 1;
+                    let escaped = match bytes.get(i) {
+                        Some(b'n') => '\n',
+                        Some(b't') => '\t',
+                        Some(b'r') => '\r',
+                        Some(b'"') => '"',
+                        Some(b'\\') => '\\',
+                        _ => {
+                            return Err(Diagnostic::new(
+                                "E004",
+                                Span {
+                                    start,
+                                    end: i.saturating_add(1).min(bytes.len()),
+                                },
+                                "invalid string escape",
+                            ));
+                        }
+                    };
+                    value.push(escaped);
+                    i += 1;
+                } else {
+                    let character = source[i..].chars().next().expect("valid UTF-8 character");
+                    value.push(character);
+                    i += character.len_utf8();
+                }
+            }
+            Kind::String(value)
         } else if bytes[i].is_ascii_digit() {
             i += 1;
             while i < bytes.len() && bytes[i].is_ascii_digit() {

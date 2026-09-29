@@ -8,7 +8,7 @@ This document describes exactly what the current Rust prototype accepts. It is a
 program  = function+ ;
 function = "fn" identifier "(" parameters? ")" "->" type block ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
-type     = "i32" | "bool" | "Unit" | "[" type "]"
+type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
          | "Result" "<" type "," type ">" ;
 block    = "{" statement* expression? "}" ;
 statement = ("let" | "var") identifier ":" type "=" expression ";"
@@ -16,7 +16,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
           | "for" identifier "in" expression block
           | "return" expression ";"
           | expression ";" ;
-expression = integer | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | string | "true" | "false" | identifier | "[" arguments? "]"
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
            | identifier "(" arguments? ")"
            | "(" expression ")" | block
@@ -31,9 +31,11 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 `i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`. This subset has no unary minus, so negative literals cannot currently be written directly; subtraction can produce negative values. These are prototype limitations, not final numeric semantics.
 
+Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
+
 ## Diagnostics and commands
 
-`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` literal range, `E101` unknown name, `E102` type mismatch, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid loop iterable, `E111` invalid error propagation, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, and `E204` interpreter invariant failure. Error output contains a source line and column. No binary, native compilation, GC, standard library, imports, structs, or generics exist in this prototype.
+`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid loop iterable, `E111` invalid error propagation, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, and `E204` interpreter invariant failure. Error output contains a source line and column. GC, standard library, imports, structs, and user-defined generics do not yet exist in this prototype.
 
 ## Reproduce
 

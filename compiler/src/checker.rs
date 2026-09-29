@@ -138,6 +138,7 @@ fn infer(
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::Bool(_) => Ok(Type::Bool),
+        ExprKind::String(_) => Ok(Type::String),
         ExprKind::Array(values) => {
             let Some(first) = values.first() else {
                 return Ok(Type::EmptyArray);
@@ -214,7 +215,10 @@ fn infer(
                         Ok(Type::Bool)
                     }
                 }
-                Op::Eq | Op::Ne if lhs == rhs && matches!(lhs, Type::I32 | Type::Bool) => {
+                Op::Add if lhs == Type::String && rhs == Type::String => Ok(Type::String),
+                Op::Eq | Op::Ne
+                    if lhs == rhs && matches!(lhs, Type::I32 | Type::Bool | Type::String) =>
+                {
                     Ok(Type::Bool)
                 }
                 _ => Err(Diagnostic::new(
