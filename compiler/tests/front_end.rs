@@ -87,6 +87,28 @@ fn invalid_records_are_rejected_before_execution() {
 }
 
 #[test]
+fn enum_variants_are_typed_error_values() {
+    let source = "enum DivError{DivZero,Overflow} fn div(a:i32,b:i32)->Result<i32,DivError>{if b==0{Err(DivError::DivZero)}else{Ok(a/b)}} fn main()->Result<i32,DivError>{div(7,0)}";
+    assert_eq!(run(source).unwrap().to_string(), "Err(DivError::DivZero)");
+    let source = "enum Flag{On,Off} fn main()->[Flag]{[Flag::On,Flag::Off]}";
+    assert_eq!(run(source).unwrap().to_string(), "[Flag::On,Flag::Off]");
+}
+
+#[test]
+fn invalid_enum_variants_are_rejected() {
+    for (source, code) in [
+        ("enum E{A,A} fn main()->i32{0}", "E106"),
+        ("enum E{A} fn main()->E{E::B}", "E114"),
+        ("fn main()->i32{Missing::A;0}", "E103"),
+        ("struct P{x:i32} fn main()->P{P::X}", "E114"),
+        ("enum E{A} fn main()->E{E()}", "E114"),
+        ("enum E{A} struct E{} fn main()->i32{0}", "E106"),
+    ] {
+        assert_eq!(check(source).unwrap_err().code, code, "{source}");
+    }
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";
