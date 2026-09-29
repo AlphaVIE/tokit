@@ -31,6 +31,7 @@ fn native_output_matches_reference_interpreter() {
         "sum_positive",
         "checked_division",
         "checked_division_enum",
+        "generic_pair",
         "record",
     ] {
         let source =
@@ -52,6 +53,26 @@ fn native_output_matches_reference_interpreter() {
         );
     }
     for (name, source) in [
+        (
+            "generic_pair_i32",
+            "struct Pair<T>{left:T,right:T} fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)} fn main()->Pair<i32>{flip(Pair(1,2))}",
+        ),
+        (
+            "generic_pair_string",
+            "struct Pair<T>{left:T,right:T} fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)} fn main()->Pair<String>{flip(Pair(\"a\",\"b\"))}",
+        ),
+        (
+            "generic_recursive_array",
+            "struct Node{child:Wrap<Node>} struct Wrap<T>{xs:[T]} fn empty<T>(xs:[T])->Wrap<T>{Wrap(xs)} fn main()->Node{let xs:[Node]=[];Node(empty(xs))}",
+        ),
+        (
+            "generic_result_join",
+            "struct Pair<T>{left:T,right:T} fn main()->Pair<Result<i32,i32>>{Pair(Ok(1),Err(2))}",
+        ),
+        (
+            "generic_two_params",
+            "struct Pair<A,B>{left:A,right:B} fn flip<A,B>(p:Pair<A,B>)->Pair<B,A>{Pair(p.right,p.left)} fn main()->Pair<String,i32>{flip(Pair(5,\"x\"))}",
+        ),
         (
             "enum_error",
             "enum DivError{DivZero,Overflow} fn div(a:i32,b:i32)->Result<i32,DivError>{if b==0{Err(DivError::DivZero)}else{Ok(a/b)}} fn main()->Result<i32,DivError>{div(7,0)}",

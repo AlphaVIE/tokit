@@ -5,11 +5,16 @@ use crate::lexer::{Kind, Token};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    type_params: Vec<String>,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            type_params: Vec::new(),
+        }
     }
 
     fn current(&self) -> &Token {
@@ -70,8 +75,39 @@ impl Parser {
                 self.expect(Kind::Gt)?;
                 Ok(Type::Result(Box::new(ok), Box::new(err)))
             }
+            _ if self.type_params.contains(&name) => Ok(Type::Param(name)),
+            _ if self.at(&Kind::Lt) => {
+                self.bump();
+                let mut args = Vec::new();
+                loop {
+                    args.push(self.ty()?);
+                    if !self.at(&Kind::Comma) {
+                        break;
+                    }
+                    self.bump();
+                }
+                self.expect(Kind::Gt)?;
+                Ok(Type::Applied(name, args))
+            }
             _ => Ok(Type::Named(name)),
         }
+    }
+
+    fn generic_params(&mut self) -> Result<Vec<String>, Diagnostic> {
+        if !self.at(&Kind::Lt) {
+            return Ok(Vec::new());
+        }
+        self.bump();
+        let mut params = Vec::new();
+        loop {
+            params.push(self.ident()?.0);
+            if !self.at(&Kind::Comma) {
+                break;
+            }
+            self.bump();
+        }
+        self.expect(Kind::Gt)?;
+        Ok(params)
     }
 
     pub fn program(&mut self) -> Result<Program, Diagnostic> {
@@ -126,6 +162,8 @@ impl Parser {
     fn record(&mut self) -> Result<Record, Diagnostic> {
         let start = self.expect(Kind::Struct)?.span;
         let (name, _) = self.ident()?;
+        let type_params = self.generic_params()?;
+        self.type_params = type_params.clone();
         self.expect(Kind::LBrace)?;
         let mut fields = Vec::new();
         if !self.at(&Kind::RBrace) {
@@ -140,8 +178,10 @@ impl Parser {
             }
         }
         let end = self.expect(Kind::RBrace)?.span;
+        self.type_params.clear();
         Ok(Record {
             name,
+            type_params,
             fields,
             span: start.join(end),
         })
@@ -150,6 +190,8 @@ impl Parser {
     fn function(&mut self) -> Result<Function, Diagnostic> {
         let start = self.expect(Kind::Fn)?.span;
         let (name, _) = self.ident()?;
+        let type_params = self.generic_params()?;
+        self.type_params = type_params.clone();
         self.expect(Kind::LParen)?;
         let mut params = Vec::new();
         if !self.at(&Kind::RParen) {
@@ -168,9 +210,11 @@ impl Parser {
         self.expect(Kind::Arrow)?;
         let ret = self.ty()?;
         let body = self.block()?;
+        self.type_params.clear();
         let span = start.join(body.span);
         Ok(Function {
             name,
+            type_params,
             params,
             ret,
             body,

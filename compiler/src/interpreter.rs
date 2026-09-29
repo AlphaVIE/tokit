@@ -76,11 +76,11 @@ pub fn run(program: &Program) -> Result<Value, Diagnostic> {
         .ok_or_else(|| {
             Diagnostic::new("E203", Span { start: 0, end: 0 }, "missing main function")
         })?;
-    if !main.params.is_empty() {
+    if !main.params.is_empty() || !main.type_params.is_empty() {
         return Err(Diagnostic::new(
             "E203",
             main.span,
-            "main must have no parameters",
+            "main must have no parameters or type parameters",
         ));
     }
     invoke(program, main, Vec::new(), 0)
