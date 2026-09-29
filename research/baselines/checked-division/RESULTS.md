@@ -2,7 +2,7 @@
 
 The [contract](contract.json) defines seven input/output cases for signed `i32` division with truncation toward zero and a typed zero-divisor error. `i32::MIN / -1` is excluded because its overflow policy is separate. The source region between `BENCH_START` and `BENCH_END` contains the core type and function definitions; command-line and output adapters are excluded. The eight implementations use each language's available tagged-result representation, so their static guarantees differ.
 
-On the Windows development machine, Tokit, Rust, Java, Python, and TypeScript passed all seven cases. C, C++, and Go were unavailable locally; CI runs all eight with `--require-all`. The current CI result should be linked here after it completes.
+On the Windows development machine, Tokit, Rust, Java, Python, and TypeScript passed all seven cases. C, C++, and Go were unavailable locally. [CI verified all eight languages](https://github.com/AlphaVIE/tokit/actions/runs/36561867650) with `--require-all`.
 
 Measured on 2026-09-29 with `tiktoken==0.14.0`, `tokenizers==0.23.2`, and the pinned Qwen tokenizer described in [the cross-family report](../../CROSS_FAMILY_RESULTS.md):
 
