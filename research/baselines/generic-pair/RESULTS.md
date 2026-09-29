@@ -2,7 +2,7 @@
 
 The [contract](contract.json) constructs a `Pair<T>` and returns a fresh pair with its two fields reversed. Four cases cover `i32`, `bool`, and `String`. The C implementation uses a macro instantiated for those three types; it does not provide open-ended parametric polymorphism. Other languages use their native generic facilities. The marked core region includes definitions but excludes input/output adapters.
 
-On the Windows development machine, Tokit, Rust, Java, Python, and TypeScript passed all four cases. C, C++, and Go were unavailable locally. CI verifies all eight languages with `--require-all`. The string case is ASCII because Windows Java process arguments did not preserve a non-ASCII trial value; this contract does not establish Unicode interoperability. Tokit's separate UTF-8 tests cover direct Unicode literals and native output.
+On the Windows development machine, Tokit, Rust, Java, Python, and TypeScript passed all four cases. C, C++, and Go were unavailable locally. [CI verified all eight languages](https://github.com/AlphaVIE/tokit/actions/runs/36567396083) with `--require-all`. The string case is ASCII because Windows Java process arguments did not preserve a non-ASCII trial value; this contract does not establish Unicode interoperability. Tokit's separate UTF-8 tests cover direct Unicode literals and native output.
 
 Measured on 2026-09-29 with `tiktoken==0.14.0`, `tokenizers==0.23.2`, and the pinned Qwen tokenizer described in [the cross-family report](../../CROSS_FAMILY_RESULTS.md):
 
