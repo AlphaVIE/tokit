@@ -86,7 +86,16 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     for record in &program.records {
         if matches!(
             record.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result" | "Task" | "read_text" | "lines" | "join"
+            "i32"
+                | "bool"
+                | "String"
+                | "Unit"
+                | "Result"
+                | "Option"
+                | "Task"
+                | "read_text"
+                | "lines"
+                | "join"
         ) || !record_names.insert(record.name.clone())
         {
             return Err(Diagnostic::new(
@@ -100,7 +109,16 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     for enum_decl in &program.enums {
         if matches!(
             enum_decl.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result" | "Task" | "read_text" | "lines" | "join"
+            "i32"
+                | "bool"
+                | "String"
+                | "Unit"
+                | "Result"
+                | "Option"
+                | "Task"
+                | "read_text"
+                | "lines"
+                | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
             return Err(Diagnostic::new(
@@ -271,7 +289,7 @@ fn validate_params(
             || names.contains(param)
             || matches!(
                 param.as_str(),
-                "i32" | "bool" | "String" | "Unit" | "Result" | "Task"
+                "i32" | "bool" | "String" | "Unit" | "Result" | "Option" | "Task"
             )
         {
             return Err(Diagnostic::new(
@@ -309,7 +327,11 @@ fn expression_is_spawn_safe(
     visiting: &mut HashSet<String>,
 ) -> bool {
     match &expr.kind {
-        ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => true,
+        ExprKind::Int(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Var(_)
+        | ExprKind::None => true,
         ExprKind::Variant(_, _, payload) => payload
             .as_ref()
             .is_none_or(|value| expression_is_spawn_safe(value, program, visiting)),
@@ -323,6 +345,7 @@ fn expression_is_spawn_safe(
         ExprKind::Field(value, _)
         | ExprKind::Ok(value)
         | ExprKind::Err(value)
+        | ExprKind::Some(value)
         | ExprKind::Try(value) => expression_is_spawn_safe(value, program, visiting),
         ExprKind::Call(name, args) => {
             name != builtins::READ_TEXT
@@ -366,6 +389,7 @@ fn mentions_param(ty: &Type, param: &str) -> bool {
         Type::Param(name) => name == param,
         Type::Applied(_, args) => args.iter().any(|arg| mentions_param(arg, param)),
         Type::Array(element) => mentions_param(element, param),
+        Type::Option(element) => mentions_param(element, param),
         Type::Task(result) => mentions_param(result, param),
         Type::Result(ok, err) => mentions_param(ok, param) || mentions_param(err, param),
         _ => false,
@@ -397,6 +421,7 @@ fn validate_type(
             Ok(())
         }
         Type::Array(element) => validate_type(element, arities, span),
+        Type::Option(element) => validate_type(element, arities, span),
         Type::Task(result) => validate_type(result, arities, span),
         Type::Result(ok, err) => {
             validate_type(ok, arities, span)?;
@@ -465,6 +490,7 @@ fn type_has_cycle(ty: &Type, program: &Program, visiting: &mut HashSet<String>) 
         Type::Named(name) => record_has_cycle(name, &[], program, visiting),
         Type::Applied(name, args) => record_has_cycle(name, args, program, visiting),
         Type::Array(_) => false,
+        Type::Option(element) => type_has_cycle(element, program, visiting),
         Type::Task(_) => false,
         Type::Result(ok, err) => {
             type_has_cycle(ok, program, visiting) || type_has_cycle(err, program, visiting)
@@ -480,6 +506,7 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
     match (expected, actual) {
         (Type::Array(_), Type::EmptyArray) => true,
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::Option(expected), Type::Option(actual)) => compatible(expected, actual),
         (Type::Task(expected), Type::Task(actual)) => compatible(expected, actual),
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
@@ -507,6 +534,9 @@ fn join(left: &Type, right: &Type) -> Option<Type> {
         (Type::Array(_), Type::EmptyArray) => Some(left.clone()),
         (Type::EmptyArray, Type::Array(_)) => Some(right.clone()),
         (Type::Array(left), Type::Array(right)) => Some(Type::Array(Box::new(join(left, right)?))),
+        (Type::Option(left), Type::Option(right)) => {
+            Some(Type::Option(Box::new(join(left, right)?)))
+        }
         (Type::Task(left), Type::Task(right)) => Some(Type::Task(Box::new(join(left, right)?))),
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
@@ -544,6 +574,7 @@ fn substitute(ty: &Type, inferred: &HashMap<String, Type>) -> Type {
     match ty {
         Type::Param(name) => inferred.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Type::Array(element) => Type::Array(Box::new(substitute(element, inferred))),
+        Type::Option(element) => Type::Option(Box::new(substitute(element, inferred))),
         Type::Task(result) => Type::Task(Box::new(substitute(result, inferred))),
         Type::Result(ok, err) => Type::Result(
             Box::new(substitute(ok, inferred)),
@@ -584,6 +615,7 @@ fn infer_params(
             }
         }
         (Type::Array(a), Type::Array(b)) => infer_params(a, b, inferred, span),
+        (Type::Option(a), Type::Option(b)) => infer_params(a, b, inferred, span),
         (Type::Task(a), Type::Task(b)) => infer_params(a, b, inferred, span),
         (Type::Result(a_ok, a_err), Type::Result(b_ok, b_err)) => {
             infer_params(a_ok, b_ok, inferred, span)?;
@@ -620,6 +652,10 @@ fn match_pattern(
         (PatternKind::Err(name), Type::Result(_, err)) => {
             Ok(("Err".to_owned(), Some((name.clone(), *err.clone()))))
         }
+        (PatternKind::Some(name), Type::Option(element)) => {
+            Ok(("Some".to_owned(), Some((name.clone(), *element.clone()))))
+        }
+        (PatternKind::None, Type::Option(_)) => Ok(("None".to_owned(), None)),
         (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
         (PatternKind::Variant(name, variant, binding), Type::Named(actual)) if name == actual => {
             let declared = signatures
@@ -784,6 +820,14 @@ fn infer(
             }
             Ok(Type::Result(Box::new(Type::Never), Box::new(inner)))
         }
+        ExprKind::Some(inner) => {
+            let inner = type_of(inner, env, signatures, return_type, types)?;
+            if inner == Type::Never {
+                return Ok(Type::Never);
+            }
+            Ok(Type::Option(Box::new(inner)))
+        }
+        ExprKind::None => Ok(Type::Option(Box::new(Type::Never))),
         ExprKind::Try(inner) => {
             let actual = type_of(inner, env, signatures, return_type, types)?;
             if actual == Type::Never {
@@ -929,8 +973,16 @@ fn infer(
             if matched == Type::Never {
                 return Ok(Type::Never);
             }
+            if matched == Type::Option(Box::new(Type::Never)) {
+                return Err(Diagnostic::new(
+                    "E115",
+                    value.span,
+                    "cannot infer Option element type for match",
+                ));
+            }
             let expected: HashSet<String> = match &matched {
                 Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
+                Type::Option(_) => ["Some".to_owned(), "None".to_owned()].into_iter().collect(),
                 Type::Bool => ["true".to_owned(), "false".to_owned()]
                     .into_iter()
                     .collect(),

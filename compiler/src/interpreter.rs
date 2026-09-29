@@ -17,6 +17,8 @@ pub enum Value {
     Enum(String, String, Option<Box<Value>>),
     Ok(Box<Value>),
     Err(Box<Value>),
+    Some(Box<Value>),
+    None,
     Task(Box<Value>),
     Unit,
 }
@@ -56,6 +58,8 @@ impl std::fmt::Display for Value {
             }
             Self::Ok(value) => write!(f, "Ok({value})"),
             Self::Err(value) => write!(f, "Err({value})"),
+            Self::Some(value) => write!(f, "Some({value})"),
+            Self::None => f.write_str("None"),
             Self::Task(_) => f.write_str("<task>"),
             Self::Unit => f.write_str("()"),
         }
@@ -187,6 +191,10 @@ fn eval(
         ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(
             inner, env, program, depth, policy
         )))),
+        ExprKind::Some(inner) => Value::Some(Box::new(take_value!(eval(
+            inner, env, program, depth, policy
+        )))),
+        ExprKind::None => Value::None,
         ExprKind::Try(inner) => {
             let value = take_value!(eval(inner, env, program, depth, policy));
             match value {
@@ -294,6 +302,10 @@ fn eval(
                     (PatternKind::Err(name), Value::Err(value)) => {
                         Some(Some((name.clone(), *value.clone())))
                     }
+                    (PatternKind::Some(name), Value::Some(value)) => {
+                        Some(Some((name.clone(), *value.clone())))
+                    }
+                    (PatternKind::None, Value::None) => Some(None),
                     (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => {
                         Some(None)
                     }
