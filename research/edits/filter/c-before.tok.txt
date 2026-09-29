@@ -1,0 +1,6 @@
+@1|F|count_positive||xs:[i32]|i32|2,3,6
+@2|V|total|i32|0
+@3|L|x|xs|4
+@4|I|>(x,0)|5
+@5|A|total|add(total,1)
+@6|R|total

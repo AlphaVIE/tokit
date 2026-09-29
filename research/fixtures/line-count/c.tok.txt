@@ -1,0 +1,7 @@
+@1|M|fs
+@2|F|line_count||path:str|?i32,IoError|3,4,5,7
+@3|V|text|str|try(fs.read(path))
+@4|V|count|i32|0
+@5|L|line|text.lines()|6
+@6|A|count|add(count,1)
+@7|R|Ok(count)

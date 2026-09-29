@@ -1,0 +1,4 @@
+(~ task)
+(^ square_async () ((x i32)) (? i32 TaskError)
+  (= job (Task i32) (task.spawn (^ () (mul x x))))
+  (Ok (! (task.join job))))

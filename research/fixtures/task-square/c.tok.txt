@@ -1,0 +1,4 @@
+@1|M|task
+@2|F|square_async||x:i32|?i32,TaskError|3,4
+@3|V|job|Task<i32>|task.spawn(lambda: mul(x,x))
+@4|R|Ok(try(task.join(job)))

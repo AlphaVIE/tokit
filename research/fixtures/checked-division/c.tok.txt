@@ -1,0 +1,4 @@
+@1|F|divide||a:i32,b:i32|?i32,DivZero|2,4
+@2|I|eq(b,0)|3
+@3|R|Err(DivZero)
+@4|R|Ok(div(a,b))

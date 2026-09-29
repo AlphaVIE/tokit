@@ -1,0 +1,5 @@
+use task;
+fn square_async(x:i32)->Result<i32,TaskError>{
+  let job:Task<i32>=task.spawn(||x*x);
+  Ok(task.join(job)?)
+}
