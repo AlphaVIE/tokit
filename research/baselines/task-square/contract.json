@@ -1,0 +1,18 @@
+{
+  "name": "task-square",
+  "operation": "spawn a task computing signed i32 x*x, join it, propagate a task failure, and return Ok(square)",
+  "input": "one signed 32-bit integer in the bounded cases below",
+  "output": "Ok(square) on success; Err(TaskError::Failed) for a task failure",
+  "concurrency": "the square computation runs in a separate task; its completion is observed by join before output; scheduling order and latency are unspecified",
+  "ownership": "the task receives a copied i32 input; no shared mutable state, I/O, or external side effects",
+  "limits": "inputs are bounded so x*x fits i32; overflow and induced task failure are outside executable cases",
+  "cases": [
+    {"name": "zero", "input": 0, "expected": "Ok(0)"},
+    {"name": "one", "input": 1, "expected": "Ok(1)"},
+    {"name": "negative-one", "input": -1, "expected": "Ok(1)"},
+    {"name": "seven", "input": 7, "expected": "Ok(49)"},
+    {"name": "negative-seven", "input": -7, "expected": "Ok(49)"},
+    {"name": "largest-safe", "input": 46340, "expected": "Ok(2147395600)"},
+    {"name": "negative-largest-safe", "input": -46340, "expected": "Ok(2147395600)"}
+  ]
+}

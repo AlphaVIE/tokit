@@ -1,0 +1,4 @@
+// BENCH_START
+fn square(x:i32)->i32{x*x}
+fn square_async(x:i32)->Result<i32,TaskError>{let job:Task<i32> =spawn square(x);Ok(join(job)?)}
+// BENCH_END
