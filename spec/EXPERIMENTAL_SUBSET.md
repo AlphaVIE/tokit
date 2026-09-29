@@ -6,12 +6,14 @@ This document describes exactly what the current Rust prototype accepts. It is a
 
 ```text
 program  = (function | record | enum)+ ;
-function = "fn" identifier "(" parameters? ")" "->" type block ;
-record   = "struct" identifier "{" (identifier ":" type ("," identifier ":" type)*)? "}" ;
+function = "fn" identifier generic-params? "(" parameters? ")" "->" type block ;
+record   = "struct" identifier generic-params? "{" (identifier ":" type ("," identifier ":" type)*)? "}" ;
 enum     = "enum" identifier "{" (identifier ("," identifier)*)? "}" ;
+generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
 type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
-         | "Result" "<" type "," type ">" | identifier ;
+         | "Result" "<" type "," type ">" | identifier
+         | identifier "<" type ("," type)* ">" ;
 block    = "{" statement* expression? "}" ;
 statement = ("let" | "var") identifier ":" type "=" expression ";"
           | identifier "=" expression ";"
@@ -39,11 +41,13 @@ Strings are UTF-8 values written in double quotes. Literals accept direct Unicod
 
 Named records declare typed fields in order. Calling the record name constructs a value with one argument per field; postfix `.field` reads a field. Records are value types, copied when passed or read. Unknown type names report `E103`, duplicate names or fields `E106`, direct recursive value layouts `E112`, and invalid field access `E113`. Recursion through an array is permitted because the array's storage is indirect.
 
+Records and functions can declare type parameters, as in `struct Pair<T>{left:T,right:T}` and `fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)}`. A call infers each type argument from its value arguments; there is no explicit call-site specialization yet. Ambiguous calls or unused record type parameters report `E115`. Type parameters have implicit clone and render capabilities in the native bootstrap; trait bounds and general constraint solving are not implemented. A generic `main` is invalid.
+
 Unit enums declare named variants, including an optional empty variant set. `Enum::Variant` constructs a value and can be used as a typed `Result` error. Unknown variants or using an enum name as a function report `E114`. Payload variants, pattern matching, and exhaustive case analysis are not yet supported.
 
 ## Diagnostics and commands
 
-`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless `main`. `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E103` unknown type, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E112` recursive record, `E113` invalid field access, `E114` invalid enum variant, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports, payload enums, and user-defined generics do not yet exist in this prototype.
+`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless, non-generic `main`. `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E103` unknown type, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E112` recursive record, `E113` invalid field access, `E114` invalid enum variant, `E115` type inference failure, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports, payload enums, and trait-constrained generics do not yet exist in this prototype.
 
 ## Reproduce
 

@@ -109,6 +109,58 @@ fn invalid_enum_variants_are_rejected() {
 }
 
 #[test]
+fn generic_records_and_functions_infer_type_arguments() {
+    let source = "struct Pair<T>{left:T,right:T} fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)} fn main()->Pair<i32>{flip(Pair(1,2))}";
+    assert_eq!(run(source).unwrap().to_string(), "Pair(left:2,right:1)");
+    let source = "struct Pair<T>{left:T,right:T} fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)} fn main()->Pair<String>{flip(Pair(\"a\",\"b\"))}";
+    assert_eq!(
+        run(source).unwrap().to_string(),
+        "Pair(left:\"b\",right:\"a\")"
+    );
+    let source = "struct Node{child:Wrap<Node>} struct Wrap<T>{xs:[T]} fn empty<T>(xs:[T])->Wrap<T>{Wrap(xs)} fn main()->Node{let xs:[Node]=[];Node(empty(xs))}";
+    assert_eq!(run(source).unwrap().to_string(), "Node(child:Wrap(xs:[]))");
+    let source =
+        "struct Pair<T>{left:T,right:T} fn main()->Pair<Result<i32,i32>>{Pair(Ok(1),Err(2))}";
+    assert_eq!(
+        run(source).unwrap().to_string(),
+        "Pair(left:Ok(1),right:Err(2))"
+    );
+    let source = "struct Pair<A,B>{left:A,right:B} fn flip<A,B>(p:Pair<A,B>)->Pair<B,A>{Pair(p.right,p.left)} fn main()->Pair<String,i32>{flip(Pair(5,\"x\"))}";
+    assert_eq!(run(source).unwrap().to_string(), "Pair(left:\"x\",right:5)");
+}
+
+#[test]
+fn invalid_generic_calls_are_rejected() {
+    for (source, code) in [
+        (
+            "struct Pair<T>{left:T,right:T} fn main()->Pair<i32>{Pair(1,true)}",
+            "E102",
+        ),
+        (
+            "struct Pair<T>{left:T,right:T} fn main()->Pair{Pair(1,2)}",
+            "E103",
+        ),
+        ("struct Pair<T,T>{left:T} fn main()->i32{0}", "E106"),
+        (
+            "fn unused<T>(x:i32)->i32{x} fn main()->i32{unused(1)}",
+            "E115",
+        ),
+        (
+            "struct Pair<T>{left:T} fn main()->Pair<i32>{Pair()}",
+            "E105",
+        ),
+        ("struct Phantom<T>{x:i32} fn main()->i32{0}", "E115"),
+        (
+            "struct Box<T>{x:T} struct Loop{next:Box<Loop>} fn main()->i32{0}",
+            "E112",
+        ),
+    ] {
+        assert_eq!(check(source).unwrap_err().code, code, "{source}");
+    }
+    assert_eq!(run("fn main<T>()->i32{1}").unwrap_err().code, "E203");
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";
