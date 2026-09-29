@@ -1,12 +1,33 @@
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct SourceId(pub usize);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Span {
+    pub source_id: SourceId,
     pub start: usize,
     pub end: usize,
 }
 
 impl Span {
-    pub fn join(self, other: Self) -> Self {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self::in_source(SourceId::default(), start, end)
+    }
+
+    pub fn in_source(source_id: SourceId, start: usize, end: usize) -> Self {
         Self {
+            source_id,
+            start,
+            end,
+        }
+    }
+
+    pub fn join(self, other: Self) -> Self {
+        assert_eq!(
+            self.source_id, other.source_id,
+            "cannot join spans from different sources"
+        );
+        Self {
+            source_id: self.source_id,
             start: self.start,
             end: other.end,
         }

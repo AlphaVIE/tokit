@@ -13,13 +13,17 @@ pub mod parser;
 pub mod stats;
 pub mod test_runner;
 
-use ast::Program;
+use ast::{Program, SourceId};
 use diagnostic::Diagnostic;
 use interpreter::Value;
 use std::path::Path;
 
 pub fn parse(source: &str) -> Result<Program, Diagnostic> {
-    let tokens = lexer::lex(source)?;
+    parse_in_source(source, SourceId::default())
+}
+
+pub fn parse_in_source(source: &str, source_id: SourceId) -> Result<Program, Diagnostic> {
+    let tokens = lexer::lex_in_source(source, source_id)?;
     parser::Parser::new(tokens).program()
 }
 

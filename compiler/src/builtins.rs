@@ -22,7 +22,7 @@ pub fn io_error_decl() -> EnumDecl {
                 payload: None,
             })
             .collect(),
-        span: Span { start: 0, end: 0 },
+        span: Span::new(0, 0),
     }
 }
 
@@ -47,7 +47,7 @@ pub fn task_error_decl() -> EnumDecl {
             name: "Failed".to_owned(),
             payload: None,
         }],
-        span: Span { start: 0, end: 0 },
+        span: Span::new(0, 0),
     }
 }
 
@@ -61,7 +61,7 @@ pub fn parse_error_decl() -> EnumDecl {
                 payload: None,
             })
             .collect(),
-        span: Span { start: 0, end: 0 },
+        span: Span::new(0, 0),
     }
 }
 

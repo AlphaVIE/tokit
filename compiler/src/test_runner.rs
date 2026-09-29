@@ -69,7 +69,7 @@ pub fn run_with_capabilities(
     if tests.is_empty() {
         return Err(Diagnostic::new(
             "E203",
-            Span { start: 0, end: 0 },
+            Span::new(0, 0),
             "no test_ functions found",
         ));
     }
