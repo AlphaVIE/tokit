@@ -8,7 +8,7 @@ For each source representation, measure UTF-8 bytes, Unicode scalar count, model
 
 ## Tokenizers
 
-Pin package versions, tokenizer model files/hashes, and encoding names. Use the exact tokenizer for each target model where available. A local command `python scripts/token_cost.py research/candidates` measures two OpenAI encodings when `tiktoken` is installed; it is an **initial instrumentation check**, not cross-family validation. Add at least one independently trained tokenizer family before ranking candidates. If a tokenizer cannot be redistributed, document its source, revision, hash, and loading instructions.
+Pin package versions, tokenizer model files/hashes, and encoding names. Use the exact tokenizer for each target model where available. The local `scripts/token_cost.py` tool measures two OpenAI encodings and, when supplied with a verified local JSON file, the Qwen2.5-Coder-0.5B-Instruct tokenizer. These are **source-only instrumentation checks**, not generation benchmarks. The Qwen tokenizer is fetched from the [official model repository](https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct) at a pinned revision, verified by SHA-256, and kept out of Git. Add further model families and tasks before ranking candidates. If a tokenizer cannot be redistributed, document its source, revision, hash, and loading instructions.
 
 Count source only for the source-size view. Separately count all messages in model generation and repair sessions, including system/developer instructions used in the experiment, fixture description, source context, errors, and output. Keep input and output counts distinct. Log model version, sampling settings, seeds if supported, retries, timeouts, and pricing assumptions.
 
