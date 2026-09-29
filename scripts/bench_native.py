@@ -49,6 +49,7 @@ def summary(samples: list[int]) -> dict[str, int | list[int]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--workload", choices=("cycle-sum", "array-cycle"), default="cycle-sum")
     parser.add_argument("--iterations", type=int, default=99_999_999)
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--samples", type=int, default=7)
@@ -74,13 +75,14 @@ def main() -> None:
     )
     suffix = ".exe" if os.name == "nt" else ""
     tok = ROOT / "target" / "debug" / f"tok{suffix}"
-    source_tok = WORKLOAD / "cycle_sum.tok"
-    source_rust = WORKLOAD / "cycle_sum.rs"
+    stem = args.workload.replace("-", "_")
+    source_tok = WORKLOAD / f"{stem}.tok"
+    source_rust = WORKLOAD / f"{stem}.rs"
     expected = f"Ok({2 * args.iterations})"
 
     with tempfile.TemporaryDirectory(prefix="tokit-native-bench-") as temporary:
         directory = Path(temporary)
-        outputs = {name: directory / f"cycle-sum-{name}{suffix}" for name in ("Tokit", "Rust")}
+        outputs = {name: directory / f"{args.workload}-{name}{suffix}" for name in ("Tokit", "Rust")}
         build_commands = {
             "Tokit": [str(tok), "build", str(source_tok), "-o", str(outputs["Tokit"])],
             "Rust": ["rustc", "--edition=2024", "-C", "opt-level=2", str(source_rust),
@@ -114,7 +116,7 @@ def main() -> None:
                 run_samples[name].append(elapsed)
 
         report = {
-            "workload": "cycle-sum",
+            "workload": args.workload,
             "iterations": args.iterations,
             "expected_output": expected,
             "host": {"platform": platform.platform(), "machine": platform.machine(),

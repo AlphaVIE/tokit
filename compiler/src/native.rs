@@ -47,13 +47,13 @@ fn __tok_mul(a: i32, b: i32, line: usize, column: usize) -> i32 {
 fn __tok_div(a: i32, b: i32, line: usize, column: usize) -> i32 {
     a.checked_div(b).unwrap_or_else(|| __tok_fail(line, column))
 }
-fn __tok_index<T: Clone>(values: Vec<T>, index: i32, line: usize, column: usize) -> T {
+fn __tok_index<T: Clone>(values: &[T], index: i32, line: usize, column: usize) -> T {
     usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
         eprintln!("E205@{}:{} array index out of bounds", line, column);
         std::process::exit(1)
     })
 }
-fn __tok_len<T>(values: Vec<T>, line: usize, column: usize) -> i32 {
+fn __tok_len<T>(values: &[T], line: usize, column: usize) -> i32 {
     i32::try_from(values.len()).unwrap_or_else(|_| {
         eprintln!("E206@{}:{} array length exceeds i32", line, column);
         std::process::exit(1)
@@ -251,6 +251,13 @@ fn location(source: &str, span: Span) -> (usize, usize) {
     (line, column)
 }
 
+fn emit_array_borrow(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
+    match &expr.kind {
+        ExprKind::Var(name) => format!("&{}", user_name(name)),
+        _ => format!("&({})", emit_expr(expr, source, types)),
+    }
+}
+
 fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
@@ -275,7 +282,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
             let (line, column) = location(source, expr.span);
             format!(
                 "__tok_index({},{},{line},{column})",
-                emit_expr(array, source, types),
+                emit_array_borrow(array, source, types),
                 emit_expr(index, source, types)
             )
         }
@@ -306,7 +313,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                 let (line, column) = location(source, expr.span);
                 return format!(
                     "__tok_len({},{line},{column})",
-                    emit_expr(&args[0], source, types)
+                    emit_array_borrow(&args[0], source, types)
                 );
             }
             format!(
