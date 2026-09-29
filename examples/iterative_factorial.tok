@@ -1,0 +1,7 @@
+fn factorial(n:i32)->i32{
+    var result:i32=1;
+    var next:i32=2;
+    while next<=n{result=result*next;next=next+1;}
+    result
+}
+fn main()->i32{factorial(5)}

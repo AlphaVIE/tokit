@@ -299,6 +299,16 @@ impl Parser {
                     body,
                     span,
                 });
+            } else if self.at(&Kind::While) {
+                let first = self.bump().span;
+                let condition = self.expr(0)?;
+                let body = self.block()?;
+                let span = first.join(body.span);
+                stmts.push(Stmt::While {
+                    condition,
+                    body,
+                    span,
+                });
             } else if matches!(self.current().kind, Kind::Ident(_)) && self.next_is(&Kind::Eq) {
                 let (name, first) = self.ident()?;
                 self.bump();

@@ -472,6 +472,21 @@ fn emit_stmt(stmt: &Stmt, source: &str, types: &HashMap<Span, Type>) -> String {
                 emit_expr(iterable, source, types)
             )
         }
+        Stmt::While {
+            condition, body, ..
+        } => {
+            let body_type = types.get(&body.span).expect("checked body has a type");
+            let body_expr = emit_expr(body, source, types);
+            let discarded = if *body_type == Type::Never {
+                format!("let _ = {body_expr};")
+            } else {
+                format!("let _: {} = {body_expr};", rust_type_fallback(body_type))
+            };
+            format!(
+                "while {} {{ {discarded} }}\n",
+                emit_expr(condition, source, types)
+            )
+        }
         Stmt::Return { value, .. } => format!("return {};\n", emit_expr(value, source, types)),
         Stmt::Expr(value) => {
             let ty = types

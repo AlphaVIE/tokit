@@ -144,6 +144,11 @@ pub enum Stmt {
         body: Expr,
         span: Span,
     },
+    While {
+        condition: Expr,
+        body: Expr,
+        span: Span,
+    },
     Return {
         value: Expr,
         span: Span,

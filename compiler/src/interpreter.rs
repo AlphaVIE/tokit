@@ -445,6 +445,24 @@ fn eval(
                             take_value!(eval(body, &loop_scope, program, depth, runtime));
                         }
                     }
+                    Stmt::While {
+                        condition,
+                        body,
+                        span,
+                    } => loop {
+                        let value = take_value!(eval(condition, &scope, program, depth, runtime));
+                        let Value::Bool(keep_going) = value else {
+                            return Err(Diagnostic::new(
+                                "E204",
+                                *span,
+                                "invalid runtime while condition",
+                            ));
+                        };
+                        if !keep_going {
+                            break;
+                        }
+                        take_value!(eval(body, &scope, program, depth, runtime));
+                    },
                     Stmt::Return { value, .. } => {
                         let value = take_value!(eval(value, &scope, program, depth, runtime));
                         return Ok(Flow::Return(value));
