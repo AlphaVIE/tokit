@@ -15,7 +15,11 @@ struct Facts {
 fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
         ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => {}
-        ExprKind::Variant(_, _) => {}
+        ExprKind::Variant(_, _, payload) => {
+            if let Some(payload) = payload {
+                visit(payload, facts);
+            }
+        }
         ExprKind::Array(values) => {
             for value in values {
                 visit(value, facts);
@@ -116,10 +120,18 @@ pub fn explain(program: &Program) -> String {
         out.push_str("  none\n");
     }
     for decl in &program.enums {
+        let variants = decl
+            .variants
+            .iter()
+            .map(|variant| match &variant.payload {
+                Some(ty) => format!("{}({ty})", variant.name),
+                None => variant.name.clone(),
+            })
+            .collect::<Vec<_>>();
         out.push_str(&format!(
             "  {}: {}\n",
             decl.name,
-            list(decl.variants.iter().map(String::as_str))
+            list(variants.iter().map(String::as_str))
         ));
     }
     out.push_str("\nFunctions\n");

@@ -8,7 +8,8 @@ This document describes exactly what the current Rust prototype accepts. It is a
 program  = (function | record | enum)+ ;
 function = "fn" identifier generic-params? "(" parameters? ")" "->" type block ;
 record   = "struct" identifier generic-params? "{" (identifier ":" type ("," identifier ":" type)*)? "}" ;
-enum     = "enum" identifier "{" (identifier ("," identifier)*)? "}" ;
+enum     = "enum" identifier "{" (enum-variant ("," enum-variant)*)? "}" ;
+enum-variant = identifier ("(" type ")")? ;
 generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
 type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
@@ -21,7 +22,7 @@ statement = ("let" | "var") identifier ":" type "=" expression ";"
           | "return" expression ";"
           | expression ";" ;
 expression = integer | string | "true" | "false" | identifier | "[" arguments? "]"
-           | identifier "::" identifier
+           | identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
            | identifier "(" arguments? ")"
            | "(" expression ")" | block
@@ -30,7 +31,7 @@ expression = integer | string | "true" | "false" | identifier | "[" arguments? "
            | expression "?" | expression "[" expression "]" | expression "." identifier
            | expression binary-op expression ;
 pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
-        | identifier "::" identifier | "true" | "false" ;
+        | identifier "::" identifier ("(" identifier ")")? | "true" | "false" ;
 binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
 
@@ -46,13 +47,13 @@ Named records declare typed fields in order. Calling the record name constructs 
 
 Records and functions can declare type parameters, as in `struct Pair<T>{left:T,right:T}` and `fn flip<T>(p:Pair<T>)->Pair<T>{Pair(p.right,p.left)}`. A call infers each type argument from its value arguments; there is no explicit call-site specialization yet. Ambiguous calls or unused record type parameters report `E115`. Type parameters have implicit clone and render capabilities in the native bootstrap; trait bounds and general constraint solving are not implemented. A generic `main` is invalid.
 
-Unit enums declare named variants, including an optional empty variant set. `Enum::Variant` constructs a value and can be used as a typed `Result` error. Unknown variants or using an enum name as a function report `E114`. Payload variants are not yet supported.
+Enums declare named variants, including an optional empty variant set. A variant may carry one typed value, for example `enum Event{Stop,Number(i32)}`. `Event::Stop` and `Event::Number(7)` construct values, which may also serve as typed `Result` errors. Missing, extra, or incorrectly typed payloads are rejected. Unknown variants or using an enum name as a function report `E114`. Direct recursive value layouts across records and enums report `E112`; recursion through an array is permitted because its storage is indirect. Generic enums and variants with multiple payload fields are not yet supported.
 
-`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, unit enums with qualified `Enum::Variant` patterns, and `bool` with `true` and `false` patterns. All possible cases must occur exactly once; missing, duplicate, or inapplicable patterns report `E116`. A payload binding is scoped to its arm and has the corresponding result type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
+`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, enums with qualified `Enum::Variant` and `Enum::Variant(name)` patterns, and `bool` with `true` and `false` patterns. All possible cases must occur exactly once; missing, duplicate, or inapplicable patterns report `E116`. A payload binding is scoped to its arm and has the declared payload type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
 
 ## Diagnostics and commands
 
-`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless, non-generic `main`. `tok explain file.tok` prints a deterministic summary of declarations, call relationships, record constructions, and notable operations after type-checking. It currently reports syntactic operations; it does not prove absence of effects in callees. `tok fmt file.tok` prints [canonical experimental whitespace](FORMATTER.md), with `--check` and `--write` modes. `tok stats file.tok` emits JSON structural counts for a checked program; see [structural metrics](../research/STRUCTURAL_METRICS.md). `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E103` unknown type, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E112` recursive record, `E113` invalid field access, `E114` invalid enum variant, `E115` type inference failure, `E116` invalid match pattern or coverage, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports, payload enums, and trait-constrained generics do not yet exist in this prototype.
+`tok check file.tok` lexes, parses, and type-checks; `tok run file.tok` additionally evaluates `main()` in the reference interpreter. A run requires a parameterless, non-generic `main`. `tok explain file.tok` prints a deterministic summary of declarations, call relationships, record constructions, and notable operations after type-checking. It currently reports syntactic operations; it does not prove absence of effects in callees. `tok fmt file.tok` prints [canonical experimental whitespace](FORMATTER.md), with `--check` and `--write` modes. `tok stats file.tok` emits JSON structural counts for a checked program; see [structural metrics](../research/STRUCTURAL_METRICS.md). `tok build file.tok -o output` produces a host executable through the experimental Rust bootstrap. `--json` before the path emits a JSON result or diagnostic with byte span, line, and column. Diagnostics use `E001` invalid character, `E002` parse error, `E003` integer literal range, `E004` invalid string literal, `E101` unknown name, `E102` type mismatch, `E103` unknown type, `E104` invalid operands, `E105` arity mismatch, `E106` duplicate name, `E107` unreachable code, `E109` immutable assignment, `E110` invalid array operation, `E111` invalid error propagation, `E112` recursive value layout, `E113` invalid field access, `E114` invalid enum variant, `E115` type inference failure, `E116` invalid match pattern or coverage, `E201` arithmetic failure, `E202` call-depth limit, `E203` invalid entry point, `E204` interpreter invariant failure, and `E205` array index out of bounds. Error output contains a source line and column. GC, standard library, imports and trait-constrained generics do not yet exist in this prototype.
 
 ## Reproduce
 

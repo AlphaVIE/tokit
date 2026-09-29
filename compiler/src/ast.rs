@@ -80,7 +80,7 @@ pub struct Expr {
 pub enum PatternKind {
     Ok(String),
     Err(String),
-    Variant(String, String),
+    Variant(String, String, Option<String>),
     Bool(bool),
 }
 
@@ -98,7 +98,7 @@ pub enum ExprKind {
     Array(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
     Field(Box<Expr>, String),
-    Variant(String, String),
+    Variant(String, String, Option<Box<Expr>>),
     Ok(Box<Expr>),
     Err(Box<Expr>),
     Try(Box<Expr>),
@@ -158,8 +158,14 @@ pub struct Record {
 #[derive(Clone, Debug)]
 pub struct EnumDecl {
     pub name: String,
-    pub variants: Vec<String>,
+    pub variants: Vec<EnumVariant>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct EnumVariant {
+    pub name: String,
+    pub payload: Option<Type>,
 }
 
 #[derive(Clone, Debug)]

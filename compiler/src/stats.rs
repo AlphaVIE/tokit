@@ -49,7 +49,12 @@ fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
     *nodes += 1;
     match &expr.kind {
         ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => {}
-        ExprKind::Variant(_, _) => *ops += 1,
+        ExprKind::Variant(_, _, payload) => {
+            *ops += 1;
+            if let Some(payload) = payload {
+                count_expr(payload, nodes, ops);
+            }
+        }
         ExprKind::Array(values) => {
             *ops += 1;
             for value in values {
@@ -133,6 +138,11 @@ pub fn measure(source: &str, program: &Program) -> Stats {
     }
     for decl in &program.enums {
         nodes += 1 + decl.variants.len();
+        for variant in &decl.variants {
+            if let Some(ty) = &variant.payload {
+                count_type(ty, &mut nodes);
+            }
+        }
     }
     for function in &program.functions {
         nodes += 1;

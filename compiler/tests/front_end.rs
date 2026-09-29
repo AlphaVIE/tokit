@@ -197,6 +197,44 @@ fn match_requires_compatible_exhaustive_unique_arms() {
 }
 
 #[test]
+fn payload_enums_construct_render_and_match_typed_bindings() {
+    let source = "enum Shape{Point,Square(i32),Text(String)} fn describe(s:Shape)->String{match s{Shape::Point=>\"point\",Shape::Square(n)=>if n>0{\"square\"}else{\"empty\"},Shape::Text(label)=>label}} fn main()->String{describe(Shape::Text(\"hello\"))}";
+    assert_eq!(run(source).unwrap(), Value::String("hello".to_owned()));
+    let source = "enum Shape{Point,Square(i32)} fn main()->Shape{Shape::Square(7)}";
+    assert_eq!(run(source).unwrap().to_string(), "Shape::Square(7)");
+    let source = "enum List{Nil,Cons([List])} fn main()->List{List::Cons([List::Nil])}";
+    assert_eq!(run(source).unwrap().to_string(), "List::Cons([List::Nil])");
+}
+
+#[test]
+fn invalid_payload_enums_are_rejected() {
+    for (source, code) in [
+        ("enum E{A(i32)} fn main()->E{E::A}", "E114"),
+        ("enum E{A} fn main()->E{E::A(1)}", "E114"),
+        ("enum E{A(i32)} fn main()->E{E::A(true)}", "E102"),
+        ("enum E{A(Unknown)} fn main()->i32{0}", "E103"),
+        ("enum E{A(i32),A(bool)} fn main()->i32{0}", "E106"),
+        ("enum E{A(E)} fn main()->i32{0}", "E112"),
+        ("struct R{e:E} enum E{A(R)} fn main()->i32{0}", "E112"),
+        (
+            "enum E{A(i32)} fn main()->i32{match E::A(1){E::A=>1}}",
+            "E116",
+        ),
+        ("enum E{A} fn main()->i32{match E::A{E::A(x)=>1}}", "E116"),
+        (
+            "enum E{A(i32)} fn main()->bool{match E::A(1){E::A(x)=>x}}",
+            "E102",
+        ),
+        (
+            "enum E{A(i32),B} fn main()->i32{match E::A(1){E::A(x)=>x,E::B=>0};x}",
+            "E101",
+        ),
+    ] {
+        assert_eq!(check(source).unwrap_err().code, code, "{source}");
+    }
+}
+
+#[test]
 fn executes_recursion_and_early_return() {
     let source =
         "fn fact(n:i32)->i32{if n<=1{return 1;}else{}; n*fact(n-1)} fn main()->i32{fact(5)}";

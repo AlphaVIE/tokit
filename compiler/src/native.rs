@@ -127,7 +127,13 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::Bool(value) => value.to_string(),
         ExprKind::String(value) => format!("{:?}.to_owned()", value),
-        ExprKind::Variant(name, variant) => format!("{}::{}", user_name(name), user_name(variant)),
+        ExprKind::Variant(name, variant, payload) => {
+            let prefix = format!("{}::{}", user_name(name), user_name(variant));
+            match payload {
+                Some(value) => format!("{prefix}({})", emit_expr(value, source, types)),
+                None => prefix,
+            }
+        }
         ExprKind::Array(values) => format!(
             "vec![{}]",
             values
@@ -210,8 +216,12 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
                         PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
                         PatternKind::Err(name) => format!("Err({})", user_name(name)),
                         PatternKind::Bool(value) => value.to_string(),
-                        PatternKind::Variant(name, variant) => {
-                            format!("{}::{}", user_name(name), user_name(variant))
+                        PatternKind::Variant(name, variant, binding) => {
+                            let prefix = format!("{}::{}", user_name(name), user_name(variant));
+                            match binding {
+                                Some(name) => format!("{prefix}({})", user_name(name)),
+                                None => prefix,
+                            }
                         }
                     };
                     format!("{pattern} => {}", emit_expr(body, source, types))
@@ -323,7 +333,10 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         let variants = enum_decl
             .variants
             .iter()
-            .map(|variant| user_name(variant))
+            .map(|variant| match &variant.payload {
+                Some(ty) => format!("{}({})", user_name(&variant.name), rust_type(ty)),
+                None => user_name(&variant.name),
+            })
             .collect::<Vec<_>>()
             .join(",");
         writeln!(out, "#[derive(Clone)] enum {name} {{ {variants} }}")
@@ -332,11 +345,15 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
             .variants
             .iter()
             .map(|variant| {
-                format!(
-                    "Self::{} => {:?}.to_owned()",
-                    user_name(variant),
-                    format!("{}::{variant}", enum_decl.name)
-                )
+                let name = user_name(&variant.name);
+                let display = format!("{}::{}", enum_decl.name, variant.name);
+                if variant.payload.is_some() {
+                    format!(
+                        "Self::{name}(value) => format!(\"{display}({{}})\", value.tok_render())"
+                    )
+                } else {
+                    format!("Self::{name} => {display:?}.to_owned()")
+                }
             })
             .collect::<Vec<_>>()
             .join(",");

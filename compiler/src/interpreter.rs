@@ -11,7 +11,7 @@ pub enum Value {
     String(String),
     Array(Vec<Value>),
     Record(String, Vec<(String, Value)>),
-    Enum(String, String),
+    Enum(String, String, Option<Box<Value>>),
     Ok(Box<Value>),
     Err(Box<Value>),
     Unit,
@@ -43,7 +43,13 @@ impl std::fmt::Display for Value {
                 }
                 f.write_str(")")
             }
-            Self::Enum(name, variant) => write!(f, "{name}::{variant}"),
+            Self::Enum(name, variant, payload) => {
+                write!(f, "{name}::{variant}")?;
+                if let Some(value) = payload {
+                    write!(f, "({value})")?;
+                }
+                Ok(())
+            }
             Self::Ok(value) => write!(f, "Ok({value})"),
             Self::Err(value) => write!(f, "Err({value})"),
             Self::Unit => f.write_str("()"),
@@ -115,7 +121,13 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::Bool(value) => Value::Bool(*value),
         ExprKind::String(value) => Value::String(value.clone()),
-        ExprKind::Variant(name, variant) => Value::Enum(name.clone(), variant.clone()),
+        ExprKind::Variant(name, variant, payload) => {
+            let payload = match payload {
+                Some(value) => Some(Box::new(take_value!(eval(value, env, program, depth)))),
+                None => None,
+            };
+            Value::Enum(name.clone(), variant.clone(), payload)
+        }
         ExprKind::Array(items) => {
             let mut values = Vec::new();
             for item in items {
@@ -229,11 +241,16 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                     (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => {
                         Some(None)
                     }
-                    (PatternKind::Variant(name, variant), Value::Enum(actual, value))
-                        if name == actual && variant == value =>
-                    {
-                        Some(None)
-                    }
+                    (
+                        PatternKind::Variant(name, variant, binding),
+                        Value::Enum(actual, value, payload),
+                    ) if name == actual && variant == value => match (binding, payload) {
+                        (None, None) => Some(None),
+                        (Some(binding), Some(payload)) => {
+                            Some(Some((binding.clone(), *payload.clone())))
+                        }
+                        _ => None,
+                    },
                     _ => None,
                 };
                 if let Some(binding) = binding {
