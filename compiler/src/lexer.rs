@@ -1,4 +1,4 @@
-use crate::ast::Span;
+use crate::ast::{SourceId, Span};
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +62,10 @@ pub struct Token {
 }
 
 pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
+    lex_in_source(source, SourceId::default())
+}
+
+pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Diagnostic> {
     let bytes = source.as_bytes();
     let mut tokens = Vec::new();
     let mut i = 0;
@@ -113,7 +117,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 if i >= bytes.len() || bytes[i] == b'\n' || bytes[i] == b'\r' {
                     return Err(Diagnostic::new(
                         "E004",
-                        Span { start, end: i },
+                        Span::in_source(source_id, start, i),
                         "unclosed string literal",
                     ));
                 }
@@ -132,10 +136,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                         _ => {
                             return Err(Diagnostic::new(
                                 "E004",
-                                Span {
+                                Span::in_source(
+                                    source_id,
                                     start,
-                                    end: i.saturating_add(1).min(bytes.len()),
-                                },
+                                    i.saturating_add(1).min(bytes.len()),
+                                ),
                                 "invalid string escape",
                             ));
                         }
@@ -207,7 +212,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 _ => {
                     return Err(Diagnostic::new(
                         "E001",
-                        Span { start, end: i },
+                        Span::in_source(source_id, start, i),
                         "invalid character",
                     ));
                 }
@@ -215,12 +220,12 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
         };
         tokens.push(Token {
             kind,
-            span: Span { start, end: i },
+            span: Span::in_source(source_id, start, i),
         });
     }
     tokens.push(Token {
         kind: Kind::Eof,
-        span: Span { start: i, end: i },
+        span: Span::in_source(source_id, i, i),
     });
     Ok(tokens)
 }

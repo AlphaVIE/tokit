@@ -278,7 +278,7 @@ fn run_requires_parameterless_main() {
 #[test]
 fn machine_diagnostic_has_stable_span_and_escaping() {
     use tokit_compiler::{ast::Span, diagnostic::Diagnostic};
-    let diagnostic = Diagnostic::new("E999", Span { start: 2, end: 4 }, "bad \"name\"\n");
+    let diagnostic = Diagnostic::new("E999", Span::new(2, 4), "bad \"name\"\n");
     assert_eq!(
         diagnostic.json("a\né"),
         r#"{"code":"E999","span":{"start":2,"end":4},"line":2,"column":1,"message":"bad \"name\"\n"}"#

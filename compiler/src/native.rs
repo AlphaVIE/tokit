@@ -563,9 +563,7 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         .functions
         .iter()
         .find(|f| f.name == "main")
-        .ok_or_else(|| {
-            Diagnostic::new("E203", Span { start: 0, end: 0 }, "missing main function")
-        })?;
+        .ok_or_else(|| Diagnostic::new("E203", Span::new(0, 0), "missing main function"))?;
     if !main.params.is_empty() || !main.type_params.is_empty() {
         return Err(Diagnostic::new(
             "E203",

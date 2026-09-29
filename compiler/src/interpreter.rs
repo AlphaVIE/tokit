@@ -149,11 +149,7 @@ fn run_entry(
         .iter()
         .find(|function| function.name == name)
         .ok_or_else(|| {
-            Diagnostic::new(
-                "E203",
-                Span { start: 0, end: 0 },
-                format!("missing {name} function"),
-            )
+            Diagnostic::new("E203", Span::new(0, 0), format!("missing {name} function"))
         })?;
     if !function.params.is_empty() || !function.type_params.is_empty() {
         return Err(Diagnostic::new(
