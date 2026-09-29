@@ -134,14 +134,28 @@ fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
     state.result.as_ref().expect("task result").clone()
 }
 thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
+thread_local! { static __TOK_WRITE_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
 thread_local! { static __TOK_ARGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
 fn __tok_configure_runtime() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut start = 0;
-    if args.first().is_some_and(|arg| arg == "--allow-read") {
-        if let Some(root) = args.get(1) {
-            __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
-            start = 2;
+    let mut saw_read = false;
+    let mut saw_write = false;
+    loop {
+        match args.get(start).map(String::as_str) {
+            Some("--allow-read") if !saw_read => {
+                let Some(root) = args.get(start + 1) else { eprintln!("missing read grant root"); std::process::exit(2); };
+                __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+                saw_read = true;
+                start += 2;
+            }
+            Some("--allow-write") if !saw_write => {
+                let Some(root) = args.get(start + 1) else { eprintln!("missing write grant root"); std::process::exit(2); };
+                __TOK_WRITE_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+                saw_write = true;
+                start += 2;
+            }
+            _ => break,
         }
     }
     if args.get(start).is_some_and(|arg| arg == "--") { start += 1; }
@@ -170,6 +184,25 @@ fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
     if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
     let bytes = std::fs::read(resolved).map_err(|error| __tok_read_error(error.kind()))?;
     String::from_utf8(bytes).map_err(|_| __TokIoError::InvalidUtf8)
+}
+fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
+    let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
+    let requested = std::path::Path::new(&path);
+    let target = match requested.canonicalize() {
+        Ok(target) => target,
+        Err(_) => {
+            if requested.symlink_metadata().is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+                return Err(__TokIoError::Denied);
+            }
+            let parent = requested.parent().filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            let parent = parent.canonicalize().map_err(|_| __TokIoError::Denied)?;
+            let name = requested.file_name().ok_or(__TokIoError::Other)?;
+            parent.join(name)
+        }
+    };
+    if !target.starts_with(&root) { return Err(__TokIoError::Denied); }
+    std::fs::write(target, text.as_bytes()).map_err(|error| __tok_read_error(error.kind()))
 }
 fn __tok_lines(text: String) -> Vec<String> {
     text.lines().map(str::to_owned).collect()
@@ -302,6 +335,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         ExprKind::Call(name, args) => {
             let callee = match name.as_str() {
                 builtins::READ_TEXT => "__tok_read_text".to_owned(),
+                builtins::WRITE_TEXT => "__tok_write_text".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),

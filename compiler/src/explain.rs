@@ -62,6 +62,9 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             if name == builtins::READ_TEXT {
                 facts.operations.insert("filesystem read (requires grant)");
                 facts.effects.insert("fs.read");
+            } else if name == builtins::WRITE_TEXT {
+                facts.operations.insert("filesystem write (requires grant)");
+                facts.effects.insert("fs.write");
             } else if name == builtins::LINES {
                 facts.operations.insert("line splitting");
             } else if name == builtins::ARGS {

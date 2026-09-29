@@ -43,6 +43,18 @@ fn task_creation_and_join_have_distinct_effects() {
 }
 
 #[test]
+fn file_writes_propagate_as_a_separate_effect() {
+    let source = "fn save()->Result<Unit,IoError>{write_text(\"out.txt\",\"ok\")} fn main()->Result<Unit,IoError>{save()}";
+    let index = ai_index::index(&check(source).unwrap());
+    assert!(index.contains("\"builtins\":[\"write_text\"]"));
+    assert_eq!(index.matches("\"effects\":[\"fs.write\"]").count(), 2);
+    assert_eq!(
+        index.matches("\"direct_effects\":[\"fs.write\"]").count(),
+        1
+    );
+}
+
+#[test]
 fn cli_emits_index_only_after_checking() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_tok"))

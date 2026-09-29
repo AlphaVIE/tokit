@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::ast::{Expr, ExprKind, Function, Op, PatternKind, Program, Span, Stmt};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
-use crate::filesystem::ReadPolicy;
+use crate::filesystem::{ReadPolicy, WritePolicy};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
@@ -78,6 +78,7 @@ const MAX_CALL_DEPTH: usize = 32;
 
 struct Runtime<'a> {
     read: ReadPolicy,
+    write: WritePolicy,
     args: &'a [String],
 }
 
@@ -105,22 +106,42 @@ pub fn run_with_runtime_args(
     root: Option<&Path>,
     args: &[String],
 ) -> Result<Value, Diagnostic> {
-    run_entry(program, "main", root, args)
+    run_with_capabilities(program, root, None, args)
+}
+
+pub fn run_with_capabilities(
+    program: &Program,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+    args: &[String],
+) -> Result<Value, Diagnostic> {
+    run_entry(program, "main", read_root, write_root, args)
 }
 
 /// Execute a checked, parameterless function in a fresh reference runtime.
 pub fn run_named(program: &Program, name: &str, root: Option<&Path>) -> Result<Value, Diagnostic> {
-    run_entry(program, name, root, &[])
+    run_named_with_capabilities(program, name, root, None)
+}
+
+pub fn run_named_with_capabilities(
+    program: &Program,
+    name: &str,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+) -> Result<Value, Diagnostic> {
+    run_entry(program, name, read_root, write_root, &[])
 }
 
 fn run_entry(
     program: &Program,
     name: &str,
-    root: Option<&Path>,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
     args: &[String],
 ) -> Result<Value, Diagnostic> {
     let runtime = Runtime {
-        read: ReadPolicy::from_root(root),
+        read: ReadPolicy::from_root(read_root),
+        write: WritePolicy::from_root(write_root),
         args,
     };
     let function = program
@@ -275,6 +296,23 @@ fn eval(
                 };
                 return Ok(Flow::Value(match runtime.read.read_text(path) {
                     Ok(value) => Value::Ok(Box::new(Value::String(value))),
+                    Err(error) => Value::Err(Box::new(Value::Enum(
+                        builtins::IO_ERROR.to_owned(),
+                        error.variant().to_owned(),
+                        None,
+                    ))),
+                }));
+            }
+            if name == builtins::WRITE_TEXT {
+                let [Value::String(path), Value::String(text)] = values.as_slice() else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid write_text call",
+                    ));
+                };
+                return Ok(Flow::Value(match runtime.write.write_text(path, text) {
+                    Ok(()) => Value::Ok(Box::new(Value::Unit)),
                     Err(error) => Value::Err(Box::new(Value::Enum(
                         builtins::IO_ERROR.to_owned(),
                         error.variant().to_owned(),

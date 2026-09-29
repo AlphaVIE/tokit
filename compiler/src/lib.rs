@@ -47,3 +47,13 @@ pub fn run_with_runtime_args(
     let program = check(source)?;
     interpreter::run_with_runtime_args(&program, root, args)
 }
+
+pub fn run_with_capabilities(
+    source: &str,
+    read_root: Option<&Path>,
+    write_root: Option<&Path>,
+    args: &[String],
+) -> Result<Value, Diagnostic> {
+    let program = check(source)?;
+    interpreter::run_with_capabilities(&program, read_root, write_root, args)
+}
