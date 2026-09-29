@@ -61,6 +61,14 @@ impl Parser {
             "i32" => Ok(Type::I32),
             "bool" => Ok(Type::Bool),
             "Unit" => Ok(Type::Unit),
+            "Result" => {
+                self.expect(Kind::Lt)?;
+                let ok = self.ty()?;
+                self.expect(Kind::Comma)?;
+                let err = self.ty()?;
+                self.expect(Kind::Gt)?;
+                Ok(Type::Result(Box::new(ok), Box::new(err)))
+            }
             _ => Err(Diagnostic::new(
                 "E002",
                 span,
@@ -195,6 +203,15 @@ impl Parser {
     fn expr(&mut self, min_prec: u8) -> Result<Expr, Diagnostic> {
         let mut left = self.atom()?;
         loop {
+            if self.at(&Kind::Question) {
+                let end = self.bump().span;
+                let span = left.span.join(end);
+                left = Expr {
+                    kind: ExprKind::Try(Box::new(left)),
+                    span,
+                };
+                continue;
+            }
             let (op, prec) = match self.current().kind {
                 Kind::EqEq => (Op::Eq, 1),
                 Kind::BangEq => (Op::Ne, 1),
@@ -238,6 +255,20 @@ impl Parser {
                 kind: ExprKind::Bool(token.kind == Kind::True),
                 span: token.span,
             }),
+            Kind::Ok | Kind::Err => {
+                self.expect(Kind::LParen)?;
+                let inner = self.expr(0)?;
+                let end = self.expect(Kind::RParen)?.span;
+                let kind = if token.kind == Kind::Ok {
+                    ExprKind::Ok(Box::new(inner))
+                } else {
+                    ExprKind::Err(Box::new(inner))
+                };
+                Ok(Expr {
+                    kind,
+                    span: token.span.join(end),
+                })
+            }
             Kind::Ident(name) => {
                 if self.at(&Kind::LParen) {
                     self.bump();

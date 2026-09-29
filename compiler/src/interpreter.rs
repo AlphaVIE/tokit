@@ -9,6 +9,8 @@ pub enum Value {
     I32(i32),
     Bool(bool),
     Array(Vec<Value>),
+    Ok(Box<Value>),
+    Err(Box<Value>),
     Unit,
 }
 
@@ -27,6 +29,8 @@ impl std::fmt::Display for Value {
                 }
                 f.write_str("]")
             }
+            Self::Ok(value) => write!(f, "Ok({value})"),
+            Self::Err(value) => write!(f, "Err({value})"),
             Self::Unit => f.write_str("()"),
         }
     }
@@ -100,6 +104,22 @@ fn eval(expr: &Expr, env: &Env, program: &Program, depth: usize) -> Result<Flow,
                 values.push(take_value!(eval(item, env, program, depth)));
             }
             Value::Array(values)
+        }
+        ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(inner, env, program, depth)))),
+        ExprKind::Err(inner) => Value::Err(Box::new(take_value!(eval(inner, env, program, depth)))),
+        ExprKind::Try(inner) => {
+            let value = take_value!(eval(inner, env, program, depth));
+            match value {
+                Value::Ok(value) => *value,
+                Value::Err(value) => return Ok(Flow::Return(Value::Err(value))),
+                _ => {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid runtime propagation",
+                    ));
+                }
+            }
         }
         ExprKind::Var(name) => {
             env.get(name)
