@@ -13,6 +13,7 @@ struct Signature {
     ret: Type,
     fields: Option<Vec<(String, Type)>>,
     variants: Option<Vec<EnumVariant>>,
+    spawn_safe: bool,
 }
 #[derive(Clone)]
 struct Binding {
@@ -29,19 +30,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     let mut types = HashMap::new();
     let mut record_names = HashSet::new();
     let mut arities = HashMap::new();
-    let io_error = builtins::io_error_decl();
-    record_names.insert(io_error.name.clone());
-    arities.insert(io_error.name.clone(), 0);
-    signatures.insert(
-        io_error.name.clone(),
-        Signature {
-            type_params: Vec::new(),
-            params: Vec::new(),
-            ret: Type::Named(io_error.name),
-            fields: None,
-            variants: Some(io_error.variants),
-        },
-    );
+    for builtin in [builtins::io_error_decl(), builtins::task_error_decl()] {
+        record_names.insert(builtin.name.clone());
+        arities.insert(builtin.name.clone(), 0);
+        signatures.insert(
+            builtin.name.clone(),
+            Signature {
+                type_params: Vec::new(),
+                params: Vec::new(),
+                ret: Type::Named(builtin.name),
+                fields: None,
+                variants: Some(builtin.variants),
+                spawn_safe: false,
+            },
+        );
+    }
     for (name, params, ret) in [
         (
             builtins::READ_TEXT,
@@ -62,13 +65,28 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 ret,
                 fields: None,
                 variants: None,
+                spawn_safe: false,
             },
         );
     }
+    signatures.insert(
+        builtins::JOIN.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Task(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::Result(
+                Box::new(Type::Param("T".to_owned())),
+                Box::new(Type::Named(builtins::TASK_ERROR.to_owned())),
+            ),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
     for record in &program.records {
         if matches!(
             record.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result" | "read_text" | "lines"
+            "i32" | "bool" | "String" | "Unit" | "Result" | "Task" | "read_text" | "lines" | "join"
         ) || !record_names.insert(record.name.clone())
         {
             return Err(Diagnostic::new(
@@ -82,7 +100,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     for enum_decl in &program.enums {
         if matches!(
             enum_decl.name.as_str(),
-            "i32" | "bool" | "String" | "Unit" | "Result" | "read_text" | "lines"
+            "i32" | "bool" | "String" | "Unit" | "Result" | "Task" | "read_text" | "lines" | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
             return Err(Diagnostic::new(
@@ -110,6 +128,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 ret: Type::Named(enum_decl.name.clone()),
                 fields: None,
                 variants: Some(enum_decl.variants.clone()),
+                spawn_safe: false,
             },
         );
     }
@@ -163,6 +182,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             },
             fields: Some(record.fields.clone()),
             variants: None,
+            spawn_safe: false,
         };
         signatures.insert(record.name.clone(), signature);
     }
@@ -196,6 +216,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             ret: function.ret.clone(),
             fields: None,
             variants: None,
+            spawn_safe: function_is_spawn_safe(&function.name, program, &mut HashSet::new()),
         };
         if signatures
             .insert(function.name.clone(), signature)
@@ -250,7 +271,7 @@ fn validate_params(
             || names.contains(param)
             || matches!(
                 param.as_str(),
-                "i32" | "bool" | "String" | "Unit" | "Result"
+                "i32" | "bool" | "String" | "Unit" | "Result" | "Task"
             )
         {
             return Err(Diagnostic::new(
@@ -263,11 +284,89 @@ fn validate_params(
     Ok(())
 }
 
+fn function_is_spawn_safe(name: &str, program: &Program, visiting: &mut HashSet<String>) -> bool {
+    let Some(function) = program
+        .functions
+        .iter()
+        .find(|function| function.name == name)
+    else {
+        return false;
+    };
+    if !function.type_params.is_empty() {
+        return false;
+    }
+    if !visiting.insert(name.to_owned()) {
+        return true;
+    }
+    let safe = expression_is_spawn_safe(&function.body, program, visiting);
+    visiting.remove(name);
+    safe
+}
+
+fn expression_is_spawn_safe(
+    expr: &Expr,
+    program: &Program,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match &expr.kind {
+        ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::String(_) | ExprKind::Var(_) => true,
+        ExprKind::Variant(_, _, payload) => payload
+            .as_ref()
+            .is_none_or(|value| expression_is_spawn_safe(value, program, visiting)),
+        ExprKind::Array(items) => items
+            .iter()
+            .all(|item| expression_is_spawn_safe(item, program, visiting)),
+        ExprKind::Index(left, right) | ExprKind::Binary(left, _, right) => {
+            expression_is_spawn_safe(left, program, visiting)
+                && expression_is_spawn_safe(right, program, visiting)
+        }
+        ExprKind::Field(value, _)
+        | ExprKind::Ok(value)
+        | ExprKind::Err(value)
+        | ExprKind::Try(value) => expression_is_spawn_safe(value, program, visiting),
+        ExprKind::Call(name, args) => {
+            name != builtins::READ_TEXT
+                && name != builtins::JOIN
+                && (name == builtins::LINES
+                    || program.records.iter().any(|record| record.name == *name)
+                    || function_is_spawn_safe(name, program, visiting))
+                && args
+                    .iter()
+                    .all(|arg| expression_is_spawn_safe(arg, program, visiting))
+        }
+        ExprKind::Spawn(_) => false,
+        ExprKind::If(condition, yes, no) => [condition, yes, no]
+            .iter()
+            .all(|value| expression_is_spawn_safe(value, program, visiting)),
+        ExprKind::Match(value, arms) => {
+            expression_is_spawn_safe(value, program, visiting)
+                && arms
+                    .iter()
+                    .all(|(_, body)| expression_is_spawn_safe(body, program, visiting))
+        }
+        ExprKind::Block(stmts, tail) => {
+            stmts.iter().all(|stmt| match stmt {
+                Stmt::Let { value, .. }
+                | Stmt::Assign { value, .. }
+                | Stmt::Return { value, .. }
+                | Stmt::Expr(value) => expression_is_spawn_safe(value, program, visiting),
+                Stmt::For { iterable, body, .. } => {
+                    expression_is_spawn_safe(iterable, program, visiting)
+                        && expression_is_spawn_safe(body, program, visiting)
+                }
+            }) && tail
+                .as_ref()
+                .is_none_or(|value| expression_is_spawn_safe(value, program, visiting))
+        }
+    }
+}
+
 fn mentions_param(ty: &Type, param: &str) -> bool {
     match ty {
         Type::Param(name) => name == param,
         Type::Applied(_, args) => args.iter().any(|arg| mentions_param(arg, param)),
         Type::Array(element) => mentions_param(element, param),
+        Type::Task(result) => mentions_param(result, param),
         Type::Result(ok, err) => mentions_param(ok, param) || mentions_param(err, param),
         _ => false,
     }
@@ -298,6 +397,7 @@ fn validate_type(
             Ok(())
         }
         Type::Array(element) => validate_type(element, arities, span),
+        Type::Task(result) => validate_type(result, arities, span),
         Type::Result(ok, err) => {
             validate_type(ok, arities, span)?;
             validate_type(err, arities, span)
@@ -365,6 +465,7 @@ fn type_has_cycle(ty: &Type, program: &Program, visiting: &mut HashSet<String>) 
         Type::Named(name) => record_has_cycle(name, &[], program, visiting),
         Type::Applied(name, args) => record_has_cycle(name, args, program, visiting),
         Type::Array(_) => false,
+        Type::Task(_) => false,
         Type::Result(ok, err) => {
             type_has_cycle(ok, program, visiting) || type_has_cycle(err, program, visiting)
         }
@@ -379,6 +480,7 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
     match (expected, actual) {
         (Type::Array(_), Type::EmptyArray) => true,
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::Task(expected), Type::Task(actual)) => compatible(expected, actual),
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
         {
@@ -405,6 +507,7 @@ fn join(left: &Type, right: &Type) -> Option<Type> {
         (Type::Array(_), Type::EmptyArray) => Some(left.clone()),
         (Type::EmptyArray, Type::Array(_)) => Some(right.clone()),
         (Type::Array(left), Type::Array(right)) => Some(Type::Array(Box::new(join(left, right)?))),
+        (Type::Task(left), Type::Task(right)) => Some(Type::Task(Box::new(join(left, right)?))),
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
         {
@@ -441,6 +544,7 @@ fn substitute(ty: &Type, inferred: &HashMap<String, Type>) -> Type {
     match ty {
         Type::Param(name) => inferred.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Type::Array(element) => Type::Array(Box::new(substitute(element, inferred))),
+        Type::Task(result) => Type::Task(Box::new(substitute(result, inferred))),
         Type::Result(ok, err) => Type::Result(
             Box::new(substitute(ok, inferred)),
             Box::new(substitute(err, inferred)),
@@ -480,6 +584,7 @@ fn infer_params(
             }
         }
         (Type::Array(a), Type::Array(b)) => infer_params(a, b, inferred, span),
+        (Type::Task(a), Type::Task(b)) => infer_params(a, b, inferred, span),
         (Type::Result(a_ok, a_err), Type::Result(b_ok, b_err)) => {
             infer_params(a_ok, b_ok, inferred, span)?;
             infer_params(a_err, b_err, inferred, span)
@@ -782,6 +887,29 @@ fn infer(
                 )?;
             }
             Ok(substitute(&signature.ret, &inferred))
+        }
+        ExprKind::Spawn(call) => {
+            let ExprKind::Call(name, _) = &call.kind else {
+                return Err(Diagnostic::new(
+                    "E117",
+                    call.span,
+                    "spawn requires a named function call",
+                ));
+            };
+            let result = type_of(call, env, signatures, return_type, types)?;
+            if !signatures
+                .get(name)
+                .is_some_and(|signature| signature.spawn_safe)
+            {
+                return Err(Diagnostic::new(
+                    "E117",
+                    expr.span,
+                    format!(
+                        "{name} cannot be spawned: only non-generic pure functions are supported"
+                    ),
+                ));
+            }
+            Ok(Type::Task(Box::new(result)))
         }
         ExprKind::If(condition, yes, no) => {
             let cond_type = type_of(condition, env, signatures, return_type, types)?;

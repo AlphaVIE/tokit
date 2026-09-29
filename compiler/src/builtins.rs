@@ -3,6 +3,8 @@ use crate::ast::{EnumDecl, EnumVariant, Span, Type};
 pub const READ_TEXT: &str = "read_text";
 pub const LINES: &str = "lines";
 pub const IO_ERROR: &str = "IoError";
+pub const TASK_ERROR: &str = "TaskError";
+pub const JOIN: &str = "join";
 pub const IO_ERROR_VARIANTS: [&str; 4] = ["Denied", "NotFound", "InvalidUtf8", "Other"];
 
 pub fn io_error_decl() -> EnumDecl {
@@ -24,4 +26,15 @@ pub fn read_text_result() -> Type {
         Box::new(Type::String),
         Box::new(Type::Named(IO_ERROR.to_owned())),
     )
+}
+
+pub fn task_error_decl() -> EnumDecl {
+    EnumDecl {
+        name: TASK_ERROR.to_owned(),
+        variants: vec![EnumVariant {
+            name: "Failed".to_owned(),
+            payload: None,
+        }],
+        span: Span { start: 0, end: 0 },
+    }
 }

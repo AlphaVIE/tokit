@@ -31,7 +31,7 @@ impl Stats {
 fn count_type(ty: &Type, nodes: &mut usize) {
     *nodes += 1;
     match ty {
-        Type::Array(element) => count_type(element, nodes),
+        Type::Array(element) | Type::Task(element) => count_type(element, nodes),
         Type::Result(ok, err) => {
             count_type(ok, nodes);
             count_type(err, nodes);
@@ -78,6 +78,10 @@ fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
             for arg in args {
                 count_expr(arg, nodes, ops);
             }
+        }
+        ExprKind::Spawn(call) => {
+            *ops += 1;
+            count_expr(call, nodes, ops);
         }
         ExprKind::If(condition, yes, no) => {
             *ops += 1;

@@ -35,6 +35,7 @@ fn native_output_matches_reference_interpreter() {
         "match_result",
         "payload_enum",
         "record",
+        "task_square",
     ] {
         let source =
             std::fs::read_to_string(root.join("examples").join(format!("{name}.tok"))).unwrap();

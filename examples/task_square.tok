@@ -1,0 +1,8 @@
+fn square(x:i32)->i32{x*x}
+fn main()->Result<i32,TaskError>{
+    let left:Task<i32> =spawn square(6);
+    let right:Task<i32> =spawn square(7);
+    let a:i32=join(left)?;
+    let b:i32=join(right)?;
+    Ok(a+b)
+}

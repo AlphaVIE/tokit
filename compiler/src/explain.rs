@@ -49,6 +49,8 @@ fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("filesystem read (requires grant)");
             } else if name == builtins::LINES {
                 facts.operations.insert("line splitting");
+            } else if name == builtins::JOIN {
+                facts.operations.insert("task join");
             }
             if facts.record_names.contains(name) {
                 facts.constructors.insert(name.clone());
@@ -58,6 +60,10 @@ fn visit(expr: &Expr, facts: &mut Facts) {
             for arg in args {
                 visit(arg, facts);
             }
+        }
+        ExprKind::Spawn(call) => {
+            facts.operations.insert("task spawn");
+            visit(call, facts);
         }
         ExprKind::If(condition, yes, no) => {
             facts.operations.insert("branching");

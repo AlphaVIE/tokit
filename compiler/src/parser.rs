@@ -78,6 +78,12 @@ impl Parser {
                 self.expect(Kind::Gt)?;
                 Ok(Type::Result(Box::new(ok), Box::new(err)))
             }
+            "Task" => {
+                self.expect(Kind::Lt)?;
+                let result = self.ty()?;
+                self.expect(Kind::Gt)?;
+                Ok(Type::Task(Box::new(result)))
+            }
             _ if self.type_params.contains(&name) => Ok(Type::Param(name)),
             _ if self.at(&Kind::Lt) => {
                 self.bump();
@@ -505,6 +511,20 @@ impl Parser {
                 Ok(Expr {
                     kind: ExprKind::Match(Box::new(value), arms),
                     span: token.span.join(end),
+                })
+            }
+            Kind::Spawn => {
+                let call = self.atom()?;
+                if !matches!(call.kind, ExprKind::Call(_, _)) {
+                    return Err(Diagnostic::new(
+                        "E002",
+                        call.span,
+                        "spawn requires a named function call",
+                    ));
+                }
+                Ok(Expr {
+                    span: token.span.join(call.span),
+                    kind: ExprKind::Spawn(Box::new(call)),
                 })
             }
             _ => Err(Diagnostic::new("E002", token.span, "expected expression")),
