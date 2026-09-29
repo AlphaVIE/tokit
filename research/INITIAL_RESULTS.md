@@ -1,6 +1,6 @@
 # Initial source-token measurements
 
-Run on 2026-09-29 with Python 3.11.9 and `tiktoken==0.14.0`:
+Initial run on 2026-09-29 with Python 3.11.9 and `tiktoken==0.14.0`:
 
 ```powershell
 python -m venv .venv
@@ -16,4 +16,4 @@ python -m venv .venv
 
 All files contain ASCII only and LF line endings. On this single seed fixture, A has the lowest source-token count in both tested encodings. C's repeated IDs and separators cost substantially more tokens. B's symbols do not automatically save tokens. These are observations about the current examples, **not** evidence that A is the best language design. The examples are unparsed, the standard APIs are abstract, and both tokenizers come from the same library family.
 
-The next experiment should refine equivalent expressions, add more fixtures and a non-OpenAI tokenizer, then test generation and repairs. A is the practical starting point for the first parser prototype because its source-token count is currently favorable and its syntax can be parsed with familiar techniques. This is a provisional engineering recommendation, not a grammar commitment.
+The follow-up experiment added five fixtures and a Qwen tokenizer. See [CROSS_FAMILY_RESULTS.md](CROSS_FAMILY_RESULTS.md). A is the practical starting point for the first parser prototype because its source-token count is currently favorable and its syntax can be parsed with familiar techniques. This is a provisional engineering recommendation, not a grammar commitment.

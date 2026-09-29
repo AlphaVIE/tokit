@@ -1,0 +1,6 @@
+(~ fs)
+(^ line_count () ((path str)) (? i32 IoError)
+  (= text str (! (fs.read path)))
+  (= count i32 0)
+  (* line (text.lines) (:= count (add count 1)))
+  (Ok count))

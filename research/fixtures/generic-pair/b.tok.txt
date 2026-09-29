@@ -1,0 +1,3 @@
+(# Pair (T) (left T) (right T))
+(^ flip (T) ((p (Pair T))) (Pair T)
+  (Pair (. p right) (. p left)))

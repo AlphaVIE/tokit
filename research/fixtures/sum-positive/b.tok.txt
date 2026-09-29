@@ -1,0 +1,4 @@
+(^ sum_positive () ((xs [i32])) i32
+  (= total i32 0)
+  (* x xs (% (> x 0) (:= total (add total x))))
+  total)

@@ -1,0 +1,7 @@
+use fs;
+fn line_count(path:str)->Result<i32,IoError>{
+  let text:str=fs.read(path)?;
+  let count:i32=0;
+  for line in text.lines(){count=count+1;}
+  Ok(count)
+}

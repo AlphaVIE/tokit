@@ -1,0 +1,5 @@
+fn count_positive(xs:[i32])->i32{
+  let total:i32=0;
+  for x in xs{if x>0{total=total+1;}}
+  total
+}
