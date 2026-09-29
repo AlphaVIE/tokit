@@ -1,7 +1,72 @@
 use std::{env, fs, path::Path, process};
 
+fn run_command(args: &[String]) {
+    let mut index = 0;
+    let mut json = false;
+    let mut root = None;
+    while let Some(flag) = args.get(index) {
+        match flag.as_str() {
+            "--json" if !json => {
+                json = true;
+                index += 1;
+            }
+            "--allow-read" if root.is_none() => {
+                root = args.get(index + 1).map(String::as_str);
+                if root.is_none() {
+                    eprintln!(
+                        "usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]"
+                    );
+                    process::exit(2);
+                }
+                index += 2;
+            }
+            _ => break,
+        }
+    }
+    let Some(path) = args.get(index) else {
+        eprintln!("usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]");
+        process::exit(2);
+    };
+    let remaining = &args[index + 1..];
+    let program_args = match remaining {
+        [] => &[][..],
+        [separator, rest @ ..] if separator == "--" => rest,
+        _ => {
+            eprintln!("usage: tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...]");
+            process::exit(2);
+        }
+    };
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("could not read {path}: {error}");
+            process::exit(2);
+        }
+    };
+    let result = tokit_compiler::run_with_runtime_args(&source, root.map(Path::new), program_args);
+    match result {
+        Ok(value) if json => println!(
+            "{{\"ok\":true,\"result\":\"{}\"}}",
+            tokit_compiler::diagnostic::escape_json(&value.to_string())
+        ),
+        Ok(value) => println!("{value}"),
+        Err(diagnostic) if json => {
+            println!("{{\"ok\":false,\"error\":{}}}", diagnostic.json(&source));
+            process::exit(1);
+        }
+        Err(diagnostic) => {
+            eprintln!("{}", diagnostic.display(&source));
+            process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.get(1).is_some_and(|command| command == "run") {
+        run_command(&args[2..]);
+        return;
+    }
     let fmt = match args.as_slice() {
         [_, command, path] if command == "fmt" => Some(("print", path)),
         [_, command, mode, path]
@@ -44,26 +109,6 @@ fn main() {
         }
         return;
     }
-    if let [_, command, flag, root, path] = args.as_slice()
-        && command == "run"
-        && flag == "--allow-read"
-    {
-        let source = match fs::read_to_string(path) {
-            Ok(source) => source,
-            Err(error) => {
-                eprintln!("could not read {path}: {error}");
-                process::exit(2);
-            }
-        };
-        match tokit_compiler::run_with_read_root(&source, Path::new(root)) {
-            Ok(value) => println!("{value}"),
-            Err(diagnostic) => {
-                eprintln!("{}", diagnostic.display(&source));
-                process::exit(1);
-            }
-        }
-        return;
-    }
     if let [_, command, path, flag, output] = args.as_slice()
         && command == "build"
         && flag == "-o"
@@ -90,17 +135,13 @@ fn main() {
         return;
     }
     let (json, path) = match args.as_slice() {
-        [_, command, path] if matches!(command.as_str(), "check" | "run" | "explain" | "stats") => {
+        [_, command, path] if matches!(command.as_str(), "check" | "explain" | "stats") => {
             (false, path)
         }
-        [_, command, flag, path]
-            if matches!(command.as_str(), "check" | "run") && flag == "--json" =>
-        {
-            (true, path)
-        }
+        [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok <check|run> [--json] <file.tok> | tok run --allow-read <path> <file.tok> | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] <file.tok> [-- arguments...] | tok <explain|stats> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
             );
             process::exit(2);
         }
@@ -119,7 +160,7 @@ fn main() {
         }
         "stats" => tokit_compiler::check(&source)
             .map(|program| tokit_compiler::stats::measure(&source, &program).json()),
-        _ => tokit_compiler::run(&source).map(|value| value.to_string()),
+        _ => unreachable!("run is handled before this command match"),
     };
     match result {
         Ok(output) if json => println!(

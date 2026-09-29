@@ -53,6 +53,8 @@ fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("filesystem read (requires grant)");
             } else if name == builtins::LINES {
                 facts.operations.insert("line splitting");
+            } else if name == builtins::ARGS {
+                facts.operations.insert("program arguments");
             } else if name == builtins::JOIN {
                 facts.operations.insert("task join");
             }

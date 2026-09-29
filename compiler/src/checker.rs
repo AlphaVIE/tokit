@@ -56,6 +56,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             vec![Type::String],
             Type::Array(Box::new(Type::String)),
         ),
+        (
+            builtins::ARGS,
+            Vec::new(),
+            Type::Array(Box::new(Type::String)),
+        ),
     ] {
         signatures.insert(
             name.to_owned(),
@@ -95,6 +100,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "Task"
                 | "read_text"
                 | "lines"
+                | "args"
                 | "join"
         ) || !record_names.insert(record.name.clone())
         {
@@ -118,6 +124,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "Task"
                 | "read_text"
                 | "lines"
+                | "args"
                 | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
@@ -349,6 +356,7 @@ fn expression_is_spawn_safe(
         | ExprKind::Try(value) => expression_is_spawn_safe(value, program, visiting),
         ExprKind::Call(name, args) => {
             name != builtins::READ_TEXT
+                && name != builtins::ARGS
                 && name != builtins::JOIN
                 && (name == builtins::LINES
                     || program.records.iter().any(|record| record.name == *name)
