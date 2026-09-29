@@ -8,6 +8,7 @@ pub enum Kind {
     String(String),
     Fn,
     Struct,
+    Enum,
     Let,
     Var,
     For,
@@ -26,6 +27,7 @@ pub enum Kind {
     LBracket,
     RBracket,
     Colon,
+    ColonColon,
     Comma,
     Semicolon,
     Arrow,
@@ -75,6 +77,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
             match &source[start..i] {
                 "fn" => Kind::Fn,
                 "struct" => Kind::Struct,
+                "enum" => Kind::Enum,
                 "let" => Kind::Let,
                 "var" => Kind::Var,
                 "for" => Kind::For,
@@ -146,6 +149,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, Diagnostic> {
                 b'}' => Kind::RBrace,
                 b'[' => Kind::LBracket,
                 b']' => Kind::RBracket,
+                b':' if bytes.get(i) == Some(&b':') => {
+                    i += 1;
+                    Kind::ColonColon
+                }
                 b':' => Kind::Colon,
                 b',' => Kind::Comma,
                 b';' => Kind::Semicolon,

@@ -113,6 +113,7 @@ fn emit_expr(expr: &Expr, source: &str, types: &HashMap<Span, Type>) -> String {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::Bool(value) => value.to_string(),
         ExprKind::String(value) => format!("{:?}.to_owned()", value),
+        ExprKind::Variant(name, variant) => format!("{}::{}", user_name(name), user_name(variant)),
         ExprKind::Array(values) => format!(
             "vec![{}]",
             values
@@ -275,6 +276,36 @@ pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
         ));
     }
     let mut out = String::from(PRELUDE);
+    for enum_decl in &program.enums {
+        let name = user_name(&enum_decl.name);
+        let variants = enum_decl
+            .variants
+            .iter()
+            .map(|variant| user_name(variant))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(out, "#[derive(Clone)] enum {name} {{ {variants} }}")
+            .expect("writing to String cannot fail");
+        let arms = enum_decl
+            .variants
+            .iter()
+            .map(|variant| {
+                format!(
+                    "Self::{} => {:?}.to_owned()",
+                    user_name(variant),
+                    format!("{}::{variant}", enum_decl.name)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let arms = if arms.is_empty() {
+            "_ => unreachable!()".to_owned()
+        } else {
+            arms
+        };
+        writeln!(out, "impl __TokRender for {name} {{ fn tok_render(&self) -> String {{ match self {{ {arms} }} }} }}")
+            .expect("writing to String cannot fail");
+    }
     for record in &program.records {
         let name = user_name(&record.name);
         let fields = record
