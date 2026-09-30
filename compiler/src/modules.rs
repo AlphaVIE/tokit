@@ -12,6 +12,13 @@ use crate::sources::SourceMap;
 pub struct LoadedProgram {
     pub program: Program,
     pub sources: SourceMap,
+    pub modules: Vec<ModuleInfo>,
+}
+
+pub struct ModuleInfo {
+    pub source_id: SourceId,
+    pub imports: Vec<(String, SourceId)>,
+    pub exports: Vec<String>,
 }
 
 pub struct LoadError {
@@ -167,6 +174,46 @@ pub fn load(path: &Path) -> Result<LoadedProgram, LoadError> {
             sources: loader.sources,
         });
     }
+    let modules = loader
+        .units
+        .iter()
+        .map(|unit| {
+            let unit = unit.as_ref().expect("parsed module");
+            let mut imports = unit
+                .aliases
+                .iter()
+                .map(|(alias, target)| (alias.clone(), *target))
+                .collect::<Vec<_>>();
+            imports.sort_by(|left, right| left.0.cmp(&right.0));
+            let mut exports = unit
+                .program
+                .records
+                .iter()
+                .filter(|record| record.public)
+                .map(|record| record.name.clone())
+                .chain(
+                    unit.program
+                        .enums
+                        .iter()
+                        .filter(|declaration| declaration.public)
+                        .map(|declaration| declaration.name.clone()),
+                )
+                .chain(
+                    unit.program
+                        .functions
+                        .iter()
+                        .filter(|function| function.public)
+                        .map(|function| function.name.clone()),
+                )
+                .collect::<Vec<_>>();
+            exports.sort();
+            ModuleInfo {
+                source_id: unit.source_id,
+                imports,
+                exports,
+            }
+        })
+        .collect();
     let program = match module_resolver::resolve(&mut loader.units, &loader.order, &loader.sources)
     {
         Ok(program) => program,
@@ -186,5 +233,6 @@ pub fn load(path: &Path) -> Result<LoadedProgram, LoadError> {
     Ok(LoadedProgram {
         program,
         sources: loader.sources,
+        modules,
     })
 }

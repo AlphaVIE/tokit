@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use tokit_compiler::{check, interpreter, modules, native};
+use tokit_compiler::{ai_index, check, interpreter, modules, native};
 
 fn temporary_directory(label: &str) -> PathBuf {
     let nonce = std::time::SystemTime::now()
@@ -42,6 +42,18 @@ fn diamond_imports_load_once_and_run_in_both_backends() {
     assert_eq!(loaded.sources.len(), 4);
     assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "10");
     assert_eq!(loaded.program.functions.len(), 4);
+    let index = ai_index::index_loaded(&loaded);
+    assert!(index.starts_with(
+        "{\"version\":3,\"sources\":[\"main.tok\",\"a.tok\",\"shared.tok\",\"b.tok\"]"
+    ));
+    assert!(
+        index.contains(
+            "\"modules\":[{\"source\":0,\"imports\":[[\"a\",1],[\"b\",3]],\"exports\":[]}"
+        )
+    );
+    assert!(index.contains("{\"source\":1,\"imports\":[[\"shared\",2]],\"exports\":[\"twice\"]}"));
+    assert!(index.contains("{\"source\":2,\"imports\":[],\"exports\":[\"double\"]}"));
+    assert!(index.contains("{\"source\":3,\"imports\":[[\"shared\",2]],\"exports\":[\"four\"]}"));
     let generated = native::emit_with_sources(&loaded.program, &loaded.sources).unwrap();
     let canonical_parent = loaded
         .sources
@@ -141,7 +153,7 @@ fn cli_commands_load_imports_and_index_sources() {
         ("test", "1 passed; 0 failed"),
         ("explain", "triple"),
         ("stats", "\"dependencies\":1"),
-        ("ai-index", "\"version\":2"),
+        ("ai-index", "\"version\":3"),
     ] {
         let input = if command == "test" {
             root.join("examples/modules/tests.tok")
@@ -225,6 +237,12 @@ fn modules_keep_private_names_separate_and_expose_qualified_types() {
             .iter()
             .any(|declaration| declaration.name == "b::Event")
     );
+    let index = ai_index::index_loaded(&loaded);
+    assert!(index.contains("\"exports\":[\"Box\",\"answer\",\"id\",\"make\"]"));
+    assert!(index.contains("\"name\":\"a::Hidden\""));
+    assert!(index.contains("\"public\":false"));
+    assert!(index.contains("\"name\":\"a::Box\""));
+    assert!(index.contains("\"public\":true"));
     if Command::new("rustc").arg("--version").output().is_ok() {
         let output = directory.join(format!("program{}", std::env::consts::EXE_SUFFIX));
         native::build_with_sources(&loaded.program, &loaded.sources, &output).unwrap();

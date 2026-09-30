@@ -261,9 +261,7 @@ fn main() {
         "check" => "ok".to_owned(),
         "explain" => tokit_compiler::explain::explain(&loaded.program),
         "stats" => tokit_compiler::stats::measure_sources(&loaded.sources, &loaded.program).json(),
-        "ai-index" => {
-            tokit_compiler::ai_index::index_with_sources(&loaded.program, &loaded.sources)
-        }
+        "ai-index" => tokit_compiler::ai_index::index_loaded(&loaded),
         _ => unreachable!("run is handled before this command match"),
     };
     if json {

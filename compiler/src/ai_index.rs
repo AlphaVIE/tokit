@@ -6,6 +6,7 @@ use std::fmt::Write;
 use crate::ast::{Program, Span, Type};
 use crate::diagnostic::escape_json;
 use crate::explain::{Facts, visit};
+use crate::modules::{LoadedProgram, ModuleInfo};
 use crate::sources::SourceMap;
 
 fn string(value: &str) -> String {
@@ -38,20 +39,43 @@ fn fields(fields: &[(String, Type)]) -> String {
     )
 }
 
+fn add_visibility(out: &mut String, enabled: bool, public: bool) {
+    if enabled {
+        assert_eq!(out.pop(), Some('}'));
+        write!(out, ",\"public\":{public}}}").expect("writing to String cannot fail");
+    }
+}
+
 /// Return a source-order JSON index. Call only after static checking succeeds.
 pub fn index(program: &Program) -> String {
-    index_impl(program, None)
+    index_impl(program, None, None)
 }
 
 pub fn index_with_sources(program: &Program, sources: &SourceMap) -> String {
     if sources.len() == 1 {
         index(program)
     } else {
-        index_impl(program, Some(sources))
+        index_impl(program, Some(sources), None)
     }
 }
 
-fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
+pub fn index_loaded(loaded: &LoadedProgram) -> String {
+    if loaded.sources.len() == 1 {
+        index(&loaded.program)
+    } else {
+        index_impl(
+            &loaded.program,
+            Some(&loaded.sources),
+            Some(&loaded.modules),
+        )
+    }
+}
+
+fn index_impl(
+    program: &Program,
+    sources: Option<&SourceMap>,
+    modules: Option<&[ModuleInfo]>,
+) -> String {
     let multi_source = sources.is_some();
     let record_names = program
         .records
@@ -96,7 +120,35 @@ fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
             })
             .collect::<Vec<_>>()
             .join(",");
-        format!("{{\"version\":2,\"sources\":[{paths}],\"records\":[")
+        let mut header = format!(
+            "{{\"version\":{},\"sources\":[{paths}]",
+            if modules.is_some() { 3 } else { 2 }
+        );
+        if let Some(modules) = modules {
+            header.push_str(",\"modules\":[");
+            for (index, module) in modules.iter().enumerate() {
+                if index > 0 {
+                    header.push(',');
+                }
+                let imports = module
+                    .imports
+                    .iter()
+                    .map(|(alias, target)| format!("[{},{}]", string(alias), target.0))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                write!(
+                    header,
+                    "{{\"source\":{},\"imports\":[{}],\"exports\":{}}}",
+                    module.source_id.0,
+                    imports,
+                    strings(module.exports.iter().map(String::as_str))
+                )
+                .expect("writing to String cannot fail");
+            }
+            header.push(']');
+        }
+        header.push_str(",\"records\":[");
+        header
     } else {
         String::from("{\"version\":1,\"records\":[")
     };
@@ -113,6 +165,7 @@ fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
             fields(&record.fields)
         )
         .expect("writing to String cannot fail");
+        add_visibility(&mut out, modules.is_some(), record.public);
     }
     out.push_str("],\"enums\":[");
     for (index, decl) in program.enums.iter().enumerate() {
@@ -143,6 +196,7 @@ fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
             variants
         )
         .expect("writing to String cannot fail");
+        add_visibility(&mut out, modules.is_some(), decl.public);
     }
     out.push_str("],\"functions\":[");
     for (index, (function, facts)) in entries.iter().enumerate() {
@@ -174,6 +228,7 @@ fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
             strings(effects[&function.name].iter().copied())
         )
         .expect("writing to String cannot fail");
+        add_visibility(&mut out, modules.is_some(), function.public);
     }
     out.push_str("]}");
     out
