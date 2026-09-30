@@ -14,6 +14,8 @@ Experimental file imports let the CLI load relative `.tok` files inside the entr
 
 `Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.
 
+Pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` expose UTF-8 bytes for parser experiments. [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows a round trip; the integer-array representation is provisional.
+
 Programs can read their own arguments with `args()->[String]`. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
 
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
