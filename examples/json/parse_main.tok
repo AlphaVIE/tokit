@@ -1,0 +1,1 @@
+import json="json.tok";fn main()->String{match json::parse("{\"message\":\"\\uD83D\\uDE00\",\"items\":[null,true,-12.5e+2]}"){Ok(value)=>match json::render(value){Ok(text)=>text,Err(error)=>"render error"},Err(error)=>"parse error"}}

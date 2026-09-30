@@ -1,0 +1,1 @@
+import json="json.tok";fn main()->Result<json::Value,json::JsonParseError>{json::parse("[1,]")}
