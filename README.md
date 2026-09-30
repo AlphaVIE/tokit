@@ -16,6 +16,8 @@ Experimental file imports let the CLI load relative `.tok` files inside the entr
 
 Pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` expose UTF-8 bytes for parser experiments. [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows a round trip; the integer-array representation is provisional.
 
+An experimental [JSON module](spec/JSON_MODULE_CANDIDATE.md) defines recursive values and renders valid compact JSON in Tokit. Parsing and performance work remain open.
+
 Programs can read their own arguments with `args()->[String]`. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
 
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
