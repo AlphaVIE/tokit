@@ -158,7 +158,23 @@ fn run_entry(
             format!("{name} must have no parameters or type parameters"),
         ));
     }
-    invoke(program, function, Vec::new(), 0, &runtime)
+    // The reference evaluator uses the host call stack. Give its fixed depth
+    // limit enough room even on hosts with small default thread stacks.
+    std::thread::scope(|scope| {
+        let handle = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn_scoped(scope, || invoke(program, function, Vec::new(), 0, &runtime))
+            .map_err(|error| {
+                Diagnostic::new(
+                    "E204",
+                    function.span,
+                    format!("cannot start evaluator: {error}"),
+                )
+            })?;
+        handle
+            .join()
+            .map_err(|_| Diagnostic::new("E204", function.span, "reference evaluator panicked"))?
+    })
 }
 
 fn invoke(
@@ -189,6 +205,49 @@ fn invoke(
             "loop control escaped its loop",
         )),
     }
+}
+
+fn eval_utf8_builtin(
+    name: &str,
+    values: &[Value],
+    span: Span,
+) -> Option<Result<Value, Diagnostic>> {
+    if name == builtins::UTF8_BYTES {
+        let [Value::String(text)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid utf8_bytes call",
+            )));
+        };
+        return Some(Ok(Value::Array(
+            text.bytes()
+                .map(|byte| Value::I32(i32::from(byte)))
+                .collect(),
+        )));
+    }
+    if name == builtins::UTF8_DECODE {
+        let [Value::Array(items)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid utf8_decode call",
+            )));
+        };
+        let bytes = items
+            .iter()
+            .map(|item| match item {
+                Value::I32(value) => u8::try_from(*value).ok(),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>();
+        return Some(Ok(bytes
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .map_or(Value::None, |text| {
+                Value::Some(Box::new(Value::String(text)))
+            })));
+    }
+    None
 }
 
 fn eval(
@@ -293,6 +352,9 @@ fn eval(
             let mut values = Vec::new();
             for arg in args {
                 values.push(take_value!(eval(arg, env, program, depth, runtime)));
+            }
+            if let Some(value) = eval_utf8_builtin(name, &values, expr.span) {
+                return Ok(Flow::Value(value?));
             }
             if name == builtins::READ_TEXT {
                 let [Value::String(path)] = values.as_slice() else {

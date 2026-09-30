@@ -78,6 +78,10 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("array length");
             } else if name == builtins::PARSE_I32 {
                 facts.operations.insert("integer parsing");
+            } else if name == builtins::UTF8_BYTES {
+                facts.operations.insert("UTF-8 encoding");
+            } else if name == builtins::UTF8_DECODE {
+                facts.operations.insert("UTF-8 decoding");
             } else if name == builtins::JOIN {
                 facts.operations.insert("task join");
                 facts.effects.insert("task.join");
