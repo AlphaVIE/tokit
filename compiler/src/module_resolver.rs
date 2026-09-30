@@ -59,7 +59,15 @@ impl UseKind {
         match self {
             Self::Call => matches!(
                 name,
-                "read_text" | "write_text" | "lines" | "args" | "len" | "parse_i32" | "join"
+                "read_text"
+                    | "write_text"
+                    | "lines"
+                    | "args"
+                    | "len"
+                    | "parse_i32"
+                    | "utf8_bytes"
+                    | "utf8_decode"
+                    | "join"
             ),
             Self::Type | Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
@@ -85,6 +93,8 @@ fn reserved(name: &str) -> bool {
             | "args"
             | "len"
             | "parse_i32"
+            | "utf8_bytes"
+            | "utf8_decode"
             | "join"
     )
 }

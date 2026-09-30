@@ -114,6 +114,13 @@ fn __tok_parse_i32(text: String) -> Result<i32, __TokParseError> {
         _ => __TokParseError::Invalid,
     })
 }
+fn __tok_utf8_bytes(text: String) -> Vec<i32> {
+    text.into_bytes().into_iter().map(i32::from).collect()
+}
+fn __tok_utf8_decode(values: Vec<i32>) -> Option<String> {
+    let bytes = values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
 #[derive(Clone)] enum __TokTaskError { Failed }
 impl __TokRender for __TokTaskError {
     fn tok_render(&self) -> String { "TaskError::Failed".to_owned() }
@@ -358,6 +365,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
+                builtins::UTF8_BYTES => "__tok_utf8_bytes".to_owned(),
+                builtins::UTF8_DECODE => "__tok_utf8_decode".to_owned(),
                 builtins::LEN => "__tok_len".to_owned(),
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),

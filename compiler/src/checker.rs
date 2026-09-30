@@ -82,6 +82,16 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             vec![Type::String],
             builtins::parse_i32_result(),
         ),
+        (
+            builtins::UTF8_BYTES,
+            vec![Type::String],
+            Type::Array(Box::new(Type::I32)),
+        ),
+        (
+            builtins::UTF8_DECODE,
+            vec![Type::Array(Box::new(Type::I32))],
+            Type::Option(Box::new(Type::String)),
+        ),
     ] {
         signatures.insert(
             name.to_owned(),
@@ -136,6 +146,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "args"
                 | "len"
                 | "parse_i32"
+                | "utf8_bytes"
+                | "utf8_decode"
                 | "join"
         ) || !record_names.insert(record.name.clone())
         {
@@ -163,6 +175,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "args"
                 | "len"
                 | "parse_i32"
+                | "utf8_bytes"
+                | "utf8_decode"
                 | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
@@ -400,7 +414,11 @@ fn expression_is_spawn_safe(
                 && name != builtins::JOIN
                 && (matches!(
                     name.as_str(),
-                    builtins::LINES | builtins::LEN | builtins::PARSE_I32
+                    builtins::LINES
+                        | builtins::LEN
+                        | builtins::PARSE_I32
+                        | builtins::UTF8_BYTES
+                        | builtins::UTF8_DECODE
                 ) || program.records.iter().any(|record| record.name == *name)
                     || function_is_spawn_safe(name, program, visiting))
                 && args
