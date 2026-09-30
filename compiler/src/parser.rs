@@ -4,12 +4,14 @@ use crate::ast::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
+use std::collections::HashSet;
 
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     type_params: Vec<String>,
     loop_depth: usize,
+    import_aliases: HashSet<String>,
 }
 
 impl Parser {
@@ -19,6 +21,7 @@ impl Parser {
             pos: 0,
             type_params: Vec::new(),
             loop_depth: 0,
+            import_aliases: HashSet::new(),
         }
     }
 
@@ -96,7 +99,11 @@ impl Parser {
             self.expect(Kind::RBracket)?;
             return Ok(Type::Array(Box::new(element)));
         }
-        let (name, _) = self.ident()?;
+        let (mut name, _) = self.ident()?;
+        if self.import_aliases.contains(&name) && self.at(&Kind::ColonColon) {
+            self.bump();
+            name = format!("{name}::{}", self.ident()?.0);
+        }
         match name.as_str() {
             "i32" => Ok(Type::I32),
             "bool" => Ok(Type::Bool),
@@ -173,6 +180,15 @@ impl Parser {
                         "imports must precede declarations",
                     ));
                 }
+                let (alias, alias_span) = self.ident()?;
+                if !self.import_aliases.insert(alias.clone()) {
+                    return Err(Diagnostic::new(
+                        "E118",
+                        alias_span,
+                        "duplicate import alias",
+                    ));
+                }
+                self.expect(Kind::Eq)?;
                 let path = self.bump();
                 let Kind::String(path_text) = path.kind else {
                     return Err(Diagnostic::new(
@@ -183,18 +199,31 @@ impl Parser {
                 };
                 let end = self.expect(Kind::Semicolon)?.span;
                 imports.push(ImportDecl {
+                    alias,
                     path: path_text,
                     span: start.join(end),
                 });
-            } else if self.at(&Kind::Struct) {
-                declarations_started = true;
-                records.push(self.record()?);
-            } else if self.at(&Kind::Enum) {
-                declarations_started = true;
-                enums.push(self.enum_decl()?);
             } else {
                 declarations_started = true;
-                functions.push(self.function()?);
+                let public = if self.at(&Kind::Pub) {
+                    self.bump();
+                    true
+                } else {
+                    false
+                };
+                if self.at(&Kind::Struct) {
+                    let mut declaration = self.record()?;
+                    declaration.public = public;
+                    records.push(declaration);
+                } else if self.at(&Kind::Enum) {
+                    let mut declaration = self.enum_decl()?;
+                    declaration.public = public;
+                    enums.push(declaration);
+                } else {
+                    let mut declaration = self.function()?;
+                    declaration.public = public;
+                    functions.push(declaration);
+                }
             }
         }
         if functions.is_empty() && records.is_empty() && enums.is_empty() && imports.is_empty() {
@@ -238,6 +267,7 @@ impl Parser {
         let end = self.expect(Kind::RBrace)?.span;
         Ok(EnumDecl {
             name,
+            public: false,
             variants,
             span: start.join(end),
         })
@@ -265,6 +295,7 @@ impl Parser {
         self.type_params.clear();
         Ok(Record {
             name,
+            public: false,
             type_params,
             fields,
             span: start.join(end),
@@ -298,6 +329,7 @@ impl Parser {
         let span = start.join(body.span);
         Ok(Function {
             name,
+            public: false,
             type_params,
             params,
             ret,
@@ -489,6 +521,22 @@ impl Parser {
         Ok(left)
     }
 
+    fn call_args(&mut self) -> Result<(Vec<Expr>, Span), Diagnostic> {
+        self.expect(Kind::LParen)?;
+        let mut args = Vec::new();
+        if !self.at(&Kind::RParen) {
+            loop {
+                args.push(self.expr(0)?);
+                if !self.at(&Kind::Comma) {
+                    break;
+                }
+                self.bump();
+            }
+        }
+        let end = self.expect(Kind::RParen)?.span;
+        Ok((args, end))
+    }
+
     fn atom(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
         match token.kind {
@@ -546,32 +594,36 @@ impl Parser {
             Kind::Ident(name) => {
                 if self.at(&Kind::ColonColon) {
                     self.bump();
-                    let (variant, end) = self.ident()?;
-                    let (payload, end) = if self.at(&Kind::LParen) {
-                        self.bump();
-                        let payload = self.expr(0)?;
-                        let end = self.expect(Kind::RParen)?.span;
-                        (Some(Box::new(payload)), end)
+                    let (segment, end) = self.ident()?;
+                    if self.import_aliases.contains(&name) && !self.at(&Kind::ColonColon) {
+                        let (args, end) = self.call_args()?;
+                        Ok(Expr {
+                            kind: ExprKind::Call(format!("{name}::{segment}"), args),
+                            span: token.span.join(end),
+                        })
                     } else {
-                        (None, end)
-                    };
-                    Ok(Expr {
-                        kind: ExprKind::Variant(name, variant, payload),
-                        span: token.span.join(end),
-                    })
-                } else if self.at(&Kind::LParen) {
-                    self.bump();
-                    let mut args = Vec::new();
-                    if !self.at(&Kind::RParen) {
-                        loop {
-                            args.push(self.expr(0)?);
-                            if !self.at(&Kind::Comma) {
-                                break;
-                            }
+                        let (enum_name, variant, end) = if self.import_aliases.contains(&name) {
                             self.bump();
-                        }
+                            let (variant, end) = self.ident()?;
+                            (format!("{name}::{segment}"), variant, end)
+                        } else {
+                            (name, segment, end)
+                        };
+                        let (payload, end) = if self.at(&Kind::LParen) {
+                            self.bump();
+                            let payload = self.expr(0)?;
+                            let end = self.expect(Kind::RParen)?.span;
+                            (Some(Box::new(payload)), end)
+                        } else {
+                            (None, end)
+                        };
+                        Ok(Expr {
+                            kind: ExprKind::Variant(enum_name, variant, payload),
+                            span: token.span.join(end),
+                        })
                     }
-                    let end = self.expect(Kind::RParen)?.span;
+                } else if self.at(&Kind::LParen) {
+                    let (args, end) = self.call_args()?;
                     Ok(Expr {
                         kind: ExprKind::Call(name, args),
                         span: token.span.join(end),
@@ -694,7 +746,14 @@ impl Parser {
             Kind::Ident(name) if name == "_" => (PatternKind::Wildcard, token.span),
             Kind::Ident(name) => {
                 self.expect(Kind::ColonColon)?;
-                let (variant, end) = self.ident()?;
+                let (segment, end) = self.ident()?;
+                let (enum_name, variant, end) = if self.import_aliases.contains(&name) {
+                    self.expect(Kind::ColonColon)?;
+                    let (variant, end) = self.ident()?;
+                    (format!("{name}::{segment}"), variant, end)
+                } else {
+                    (name, segment, end)
+                };
                 let (binding, end) = if self.at(&Kind::LParen) {
                     self.bump();
                     let (binding, _) = self.ident()?;
@@ -704,7 +763,7 @@ impl Parser {
                     (None, end)
                 };
                 (
-                    PatternKind::Variant(name, variant, binding),
+                    PatternKind::Variant(enum_name, variant, binding),
                     token.span.join(end),
                 )
             }

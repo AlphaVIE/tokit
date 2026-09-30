@@ -1,7 +1,7 @@
 # Experimental test runner
 
 `tok test [--allow-read <path>] [--allow-write <path>] file.tok` checks the entry file and imports and discovers
-functions whose names begin with `test_`. Tests run in declaration order in the
+functions whose local names begin with `test_`, including tests in imported files. Reports prefix imported test names with their entry-relative module path. Tests run in declaration order in the
 reference interpreter; a `main` function is unnecessary. A test must have no
 parameters or type parameters and return `bool` or `Result<bool,E>`. `true` and
 `Ok(true)` pass. `false`, `Ok(false)`, `Err(value)`, and runtime diagnostics

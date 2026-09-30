@@ -189,6 +189,7 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
+    pub public: bool,
     pub type_params: Vec<String>,
     pub params: Vec<(String, Type)>,
     pub ret: Type,
@@ -199,6 +200,7 @@ pub struct Function {
 #[derive(Clone, Debug)]
 pub struct Record {
     pub name: String,
+    pub public: bool,
     pub type_params: Vec<String>,
     pub fields: Vec<(String, Type)>,
     pub span: Span,
@@ -207,6 +209,7 @@ pub struct Record {
 #[derive(Clone, Debug)]
 pub struct EnumDecl {
     pub name: String,
+    pub public: bool,
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }
@@ -219,6 +222,7 @@ pub struct EnumVariant {
 
 #[derive(Clone, Debug)]
 pub struct ImportDecl {
+    pub alias: String,
     pub path: String,
     pub span: Span,
 }

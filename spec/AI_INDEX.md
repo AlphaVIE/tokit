@@ -16,6 +16,9 @@ stable AST identities.
 When imports load multiple files, the index uses `version: 2`. A `sources`
 array contains entry-relative file paths in loader order, and each declaration span
 becomes `[source_id,start,end]`. Source IDs are indexes into `sources`.
+Imported declaration names and their checked call/construct references use
+entry-relative module prefixes such as `math::triple`. The index does not yet
+publish a separate export table; `pub` access is enforced during checking.
 
 Effect labels currently mean:
 
@@ -29,7 +32,7 @@ Effect labels currently mean:
 
 The index summarizes possible calls, including branches that might not run.
 It does not claim that an effect occurs on every execution. It does not contain
-exports, data-flow proofs, ownership analysis, stable node IDs, or a project
+an export table, data-flow proofs, ownership analysis, stable node IDs, or a project
 dependency graph. These effect labels do not enumerate arithmetic or bounds
 failures, allocation, or local mutation. Those require later compiler and
 language work.

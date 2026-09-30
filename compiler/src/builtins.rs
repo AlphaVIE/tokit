@@ -15,6 +15,7 @@ pub const IO_ERROR_VARIANTS: [&str; 4] = ["Denied", "NotFound", "InvalidUtf8", "
 pub fn io_error_decl() -> EnumDecl {
     EnumDecl {
         name: IO_ERROR.to_owned(),
+        public: true,
         variants: IO_ERROR_VARIANTS
             .iter()
             .map(|name| EnumVariant {
@@ -43,6 +44,7 @@ pub fn write_text_result() -> Type {
 pub fn task_error_decl() -> EnumDecl {
     EnumDecl {
         name: TASK_ERROR.to_owned(),
+        public: true,
         variants: vec![EnumVariant {
             name: "Failed".to_owned(),
             payload: None,
@@ -54,6 +56,7 @@ pub fn task_error_decl() -> EnumDecl {
 pub fn parse_error_decl() -> EnumDecl {
     EnumDecl {
         name: PARSE_ERROR.to_owned(),
+        public: true,
         variants: ["Invalid", "OutOfRange"]
             .into_iter()
             .map(|name| EnumVariant {

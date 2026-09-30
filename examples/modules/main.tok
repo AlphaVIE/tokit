@@ -1,1 +1,1 @@
-import"math.tok";fn main()->i32{triple(7)}
+import math="math.tok";fn main()->i32{math::triple(7)}
