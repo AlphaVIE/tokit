@@ -38,5 +38,5 @@ file report `E106`; identical private names in separate files are allowed.
 
 This module representation is experimental. There is no re-export syntax,
 package manager, separate compilation, module initialization, or stable binary
-interface. The `pub` flag is enforced by checking, but the AI index does not
-yet include an export table.
+interface. The `pub` flag is enforced by checking and exposed in the
+multi-file AI index alongside direct import edges.

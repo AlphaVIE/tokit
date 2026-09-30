@@ -13,12 +13,21 @@ The call and effect sets are derived from the checked AST; recursion is handled
 to a fixed point. Byte spans identify the current source snapshot and are not
 stable AST identities.
 
-When imports load multiple files, the index uses `version: 2`. A `sources`
+When imports load multiple files, the CLI index uses `version: 3`. A `sources`
 array contains entry-relative file paths in loader order, and each declaration span
 becomes `[source_id,start,end]`. Source IDs are indexes into `sources`.
 Imported declaration names and their checked call/construct references use
-entry-relative module prefixes such as `math::triple`. The index does not yet
-publish a separate export table; `pub` access is enforced during checking.
+entry-relative module prefixes such as `math::triple`.
+
+The `modules` array follows source ID order. Each entry has `source` (the source
+ID), `imports` (pairs of local alias and target source ID, sorted by alias), and
+`exports` (sorted local names of public declarations). Declaration entries also
+carry `public: true` or `false`; this describes the declared visibility, while
+the export list is the direct import interface. The index contains only checked
+modules, and the paths are relative to the entry file's directory. Diamond
+imports refer to the same target source ID. The older library function
+`index_with_sources` retains its version 2 shape for callers that do not have
+the loader's module graph; the CLI uses `index_loaded`.
 
 Effect labels currently mean:
 
@@ -32,7 +41,7 @@ Effect labels currently mean:
 
 The index summarizes possible calls, including branches that might not run.
 It does not claim that an effect occurs on every execution. It does not contain
-an export table, data-flow proofs, ownership analysis, stable node IDs, or a project
+data-flow proofs, ownership analysis, stable node IDs, or a project
 dependency graph. These effect labels do not enumerate arithmetic or bounds
 failures, allocation, or local mutation. Those require later compiler and
 language work.
