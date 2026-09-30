@@ -21,9 +21,25 @@ prototype's 32-call depth guard. [main.tok](../examples/json/main.tok)
 demonstrates an object; [tests.tok](../examples/json/tests.tok) exercises
 numbers, escapes, and nesting.
 
+The parse function returns Result<Value,JsonParseError>. Its error offset is
+a zero-based UTF-8 byte position in the input. It accepts JSON scalars,
+arrays, objects, the four JSON whitespace bytes, number lexemes, short
+string escapes, and four-digit Unicode escapes. Valid UTF-16 surrogate
+pairs become one Unicode scalar; lone surrogates are rejected because
+Tokit strings require valid UTF-8. The parser preserves number lexemes,
+object member order, and duplicate names. [parse_main.tok](../examples/json/parse_main.tok)
+demonstrates a parse/render round trip, while
+[parse_cli.tok](../examples/json/parse_cli.tok) accepts a JSON document as
+one program argument. The accepted nesting depth is at most twelve
+arrays/objects; deeper inputs return a typed error. This is an explicit
+resource limit, not a claim that deeper JSON is invalid. The Unicode
+choice excludes ill-formed strings allowed by the ABNF but identified as
+non-interoperable in [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259.html).
+
 This is a library experiment, not a packaged standard library. The current
 file loader only imports paths inside the entry file's directory, so examples
-keep a copy of the module beside their entry file. Parsing is the next stage
-of [the JSON issue](https://github.com/AlphaVIE/tokit/issues/83).
-The present implementation copies arrays and concatenates strings during
-rendering; no linear-time or low-allocation performance claim is made.
+keep a copy of the module beside their entry file. The current
+implementation copies byte arrays between parser functions and
+concatenates strings during rendering. Performance evaluation and a
+packaged interface remain part of [the JSON issue](https://github.com/AlphaVIE/tokit/issues/83);
+no linear-time or low-allocation claim is made.
