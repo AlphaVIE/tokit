@@ -32,45 +32,49 @@ impl<T: __TokRender> __TokRender for Option<T> {
         match self { Some(x) => format!("Some({})", x.tok_render()), None => "None".to_owned() }
     }
 }
-fn __tok_fail(line: usize, column: usize) -> ! {
-    eprintln!("E201@{}:{} integer overflow or division by zero", line, column);
+fn __tok_runtime_fail(code: &str, source_id: usize, line: usize, column: usize, message: &str) -> ! {
+    if __TOK_SOURCES.len() > 1 {
+        eprintln!("{}:{code}@{line}:{column} {message}", __TOK_SOURCES[source_id]);
+    } else {
+        eprintln!("{code}@{line}:{column} {message}");
+    }
     std::process::exit(1)
 }
-fn __tok_add(a: i32, b: i32, line: usize, column: usize) -> i32 {
-    a.checked_add(b).unwrap_or_else(|| __tok_fail(line, column))
+fn __tok_fail(source_id: usize, line: usize, column: usize) -> ! {
+    __tok_runtime_fail("E201", source_id, line, column, "integer overflow or division by zero")
 }
-fn __tok_sub(a: i32, b: i32, line: usize, column: usize) -> i32 {
-    a.checked_sub(b).unwrap_or_else(|| __tok_fail(line, column))
+fn __tok_add(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_add(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
-fn __tok_neg(a: i32, line: usize, column: usize) -> i32 {
-    a.checked_neg().unwrap_or_else(|| __tok_fail(line, column))
+fn __tok_sub(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_sub(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
-fn __tok_mul(a: i32, b: i32, line: usize, column: usize) -> i32 {
-    a.checked_mul(b).unwrap_or_else(|| __tok_fail(line, column))
+fn __tok_neg(a: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_neg().unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
-fn __tok_div(a: i32, b: i32, line: usize, column: usize) -> i32 {
-    a.checked_div(b).unwrap_or_else(|| __tok_fail(line, column))
+fn __tok_mul(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_mul(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
-fn __tok_index<T: Clone>(values: &[T], index: i32, line: usize, column: usize) -> T {
+fn __tok_div(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize, column: usize) -> T {
     usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
-        eprintln!("E205@{}:{} array index out of bounds", line, column);
-        std::process::exit(1)
+        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
     })
 }
-fn __tok_len<T>(values: &[T], line: usize, column: usize) -> i32 {
+fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i32 {
     i32::try_from(values.len()).unwrap_or_else(|_| {
-        eprintln!("E206@{}:{} array length exceeds i32", line, column);
-        std::process::exit(1)
+        __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")
     })
 }
 thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 struct __TokDepthGuard;
 impl __TokDepthGuard {
-    fn enter(line: usize, column: usize) -> Self {
+    fn enter(source_id: usize, line: usize, column: usize) -> Self {
         __TOK_DEPTH.with(|depth| {
             if depth.get() >= 32 {
-                eprintln!("E202@{}:{} call depth limit exceeded", line, column);
-                std::process::exit(1);
+                __tok_runtime_fail("E202", source_id, line, column, "call depth limit exceeded");
             }
             depth.set(depth.get() + 1);
         });
@@ -281,7 +285,7 @@ fn rust_type_fallback(ty: &Type) -> String {
     }
 }
 
-fn location(source: &SourceMap, span: Span) -> (usize, usize) {
+fn location(source: &SourceMap, span: Span) -> (usize, usize, usize) {
     let text = &source
         .get(span.source_id)
         .expect("checked span source must be registered")
@@ -289,7 +293,7 @@ fn location(source: &SourceMap, span: Span) -> (usize, usize) {
     let before = text.get(..span.start).unwrap_or(text);
     let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
     let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
-    (line, column)
+    (span.source_id.0, line, column)
 }
 
 fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
@@ -303,9 +307,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::Neg(value) => {
-            let (line, column) = location(source, expr.span);
+            let (source_id, line, column) = location(source, expr.span);
             format!(
-                "__tok_neg({},{line},{column})",
+                "__tok_neg({},{source_id},{line},{column})",
                 emit_expr(value, source, types)
             )
         }
@@ -327,9 +331,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 .join(",")
         ),
         ExprKind::Index(array, index) => {
-            let (line, column) = location(source, expr.span);
+            let (source_id, line, column) = location(source, expr.span);
             format!(
-                "__tok_index({},{},{line},{column})",
+                "__tok_index({},{},{source_id},{line},{column})",
                 emit_array_borrow(array, source, types),
                 emit_expr(index, source, types)
             )
@@ -359,9 +363,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 _ => user_name(name),
             };
             if name == builtins::LEN {
-                let (line, column) = location(source, expr.span);
+                let (source_id, line, column) = location(source, expr.span);
                 return format!(
-                    "__tok_len({},{line},{column})",
+                    "__tok_len({},{source_id},{line},{column})",
                     emit_array_borrow(&args[0], source, types)
                 );
             }
@@ -410,8 +414,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                         Op::Div => "div",
                         _ => unreachable!(),
                     };
-                    let (line, column) = location(source, expr.span);
-                    format!("__tok_{helper}({left},{right},{line},{column})")
+                    let (source_id, line, column) = location(source, expr.span);
+                    format!("__tok_{helper}({left},{right},{source_id},{line},{column})")
                 }
                 _ => {
                     let symbol = match op {
@@ -581,6 +585,20 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         ));
     }
     let mut out = String::from(PRELUDE);
+    let paths = (0..source.len())
+        .map(|id| {
+            format!(
+                "{:?}",
+                source
+                    .display_path(crate::ast::SourceId(id))
+                    .expect("registered source path")
+                    .to_string_lossy()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    writeln!(out, "const __TOK_SOURCES: &[&str] = &[{paths}];")
+        .expect("writing to String cannot fail");
     for enum_decl in &program.enums {
         let name = user_name(&enum_decl.name);
         let variants = enum_decl
@@ -711,10 +729,10 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             .map(|(name, ty)| format!("{}: {}", user_name(name), rust_type(ty)))
             .collect::<Vec<_>>()
             .join(",");
-        let (line, column) = location(source, function.span);
+        let (source_id, line, column) = location(source, function.span);
         writeln!(
             out,
-            "fn {}{generics}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({line},{column}); {} }}",
+            "fn {}{generics}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({source_id},{line},{column}); {} }}",
             user_name(&function.name),
             rust_type(&function.ret),
             emit_expr(&function.body, source, &types)

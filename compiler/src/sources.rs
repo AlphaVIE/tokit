@@ -1,6 +1,6 @@
 //! Source texts and paths indexed by stable, loader-assigned source IDs.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::ast::SourceId;
 
@@ -34,6 +34,15 @@ impl SourceMap {
 
     pub fn get(&self, id: SourceId) -> Option<&SourceFile> {
         self.files.get(id.0)
+    }
+
+    pub fn display_path(&self, id: SourceId) -> Option<&Path> {
+        let file = self.get(id)?;
+        let base = self.files.first()?.path.parent();
+        Some(
+            base.and_then(|base| file.path.strip_prefix(base).ok())
+                .unwrap_or(&file.path),
+        )
     }
 
     pub fn len(&self) -> usize {

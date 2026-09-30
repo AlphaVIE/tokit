@@ -26,7 +26,10 @@ impl Diagnostic {
         let file = sources
             .get(self.span.source_id)
             .expect("diagnostic source ID must be registered");
-        format!("{}:{}", file.path.display(), self.display(&file.text))
+        let path = sources
+            .display_path(self.span.source_id)
+            .expect("diagnostic source path must be registered");
+        format!("{}:{}", path.display(), self.display(&file.text))
     }
 
     fn location(&self, source: &str) -> (usize, usize) {
@@ -57,7 +60,12 @@ impl Diagnostic {
         format!(
             "{{\"code\":\"{}\",\"source\":\"{}\",\"span\":{{\"start\":{},\"end\":{}}},\"line\":{},\"column\":{},\"message\":\"{}\"}}",
             self.code,
-            escape_json(&file.path.to_string_lossy()),
+            escape_json(
+                &sources
+                    .display_path(self.span.source_id)
+                    .expect("registered path")
+                    .to_string_lossy()
+            ),
             self.span.start,
             self.span.end,
             line,

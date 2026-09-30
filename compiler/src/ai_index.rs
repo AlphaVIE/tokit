@@ -89,10 +89,10 @@ fn index_impl(program: &Program, sources: Option<&SourceMap>) -> String {
     let mut out = if let Some(sources) = sources {
         let paths = (0..sources.len())
             .map(|id| {
-                let file = sources
-                    .get(crate::ast::SourceId(id))
-                    .expect("registered source");
-                string(&file.path.to_string_lossy())
+                let path = sources
+                    .display_path(crate::ast::SourceId(id))
+                    .expect("registered source path");
+                string(&path.to_string_lossy())
             })
             .collect::<Vec<_>>()
             .join(",");
