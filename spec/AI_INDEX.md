@@ -14,7 +14,7 @@ to a fixed point. Byte spans identify the current source snapshot and are not
 stable AST identities.
 
 When imports load multiple files, the index uses `version: 2`. A `sources`
-array contains canonical file paths in loader order, and each declaration span
+array contains entry-relative file paths in loader order, and each declaration span
 becomes `[source_id,start,end]`. Source IDs are indexes into `sources`.
 
 Effect labels currently mean:

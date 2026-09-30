@@ -70,22 +70,6 @@ fn native_error_location_uses_the_expression_source() {
         assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
         return;
     }
-    let mut sources = SourceMap::new();
-    let root = sources.push(
-        PathBuf::from("main.tok"),
-        "fn main()->i32{helper()}".to_owned(),
-    );
-    let library = sources.push(
-        PathBuf::from("lib.tok"),
-        "\nfn helper()->i32{2147483647+1}".to_owned(),
-    );
-    let mut program = parse_in_source(&sources.get(root).unwrap().text, root).unwrap();
-    program.functions.extend(
-        parse_in_source(&sources.get(library).unwrap().text, library)
-            .unwrap()
-            .functions,
-    );
-    checker::check(&program).unwrap();
     let directory = std::env::temp_dir().join(format!(
         "tokit-source-map-{}-{}",
         std::process::id(),
@@ -95,15 +79,35 @@ fn native_error_location_uses_the_expression_source() {
             .as_nanos()
     ));
     std::fs::create_dir(&directory).unwrap();
-    let binary = directory.join(format!("program{}", std::env::consts::EXE_SUFFIX));
-    native::build_with_sources(&program, &sources, &binary).unwrap();
-    let output = Command::new(binary).output().unwrap();
-    let diagnostic = interpreter::run(&program).unwrap_err();
-    assert_eq!(diagnostic.span.source_id, library);
-    assert!(!output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr).trim(),
-        diagnostic.display(&sources.get(library).unwrap().text)
-    );
+    for (name, library_source) in [
+        ("overflow", "\nfn helper()->i32{2147483647+1}"),
+        ("bounds", "\nfn helper()->i32{[1][2]}"),
+        ("recursion", "\nfn helper()->i32{helper()}"),
+    ] {
+        let mut sources = SourceMap::new();
+        let root = sources.push(
+            PathBuf::from("main.tok"),
+            "fn main()->i32{helper()}".to_owned(),
+        );
+        let library = sources.push(PathBuf::from("lib.tok"), library_source.to_owned());
+        let mut program = parse_in_source(&sources.get(root).unwrap().text, root).unwrap();
+        program.functions.extend(
+            parse_in_source(&sources.get(library).unwrap().text, library)
+                .unwrap()
+                .functions,
+        );
+        checker::check(&program).unwrap();
+        let binary = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        native::build_with_sources(&program, &sources, &binary).unwrap();
+        let output = Command::new(binary).output().unwrap();
+        let diagnostic = interpreter::run(&program).unwrap_err();
+        assert_eq!(diagnostic.span.source_id, library);
+        assert!(!output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr).trim(),
+            diagnostic.display_with_sources(&sources),
+            "{name}"
+        );
+    }
     std::fs::remove_dir_all(directory).unwrap();
 }

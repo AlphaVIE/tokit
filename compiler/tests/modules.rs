@@ -42,6 +42,16 @@ fn diamond_imports_load_once_and_run_in_both_backends() {
     assert_eq!(loaded.sources.len(), 4);
     assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "10");
     assert_eq!(loaded.program.functions.len(), 4);
+    let generated = native::emit_with_sources(&loaded.program, &loaded.sources).unwrap();
+    let canonical_parent = loaded
+        .sources
+        .get(tokit_compiler::ast::SourceId(0))
+        .unwrap()
+        .path
+        .parent()
+        .unwrap()
+        .to_string_lossy();
+    assert!(!generated.contains(canonical_parent.as_ref()));
     if Command::new("rustc").arg("--version").output().is_ok() {
         let output = directory.join(format!("program{}", std::env::consts::EXE_SUFFIX));
         native::build_with_sources(&loaded.program, &loaded.sources, &output).unwrap();
@@ -149,6 +159,8 @@ fn cli_commands_load_imports_and_index_sources() {
         if command == "ai-index" {
             assert!(output.contains("\"sources\":"));
             assert!(output.contains("\"span\":[1,"));
+            assert!(output.contains("\"main.tok\""));
+            assert!(!output.contains(&root.to_string_lossy().to_string()));
         }
     }
     if Command::new("rustc").arg("--version").output().is_ok() {
