@@ -96,7 +96,13 @@ fn run_checked(
     let tests = program
         .functions
         .iter()
-        .filter(|function| function.name.starts_with("test_"))
+        .filter(|function| {
+            function
+                .name
+                .rsplit("::")
+                .next()
+                .is_some_and(|name| name.starts_with("test_"))
+        })
         .collect::<Vec<_>>();
     if tests.is_empty() {
         return Err(Diagnostic::new(

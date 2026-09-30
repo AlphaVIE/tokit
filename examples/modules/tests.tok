@@ -1,1 +1,1 @@
-import"math.tok";fn test_triple()->bool{triple(7)==21}
+import math="math.tok";fn test_triple()->bool{math::triple(7)==21}

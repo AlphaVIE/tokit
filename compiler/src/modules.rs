@@ -1,11 +1,12 @@
-//! Deterministic, file-backed composition of the experimental flat namespace.
+//! Deterministic, file-backed module loading.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::ast::{ImportDecl, Program, Span};
+use crate::ast::{ImportDecl, Program, SourceId, Span};
 use crate::diagnostic::Diagnostic;
+use crate::module_resolver::{self, ModuleUnit};
 use crate::sources::SourceMap;
 
 pub struct LoadedProgram {
@@ -31,9 +32,10 @@ impl LoadError {
 struct Loader {
     root_dir: PathBuf,
     sources: SourceMap,
-    visited: HashMap<PathBuf, crate::ast::SourceId>,
+    visited: HashMap<PathBuf, SourceId>,
     active: HashSet<PathBuf>,
-    program: Program,
+    units: Vec<Option<ModuleUnit>>,
+    order: Vec<SourceId>,
 }
 
 impl Loader {
@@ -43,12 +45,8 @@ impl Loader {
             sources: SourceMap::new(),
             visited: HashMap::new(),
             active: HashSet::new(),
-            program: Program {
-                imports: Vec::new(),
-                records: Vec::new(),
-                enums: Vec::new(),
-                functions: Vec::new(),
-            },
+            units: Vec::new(),
+            order: Vec::new(),
         }
     }
 
@@ -89,7 +87,7 @@ impl Loader {
         Ok(canonical)
     }
 
-    fn visit(&mut self, path: PathBuf, origin: Option<Span>) -> Result<(), Diagnostic> {
+    fn visit(&mut self, path: PathBuf, origin: Option<Span>) -> Result<SourceId, Diagnostic> {
         if self.active.contains(&path) {
             return Err(Diagnostic::new(
                 "E118",
@@ -97,8 +95,8 @@ impl Loader {
                 format!("import cycle reaches {}", path.display()),
             ));
         }
-        if self.visited.contains_key(&path) {
-            return Ok(());
+        if let Some(id) = self.visited.get(&path) {
+            return Ok(*id);
         }
         let text = fs::read_to_string(&path).map_err(|error| {
             Diagnostic::new(
@@ -108,11 +106,13 @@ impl Loader {
             )
         })?;
         let source_id = self.sources.push(path.clone(), text);
+        self.units.push(None);
         self.visited.insert(path.clone(), source_id);
         self.active.insert(path.clone());
         let source = &self.sources.get(source_id).expect("registered source").text;
         let parsed = crate::parse_in_source(source, source_id)?;
         let mut local_imports = HashSet::new();
+        let mut aliases = HashMap::new();
         let parent = path.parent().expect("canonical file has parent");
         for import in &parsed.imports {
             let resolved = self.resolve_import(parent, import)?;
@@ -123,13 +123,17 @@ impl Loader {
                     "duplicate import in one source",
                 ));
             }
-            self.visit(resolved, Some(import.span))?;
+            let imported = self.visit(resolved, Some(import.span))?;
+            aliases.insert(import.alias.clone(), imported);
         }
         self.active.remove(&path);
-        self.program.records.extend(parsed.records);
-        self.program.enums.extend(parsed.enums);
-        self.program.functions.extend(parsed.functions);
-        Ok(())
+        self.units[source_id.0] = Some(ModuleUnit {
+            source_id,
+            program: parsed,
+            aliases,
+        });
+        self.order.push(source_id);
+        Ok(source_id)
     }
 }
 
@@ -163,14 +167,24 @@ pub fn load(path: &Path) -> Result<LoadedProgram, LoadError> {
             sources: loader.sources,
         });
     }
-    if let Err(diagnostic) = crate::checker::check(&loader.program) {
+    let program = match module_resolver::resolve(&mut loader.units, &loader.order, &loader.sources)
+    {
+        Ok(program) => program,
+        Err(diagnostic) => {
+            return Err(LoadError {
+                diagnostic,
+                sources: loader.sources,
+            });
+        }
+    };
+    if let Err(diagnostic) = crate::checker::check(&program) {
         return Err(LoadError {
             diagnostic,
             sources: loader.sources,
         });
     }
     Ok(LoadedProgram {
-        program: loader.program,
+        program,
         sources: loader.sources,
     })
 }
