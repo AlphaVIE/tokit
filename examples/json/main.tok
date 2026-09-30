@@ -1,0 +1,1 @@
+import json="json.tok";fn main()->Result<String,json::RenderError>{let fields:[json::Member]=[json::Member("text",json::Value::Text("Grüße\n\"Tokit\"")),json::Member("number",json::Value::Number("-12.5e+2")),json::Member("items",json::Value::Array([json::Value::Bool(true),json::Value::Null]))];json::render(json::Value::Object(fields))}

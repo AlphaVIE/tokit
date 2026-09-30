@@ -1,0 +1,1 @@
+import json="json.tok";fn main()->Result<String,json::RenderError>{json::render(json::Value::Number("01"))}
