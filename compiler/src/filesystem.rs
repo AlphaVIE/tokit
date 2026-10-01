@@ -41,6 +41,10 @@ impl WritePolicy {
     }
 
     pub fn write_text(&self, path: &str, text: &str) -> Result<(), IoError> {
+        self.write_bytes(path, text.as_bytes())
+    }
+
+    pub fn write_bytes(&self, path: &str, bytes: &[u8]) -> Result<(), IoError> {
         let root = self.root.as_ref().ok_or(IoError::Denied)?;
         let requested = Path::new(path);
         let target = match requested.canonicalize() {
@@ -65,7 +69,7 @@ impl WritePolicy {
         if !target.starts_with(root) {
             return Err(IoError::Denied);
         }
-        std::fs::write(target, text.as_bytes()).map_err(|error| classify(error.kind()))
+        std::fs::write(target, bytes).map_err(|error| classify(error.kind()))
     }
 }
 
@@ -77,6 +81,11 @@ impl ReadPolicy {
     }
 
     pub fn read_text(&self, path: &str) -> Result<String, ReadError> {
+        let bytes = self.read_bytes(path)?;
+        String::from_utf8(bytes).map_err(|_| ReadError::InvalidUtf8)
+    }
+
+    pub fn read_bytes(&self, path: &str) -> Result<Vec<u8>, ReadError> {
         let root = self.root.as_ref().ok_or(ReadError::Denied)?;
         let requested = Path::new(path);
         let resolved = match requested.canonicalize() {
@@ -99,8 +108,7 @@ impl ReadPolicy {
         if !resolved.starts_with(root) {
             return Err(ReadError::Denied);
         }
-        let bytes = std::fs::read(resolved).map_err(|error| classify(error.kind()))?;
-        String::from_utf8(bytes).map_err(|_| ReadError::InvalidUtf8)
+        std::fs::read(resolved).map_err(|error| classify(error.kind()))
     }
 }
 

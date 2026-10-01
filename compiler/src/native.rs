@@ -201,7 +201,7 @@ fn __tok_args() -> Vec<String> {
 fn __tok_read_error(kind: std::io::ErrorKind) -> __TokIoError {
     if kind == std::io::ErrorKind::NotFound { __TokIoError::NotFound } else { __TokIoError::Other }
 }
-fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
+fn __tok_read_bytes(path: String) -> Result<__TokBytes, __TokIoError> {
     let root = __TOK_READ_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
     let requested = std::path::Path::new(&path);
     let resolved = match requested.canonicalize() {
@@ -216,10 +216,12 @@ fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
         }
     };
     if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
-    let bytes = std::fs::read(resolved).map_err(|error| __tok_read_error(error.kind()))?;
-    String::from_utf8(bytes).map_err(|_| __TokIoError::InvalidUtf8)
+    std::fs::read(resolved).map(__TokBytes).map_err(|error| __tok_read_error(error.kind()))
 }
-fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
+fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
+    String::from_utf8(__tok_read_bytes(path)?.0).map_err(|_| __TokIoError::InvalidUtf8)
+}
+fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError> {
     let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
     let requested = std::path::Path::new(&path);
     let target = match requested.canonicalize() {
@@ -236,7 +238,10 @@ fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
         }
     };
     if !target.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::write(target, text.as_bytes()).map_err(|error| __tok_read_error(error.kind()))
+    std::fs::write(target, bytes.0).map_err(|error| __tok_read_error(error.kind()))
+}
+fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
+    __tok_write_bytes(path, __TokBytes(text.into_bytes()))
 }
 fn __tok_lines(text: String) -> Vec<String> {
     text.lines().map(str::to_owned).collect()
@@ -386,7 +391,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
         ExprKind::Call(name, args) => {
             let callee = match name.as_str() {
                 builtins::READ_TEXT => "__tok_read_text".to_owned(),
+                builtins::READ_BYTES => "__tok_read_bytes".to_owned(),
                 builtins::WRITE_TEXT => "__tok_write_text".to_owned(),
+                builtins::WRITE_BYTES => "__tok_write_bytes".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
