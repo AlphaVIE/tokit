@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::ast::{ImportDecl, Program, SourceId, Span};
 use crate::diagnostic::Diagnostic;
@@ -45,7 +45,25 @@ struct Loader {
     units: Vec<Option<ModuleUnit>>,
     order: Vec<SourceId>,
     dependencies: Option<HashMap<String, packages::PackageSource>>,
-    package_files: HashMap<PathBuf, (String, String)>,
+    package_files: HashMap<PathBuf, packages::PackageFile>,
+}
+
+fn package_relative_path(parent: &Path, root: &Path, relative: &Path) -> Option<PathBuf> {
+    let mut path = parent.to_path_buf();
+    for component in relative.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(name) => path.push(name),
+            Component::ParentDir => {
+                if path == root {
+                    return None;
+                }
+                path.pop();
+            }
+            Component::Prefix(_) | Component::RootDir => return None,
+        }
+    }
+    path.starts_with(root).then_some(path)
 }
 
 impl Loader {
@@ -64,16 +82,31 @@ impl Loader {
 
     fn resolve_import(
         &mut self,
-        parent: &Path,
+        source_path: &Path,
         import: &ImportDecl,
     ) -> Result<PathBuf, Diagnostic> {
         if let Some(name) = import.path.strip_prefix("pkg:") {
+            if self.package_files.contains_key(source_path) {
+                return Err(Diagnostic::new(
+                    "E120",
+                    import.span,
+                    "package sources cannot import other packages yet",
+                ));
+            }
             if self.dependencies.is_none() {
                 let dependencies = packages::load(&self.root_dir)
                     .map_err(|message| Diagnostic::new("E120", import.span, message))?;
-                for (name, package) in &dependencies {
-                    self.package_files
-                        .insert(package.path.clone(), (name.clone(), package.source.clone()));
+                for package in dependencies.values() {
+                    for file in &package.files {
+                        if self.visited.contains_key(&file.path) {
+                            return Err(Diagnostic::new(
+                                "E120",
+                                import.span,
+                                "package file was already imported by relative path",
+                            ));
+                        }
+                        self.package_files.insert(file.path.clone(), file.clone());
+                    }
                 }
                 self.dependencies = Some(dependencies);
             }
@@ -107,19 +140,31 @@ impl Loader {
                 "import path must be relative",
             ));
         }
-        let candidate = parent.join(relative);
-        let canonical = fs::canonicalize(&candidate).map_err(|error| {
-            Diagnostic::new(
-                "E118",
-                import.span,
-                format!("cannot resolve import {}: {error}", import.path),
-            )
-        })?;
-        if !canonical.starts_with(&self.root_dir) {
+        let parent = source_path.parent().expect("canonical file has parent");
+        let package = self.package_files.get(source_path);
+        let boundary = package.map_or(self.root_dir.as_path(), |file| file.root.as_path());
+        let canonical = if package.is_some() {
+            package_relative_path(parent, boundary, relative).ok_or_else(|| {
+                Diagnostic::new("E120", import.span, "import escapes the package directory")
+            })?
+        } else {
+            fs::canonicalize(parent.join(relative)).map_err(|error| {
+                Diagnostic::new(
+                    "E118",
+                    import.span,
+                    format!("cannot resolve import {}: {error}", import.path),
+                )
+            })?
+        };
+        if !canonical.starts_with(boundary) {
             return Err(Diagnostic::new(
-                "E118",
+                if package.is_some() { "E120" } else { "E118" },
                 import.span,
-                "import escapes the entry directory",
+                if package.is_some() {
+                    "import escapes the package directory"
+                } else {
+                    "import escapes the entry directory"
+                },
             ));
         }
         if canonical
@@ -132,7 +177,14 @@ impl Loader {
                 "import path must name a .tok file",
             ));
         }
-        if self.package_files.contains_key(&canonical) {
+        if package.is_some() && !self.package_files.contains_key(&canonical) {
+            return Err(Diagnostic::new(
+                "E120",
+                import.span,
+                "import is not in the pinned package source tree",
+            ));
+        }
+        if package.is_none() && self.package_files.contains_key(&canonical) {
             return Err(Diagnostic::new(
                 "E120",
                 import.span,
@@ -153,8 +205,8 @@ impl Loader {
         if let Some(id) = self.visited.get(&path) {
             return Ok(*id);
         }
-        let text = if let Some((_, source)) = self.package_files.get(&path) {
-            source.clone()
+        let text = if let Some(file) = self.package_files.get(&path) {
+            file.source.clone()
         } else {
             fs::read_to_string(&path).map_err(|error| {
                 Diagnostic::new(
@@ -164,17 +216,19 @@ impl Loader {
                 )
             })?
         };
-        let label = self
-            .package_files
-            .get(&path)
-            .map(|(name, _)| PathBuf::from(format!("pkg/{name}.tok")));
+        let label = self.package_files.get(&path).map(|file| file.label.clone());
         let source_id = self.sources.push_labeled(path.clone(), text, label);
         self.units.push(None);
         self.visited.insert(path.clone(), source_id);
         self.active.insert(path.clone());
         let source = &self.sources.get(source_id).expect("registered source").text;
         let parsed = crate::parse_in_source(source, source_id)?;
-        if self.package_files.contains_key(&path) && !parsed.imports.is_empty() {
+        if self
+            .package_files
+            .get(&path)
+            .is_some_and(|file| !file.multi_file)
+            && !parsed.imports.is_empty()
+        {
             return Err(Diagnostic::new(
                 "E120",
                 parsed.imports[0].span,
@@ -183,9 +237,8 @@ impl Loader {
         }
         let mut local_imports = HashSet::new();
         let mut aliases = HashMap::new();
-        let parent = path.parent().expect("canonical file has parent");
         for import in &parsed.imports {
-            let resolved = self.resolve_import(parent, import)?;
+            let resolved = self.resolve_import(&path, import)?;
             if !local_imports.insert(resolved.clone()) {
                 return Err(Diagnostic::new(
                     "E118",

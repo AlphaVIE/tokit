@@ -60,6 +60,40 @@ fn fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
     (entry, module, app.join("tok.toml"))
 }
 
+fn tree_fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let app = directory.join("app");
+    let library = directory.join("library");
+    std::fs::create_dir(&app).unwrap();
+    std::fs::create_dir_all(library.join("lib")).unwrap();
+    std::fs::write(
+        library.join("api.tok"),
+        "import helper=\"lib/helper.tok\";pub fn answer()->i32{helper::double(21)}",
+    )
+    .unwrap();
+    std::fs::write(
+        library.join("lib/helper.tok"),
+        "pub fn double(n:i32)->i32{n*2}",
+    )
+    .unwrap();
+    std::fs::write(library.join("unused.tok"), "fn unused()->i32{0}").unwrap();
+    let digest = packages::hash_path(&library).unwrap();
+    let manifest = app.join("tok.toml");
+    std::fs::write(
+        &manifest,
+        format!(
+            "[dependencies]\ncalc = {{ path = \"../library\", entry = \"api.tok\", sha256 = \"{digest}\" }}\n"
+        ),
+    )
+    .unwrap();
+    let entry = app.join("main.tok");
+    std::fs::write(
+        &entry,
+        "import calc=\"pkg:calc\";fn main()->i32{calc::answer()}",
+    )
+    .unwrap();
+    (entry, library, manifest)
+}
+
 #[test]
 fn pinned_package_import_runs_without_absolute_names() {
     let directory = temporary_directory();
@@ -236,5 +270,142 @@ fn package_diagnostics_use_logical_source_path() {
             .display()
             .contains(&directory.to_string_lossy().to_string())
     );
+    clean_fixture(&directory);
+}
+
+#[test]
+fn pinned_package_tree_loads_relative_modules_in_both_backends() {
+    let directory = temporary_directory();
+    let (entry, library, _) = tree_fixture(&directory);
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "42");
+    let index = ai_index::index_loaded(&loaded);
+    assert!(index.contains("pkg/calc/api.tok"));
+    assert!(index.contains("pkg/calc/lib/helper.tok"));
+    assert!(index.contains("pkg::calc::lib::helper::double"));
+    assert!(!index.contains(&directory.to_string_lossy().to_string()));
+    assert_eq!(loaded.sources.len(), 3);
+
+    let hash = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .args(["pkg-hash", library.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(hash.status.success());
+    assert_eq!(
+        String::from_utf8(hash.stdout).unwrap().trim(),
+        packages::hash_path(&library).unwrap()
+    );
+    if Command::new("rustc").arg("--version").output().is_ok() {
+        let output = directory.join(format!("tree-program{}", std::env::consts::EXE_SUFFIX));
+        native::build_with_sources(&loaded.program, &loaded.sources, &output).unwrap();
+        let result = Command::new(output).output().unwrap();
+        assert!(result.status.success());
+        assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "42");
+    } else {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+    }
+    clean_fixture(&directory);
+}
+
+#[test]
+fn tree_hash_covers_unused_sources_and_rejects_escape() {
+    let directory = temporary_directory();
+    let (entry, library, manifest) = tree_fixture(&directory);
+    let original = packages::hash_path(&library).unwrap();
+    std::fs::write(library.join("unused.tok"), "fn unused()->i32{1}").unwrap();
+    assert_ne!(packages::hash_path(&library).unwrap(), original);
+    let error = modules::load(&entry).err().unwrap();
+    assert_eq!(error.diagnostic.code, "E120");
+    assert!(error.diagnostic.message.contains("sha256 mismatch"));
+
+    std::fs::write(
+        library.join("api.tok"),
+        "import outside=\"../outside.tok\";pub fn answer()->i32{0}",
+    )
+    .unwrap();
+    std::fs::write(directory.join("outside.tok"), "pub fn value()->i32{1}").unwrap();
+    let digest = packages::hash_path(&library).unwrap();
+    std::fs::write(
+        &manifest,
+        format!(
+            "[dependencies]\ncalc = {{ path = \"../library\", entry = \"api.tok\", sha256 = \"{digest}\" }}\n"
+        ),
+    )
+    .unwrap();
+    let error = modules::load(&entry).err().unwrap();
+    assert_eq!(error.diagnostic.code, "E120");
+    assert!(
+        error
+            .diagnostic
+            .message
+            .contains("escapes the package directory")
+    );
+
+    std::fs::write(
+        library.join("api.tok"),
+        "import other=\"pkg:other\";pub fn answer()->i32{0}",
+    )
+    .unwrap();
+    let digest = packages::hash_path(&library).unwrap();
+    std::fs::write(
+        &manifest,
+        format!(
+            "[dependencies]\ncalc = {{ path = \"../library\", entry = \"api.tok\", sha256 = \"{digest}\" }}\n"
+        ),
+    )
+    .unwrap();
+    let error = modules::load(&entry).err().unwrap();
+    assert_eq!(error.diagnostic.code, "E120");
+    assert!(error.diagnostic.message.contains("other packages yet"));
+    clean_fixture(&directory);
+}
+
+#[test]
+fn tree_hash_is_independent_of_file_creation_order() {
+    let directory = temporary_directory();
+    let first = directory.join("first");
+    let second = directory.join("second");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    for (root, names) in [(&first, ["a.tok", "b.tok"]), (&second, ["b.tok", "a.tok"])] {
+        for name in names {
+            std::fs::write(
+                root.join(name),
+                format!("fn value()->i32{{{}}}", name.len()),
+            )
+            .unwrap();
+        }
+    }
+    assert_eq!(
+        packages::hash_path(&first).unwrap(),
+        packages::hash_path(&second).unwrap()
+    );
+    clean_fixture(&directory);
+}
+
+#[test]
+fn repository_package_tree_example_has_current_pin() {
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/package_tree/app/main.tok");
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "42");
+}
+
+#[test]
+fn package_tree_rejects_symlink_entries_when_supported() {
+    let directory = temporary_directory();
+    let (_, library, _) = tree_fixture(&directory);
+    let target = library.join("api.tok");
+    let link = library.join("linked.tok");
+    #[cfg(unix)]
+    let created = std::os::unix::fs::symlink(&target, &link);
+    #[cfg(windows)]
+    let created = std::os::windows::fs::symlink_file(&target, &link);
+    if created.is_ok() {
+        let error = packages::hash_path(&library).unwrap_err();
+        assert!(error.contains("symlinks"));
+    }
     clean_fixture(&directory);
 }

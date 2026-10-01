@@ -37,7 +37,7 @@ private imported declaration reports `E119`. Duplicate declarations within one
 file report `E106`; identical private names in separate files are allowed.
 
 An experimental [local package candidate](LOCAL_PACKAGE_CANDIDATE.md) allows
-content-pinned, single-file source dependencies through `pkg:` imports.
+content-pinned local source files and module trees through `pkg:` imports.
 There is no re-export syntax, registry, separate compilation, module
 initialization, or stable binary interface. The `pub` flag is enforced by
 checking and exposed in the multi-file AI index alongside direct import edges.

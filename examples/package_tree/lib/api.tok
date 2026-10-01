@@ -1,0 +1,1 @@
+import math="internal/math.tok";pub fn answer()->i32{math::double(21)}
