@@ -60,7 +60,9 @@ impl UseKind {
             Self::Call => matches!(
                 name,
                 "read_text"
+                    | "read_bytes"
                     | "write_text"
+                    | "write_bytes"
                     | "lines"
                     | "args"
                     | "len"
@@ -93,7 +95,9 @@ fn reserved(name: &str) -> bool {
             | "TaskError"
             | "ParseError"
             | "read_text"
+            | "read_bytes"
             | "write_text"
+            | "write_bytes"
             | "lines"
             | "args"
             | "len"

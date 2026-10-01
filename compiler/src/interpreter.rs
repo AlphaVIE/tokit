@@ -433,6 +433,23 @@ fn eval(
                     ))),
                 }));
             }
+            if name == builtins::READ_BYTES {
+                let [Value::String(path)] = values.as_slice() else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid read_bytes call",
+                    ));
+                };
+                return Ok(Flow::Value(match runtime.read.read_bytes(path) {
+                    Ok(bytes) => Value::Ok(Box::new(Value::Bytes(bytes))),
+                    Err(error) => Value::Err(Box::new(Value::Enum(
+                        builtins::IO_ERROR.to_owned(),
+                        error.variant().to_owned(),
+                        None,
+                    ))),
+                }));
+            }
             if name == builtins::WRITE_TEXT {
                 let [Value::String(path), Value::String(text)] = values.as_slice() else {
                     return Err(Diagnostic::new(
@@ -442,6 +459,23 @@ fn eval(
                     ));
                 };
                 return Ok(Flow::Value(match runtime.write.write_text(path, text) {
+                    Ok(()) => Value::Ok(Box::new(Value::Unit)),
+                    Err(error) => Value::Err(Box::new(Value::Enum(
+                        builtins::IO_ERROR.to_owned(),
+                        error.variant().to_owned(),
+                        None,
+                    ))),
+                }));
+            }
+            if name == builtins::WRITE_BYTES {
+                let [Value::String(path), Value::Bytes(bytes)] = values.as_slice() else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid write_bytes call",
+                    ));
+                };
+                return Ok(Flow::Value(match runtime.write.write_bytes(path, bytes) {
                     Ok(()) => Value::Ok(Box::new(Value::Unit)),
                     Err(error) => Value::Err(Box::new(Value::Enum(
                         builtins::IO_ERROR.to_owned(),

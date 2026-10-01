@@ -63,8 +63,18 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             builtins::read_text_result(),
         ),
         (
+            builtins::READ_BYTES,
+            vec![Type::String],
+            builtins::read_bytes_result(),
+        ),
+        (
             builtins::WRITE_TEXT,
             vec![Type::String, Type::String],
+            builtins::write_text_result(),
+        ),
+        (
+            builtins::WRITE_BYTES,
+            vec![Type::String, Type::Bytes],
             builtins::write_text_result(),
         ),
         (
@@ -158,7 +168,9 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "Option"
                 | "Task"
                 | "read_text"
+                | "read_bytes"
                 | "write_text"
+                | "write_bytes"
                 | "lines"
                 | "args"
                 | "len"
@@ -192,7 +204,9 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "Option"
                 | "Task"
                 | "read_text"
+                | "read_bytes"
                 | "write_text"
+                | "write_bytes"
                 | "lines"
                 | "args"
                 | "len"
@@ -435,7 +449,9 @@ fn expression_is_spawn_safe(
         | ExprKind::Try(value) => expression_is_spawn_safe(value, program, visiting),
         ExprKind::Call(name, args) => {
             name != builtins::READ_TEXT
+                && name != builtins::READ_BYTES
                 && name != builtins::WRITE_TEXT
+                && name != builtins::WRITE_BYTES
                 && name != builtins::ARGS
                 && name != builtins::JOIN
                 && (matches!(
