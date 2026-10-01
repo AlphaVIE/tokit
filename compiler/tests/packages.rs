@@ -513,3 +513,176 @@ fn lock_command_refuses_symlink_destination_when_supported() {
     }
     clean_fixture(&directory);
 }
+
+#[test]
+fn cli_add_and_rm_keep_manifest_comments_and_lock_in_sync() {
+    let directory = temporary_directory();
+    let (entry, _, manifest) = fixture(&directory);
+    let original = std::fs::read_to_string(&manifest).unwrap();
+    std::fs::write(
+        &manifest,
+        format!("# retained heading\n{original}# retained tail\n"),
+    )
+    .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
+    let extra = directory.join("library/extra.tok");
+    std::fs::write(&extra, "pub fn value()->i32{5}").unwrap();
+    let run = |arguments: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_tok"))
+            .args(arguments)
+            .output()
+            .unwrap()
+    };
+    let entry_path = entry.to_str().unwrap();
+    let added = run(&["add", entry_path, "extra", "../library/extra.tok"]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let updated = std::fs::read_to_string(&manifest).unwrap();
+    assert!(updated.contains("# retained heading"));
+    assert!(updated.contains("# retained tail"));
+    assert!(updated.contains("extra = {"));
+    let lock = std::fs::read_to_string(entry.parent().unwrap().join("tok.lock")).unwrap();
+    assert!(lock.contains("name = \"extra\""));
+    assert!(lock.contains("name = \"math\""));
+    modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+
+    let duplicate = run(&["add", entry_path, "extra", "../library/extra.tok"]);
+    assert!(!duplicate.status.success());
+    assert_eq!(std::fs::read_to_string(&manifest).unwrap(), updated);
+    assert_eq!(
+        std::fs::read_to_string(entry.parent().unwrap().join("tok.lock")).unwrap(),
+        lock
+    );
+
+    let removed = run(&["rm", entry_path, "extra"]);
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    let result = std::fs::read_to_string(&manifest).unwrap();
+    assert!(result.contains("# retained heading"));
+    assert!(result.contains("# retained tail"));
+    assert!(!result.contains("extra ="));
+    let lock = std::fs::read_to_string(entry.parent().unwrap().join("tok.lock")).unwrap();
+    assert!(!lock.contains("name = \"extra\""));
+    modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    clean_fixture(&directory);
+}
+
+#[test]
+fn cli_add_directory_validates_entry_and_preserves_files_on_failure() {
+    let directory = temporary_directory();
+    let (entry, _, manifest) = fixture(&directory);
+    let package = directory.join("library/pack");
+    std::fs::create_dir(&package).unwrap();
+    std::fs::write(package.join("api.tok"), "pub fn value()->i32{8}").unwrap();
+    let entry_path = entry.to_str().unwrap();
+    let manifest_before = std::fs::read_to_string(&manifest).unwrap();
+    let lock_path = entry.parent().unwrap().join("tok.lock");
+    let lock_before = std::fs::read_to_string(&lock_path).unwrap();
+    let run = |arguments: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_tok"))
+            .args(arguments)
+            .output()
+            .unwrap()
+    };
+    for arguments in [
+        vec!["add", entry_path, "pack", "../library/pack"],
+        vec![
+            "add",
+            entry_path,
+            "pack",
+            "../library/pack",
+            "--entry",
+            "missing.tok",
+        ],
+        vec![
+            "add",
+            entry_path,
+            "pack",
+            "../library/math.tok",
+            "--entry",
+            "api.tok",
+        ],
+    ] {
+        assert!(!run(&arguments).status.success(), "{arguments:?}");
+        assert_eq!(std::fs::read_to_string(&manifest).unwrap(), manifest_before);
+        assert_eq!(std::fs::read_to_string(&lock_path).unwrap(), lock_before);
+    }
+    let added = run(&[
+        "add",
+        entry_path,
+        "pack",
+        "../library/pack",
+        "--entry",
+        "api.tok",
+    ]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    std::fs::write(
+        &entry,
+        "import pack=\"pkg:pack\";fn main()->i32{pack::value()}",
+    )
+    .unwrap();
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "8");
+    clean_fixture(&directory);
+}
+
+#[test]
+fn cli_add_creates_manifest_and_refuses_symlink_lock_without_writing() {
+    let directory = temporary_directory();
+    let app = directory.join("app");
+    let library = directory.join("library");
+    std::fs::create_dir(&app).unwrap();
+    std::fs::create_dir(&library).unwrap();
+    let entry = app.join("main.tok");
+    std::fs::write(
+        &entry,
+        "import item=\"pkg:item\";fn main()->i32{item::value()}",
+    )
+    .unwrap();
+    std::fs::write(library.join("item.tok"), "pub fn value()->i32{9}").unwrap();
+    let command = || {
+        Command::new(env!("CARGO_BIN_EXE_tok"))
+            .args([
+                "add",
+                entry.to_str().unwrap(),
+                "item",
+                "../library/item.tok",
+            ])
+            .output()
+            .unwrap()
+    };
+    let lock = app.join("tok.lock");
+    let outside = directory.join("outside.txt");
+    std::fs::write(&outside, "keep").unwrap();
+    #[cfg(unix)]
+    let created = std::os::unix::fs::symlink(&outside, &lock);
+    #[cfg(windows)]
+    let created = std::os::windows::fs::symlink_file(&outside, &lock);
+    if created.is_ok() {
+        assert!(!command().status.success());
+        assert!(!app.join("tok.toml").exists());
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep");
+        std::fs::remove_file(&lock).unwrap();
+    }
+    let result = command();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(app.join("tok.toml").exists());
+    assert!(lock.exists());
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "9");
+    clean_fixture(&directory);
+}
