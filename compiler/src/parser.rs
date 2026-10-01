@@ -108,6 +108,7 @@ impl Parser {
             "i32" => Ok(Type::I32),
             "bool" => Ok(Type::Bool),
             "String" => Ok(Type::String),
+            "Bytes" => Ok(Type::Bytes),
             "Unit" => Ok(Type::Unit),
             "Result" => {
                 self.expect(Kind::Lt)?;

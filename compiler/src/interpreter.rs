@@ -12,6 +12,7 @@ pub enum Value {
     I32(i32),
     Bool(bool),
     String(String),
+    Bytes(Vec<u8>),
     Array(Vec<Value>),
     Record(String, Vec<(String, Value)>),
     Enum(String, String, Option<Box<Value>>),
@@ -29,6 +30,7 @@ impl std::fmt::Display for Value {
             Self::I32(n) => write!(f, "{n}"),
             Self::Bool(value) => write!(f, "{value}"),
             Self::String(value) => write!(f, "{value:?}"),
+            Self::Bytes(values) => write!(f, "Bytes({values:?})"),
             Self::Array(values) => {
                 f.write_str("[")?;
                 for (index, value) in values.iter().enumerate() {
@@ -247,6 +249,64 @@ fn eval_utf8_builtin(
                 Value::Some(Box::new(Value::String(text)))
             })));
     }
+    if name == builtins::UTF8_ENCODE {
+        let [Value::String(text)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid utf8_encode call",
+            )));
+        };
+        return Some(Ok(Value::Bytes(text.as_bytes().to_vec())));
+    }
+    if name == builtins::UTF8_DECODE_BYTES {
+        let [Value::Bytes(bytes)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid utf8_decode_bytes call",
+            )));
+        };
+        return Some(Ok(String::from_utf8(bytes.clone())
+            .ok()
+            .map_or(Value::None, |text| {
+                Value::Some(Box::new(Value::String(text)))
+            })));
+    }
+    if name == builtins::BYTES_FROM_I32 {
+        let [Value::Array(items)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid bytes_from_i32 call",
+            )));
+        };
+        let bytes = items
+            .iter()
+            .map(|item| match item {
+                Value::I32(value) => u8::try_from(*value).ok(),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>();
+        return Some(Ok(bytes.map_or(Value::None, |bytes| {
+            Value::Some(Box::new(Value::Bytes(bytes)))
+        })));
+    }
+    if name == builtins::BYTES_TO_I32 {
+        let [Value::Bytes(bytes)] = values else {
+            return Some(Err(Diagnostic::new(
+                "E204",
+                span,
+                "invalid bytes_to_i32 call",
+            )));
+        };
+        return Some(Ok(Value::Array(
+            bytes
+                .iter()
+                .map(|byte| Value::I32(i32::from(*byte)))
+                .collect(),
+        )));
+    }
     None
 }
 
@@ -288,14 +348,18 @@ fn eval(
         ExprKind::Index(array, index) => {
             let values = take_value!(eval(array, env, program, depth, runtime));
             let position = take_value!(eval(index, env, program, depth, runtime));
-            let (Value::Array(values), Value::I32(position)) = (values, position) else {
+            let Value::I32(position) = position else {
                 return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
             };
-            usize::try_from(position)
-                .ok()
-                .and_then(|position| values.get(position))
-                .cloned()
-                .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
+            let position = usize::try_from(position).ok();
+            match values {
+                Value::Array(values) => position.and_then(|at| values.get(at)).cloned(),
+                Value::Bytes(values) => position
+                    .and_then(|at| values.get(at))
+                    .map(|byte| Value::I32(i32::from(*byte))),
+                _ => return Err(Diagnostic::new("E204", expr.span, "invalid runtime index")),
+            }
+            .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
         }
         ExprKind::Field(value, field) => {
             let value = take_value!(eval(value, env, program, depth, runtime));
@@ -402,10 +466,12 @@ fn eval(
                 )));
             }
             if name == builtins::LEN {
-                let [Value::Array(items)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid len call"));
+                let length = match values.as_slice() {
+                    [Value::Array(items)] => items.len(),
+                    [Value::Bytes(items)] => items.len(),
+                    _ => return Err(Diagnostic::new("E204", expr.span, "invalid len call")),
                 };
-                let length = i32::try_from(items.len())
+                let length = i32::try_from(length)
                     .map_err(|_| Diagnostic::new("E206", expr.span, "array length exceeds i32"))?;
                 return Ok(Flow::Value(Value::I32(length)));
             }
@@ -571,8 +637,19 @@ fn eval(
                         span,
                     } => {
                         let iterable = take_value!(eval(iterable, &scope, program, depth, runtime));
-                        let Value::Array(values) = iterable else {
-                            return Err(Diagnostic::new("E204", *span, "invalid runtime iterable"));
+                        let values = match iterable {
+                            Value::Array(values) => values,
+                            Value::Bytes(bytes) => bytes
+                                .into_iter()
+                                .map(|byte| Value::I32(i32::from(byte)))
+                                .collect(),
+                            _ => {
+                                return Err(Diagnostic::new(
+                                    "E204",
+                                    *span,
+                                    "invalid runtime iterable",
+                                ));
+                            }
                         };
                         for value in values {
                             let mut loop_scope = scope.clone();

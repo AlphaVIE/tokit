@@ -1,0 +1,8 @@
+fn main()->Option<String>{
+    let data:Bytes=utf8_encode("Grüße, Tokit");
+    if len(data)>0{
+        utf8_decode_bytes(data)
+    }else{
+        None
+    }
+}

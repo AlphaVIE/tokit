@@ -75,13 +75,21 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("program arguments");
                 facts.effects.insert("env.args");
             } else if name == builtins::LEN {
-                facts.operations.insert("array length");
+                facts.operations.insert("array or byte length");
             } else if name == builtins::PARSE_I32 {
                 facts.operations.insert("integer parsing");
             } else if name == builtins::UTF8_BYTES {
                 facts.operations.insert("UTF-8 encoding");
             } else if name == builtins::UTF8_DECODE {
                 facts.operations.insert("UTF-8 decoding");
+            } else if name == builtins::UTF8_ENCODE {
+                facts.operations.insert("UTF-8 byte encoding");
+            } else if name == builtins::UTF8_DECODE_BYTES {
+                facts.operations.insert("UTF-8 byte decoding");
+            } else if name == builtins::BYTES_FROM_I32 {
+                facts.operations.insert("checked byte conversion");
+            } else if name == builtins::BYTES_TO_I32 {
+                facts.operations.insert("byte expansion");
             } else if name == builtins::JOIN {
                 facts.operations.insert("task join");
                 facts.effects.insert("task.join");

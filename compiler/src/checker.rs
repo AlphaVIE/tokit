@@ -92,6 +92,22 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             vec![Type::Array(Box::new(Type::I32))],
             Type::Option(Box::new(Type::String)),
         ),
+        (builtins::UTF8_ENCODE, vec![Type::String], Type::Bytes),
+        (
+            builtins::UTF8_DECODE_BYTES,
+            vec![Type::Bytes],
+            Type::Option(Box::new(Type::String)),
+        ),
+        (
+            builtins::BYTES_FROM_I32,
+            vec![Type::Array(Box::new(Type::I32))],
+            Type::Option(Box::new(Type::Bytes)),
+        ),
+        (
+            builtins::BYTES_TO_I32,
+            vec![Type::Bytes],
+            Type::Array(Box::new(Type::I32)),
+        ),
     ] {
         signatures.insert(
             name.to_owned(),
@@ -136,6 +152,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             "i32"
                 | "bool"
                 | "String"
+                | "Bytes"
                 | "Unit"
                 | "Result"
                 | "Option"
@@ -148,6 +165,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "parse_i32"
                 | "utf8_bytes"
                 | "utf8_decode"
+                | "utf8_encode"
+                | "utf8_decode_bytes"
+                | "bytes_from_i32"
+                | "bytes_to_i32"
                 | "join"
         ) || !record_names.insert(record.name.clone())
         {
@@ -165,6 +186,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             "i32"
                 | "bool"
                 | "String"
+                | "Bytes"
                 | "Unit"
                 | "Result"
                 | "Option"
@@ -177,6 +199,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "parse_i32"
                 | "utf8_bytes"
                 | "utf8_decode"
+                | "utf8_encode"
+                | "utf8_decode_bytes"
+                | "bytes_from_i32"
+                | "bytes_to_i32"
                 | "join"
         ) || !record_names.insert(enum_decl.name.clone())
         {
@@ -419,6 +445,10 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I32
                         | builtins::UTF8_BYTES
                         | builtins::UTF8_DECODE
+                        | builtins::UTF8_ENCODE
+                        | builtins::UTF8_DECODE_BYTES
+                        | builtins::BYTES_FROM_I32
+                        | builtins::BYTES_TO_I32
                 ) || program.records.iter().any(|record| record.name == *name)
                     || function_is_spawn_safe(name, program, visiting))
                 && args
@@ -848,14 +878,14 @@ fn infer(
                 return Ok(Type::Never);
             }
             require(&Type::I32, &index_type, index.span, "array index")?;
-            if let Type::Array(element) = array_type {
-                Ok(*element)
-            } else {
-                Err(Diagnostic::new(
+            match array_type {
+                Type::Array(element) => Ok(*element),
+                Type::Bytes => Ok(Type::I32),
+                _ => Err(Diagnostic::new(
                     "E110",
                     array.span,
-                    "indexing requires an array",
-                ))
+                    "indexing requires an array or Bytes",
+                )),
             }
         }
         ExprKind::Field(value, field) => {
@@ -958,7 +988,8 @@ fn infer(
                 }
                 Op::Add if lhs == Type::String && rhs == Type::String => Ok(Type::String),
                 Op::Eq | Op::Ne
-                    if lhs == rhs && matches!(lhs, Type::I32 | Type::Bool | Type::String) =>
+                    if lhs == rhs
+                        && matches!(lhs, Type::I32 | Type::Bool | Type::String | Type::Bytes) =>
                 {
                     Ok(Type::Bool)
                 }
@@ -995,6 +1026,9 @@ fn infer(
                 .iter()
                 .map(|arg| type_of(arg, env, signatures, return_type, types))
                 .collect::<Result<Vec<_>, _>>()?;
+            if name == builtins::LEN && actuals == [Type::Bytes] {
+                return Ok(Type::I32);
+            }
             let mut inferred = HashMap::new();
             for ((arg, expected), actual) in args.iter().zip(&signature.params).zip(&actuals) {
                 infer_params(expected, actual, &mut inferred, arg.span)?;
@@ -1236,18 +1270,22 @@ fn infer(
                         span,
                     } => {
                         let iter_type = type_of(iterable, &scope, signatures, return_type, types)?;
-                        let Type::Array(element) = iter_type else {
-                            return Err(Diagnostic::new(
-                                "E110",
-                                iterable.span,
-                                format!("for requires an array, got {iter_type}"),
-                            ));
+                        let element = match iter_type {
+                            Type::Array(element) => *element,
+                            Type::Bytes => Type::I32,
+                            _ => {
+                                return Err(Diagnostic::new(
+                                    "E110",
+                                    iterable.span,
+                                    format!("for requires an array or Bytes, got {iter_type}"),
+                                ));
+                            }
                         };
                         let mut loop_scope = scope.clone();
                         loop_scope.insert(
                             name.clone(),
                             Binding {
-                                ty: *element,
+                                ty: element,
                                 mutable: false,
                             },
                         );

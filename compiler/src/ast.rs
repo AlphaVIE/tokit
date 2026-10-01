@@ -39,6 +39,7 @@ pub enum Type {
     I32,
     Bool,
     String,
+    Bytes,
     Named(String),
     Applied(String, Vec<Type>),
     Param(String),
@@ -57,6 +58,7 @@ impl std::fmt::Display for Type {
             Self::I32 => "i32",
             Self::Bool => "bool",
             Self::String => "String",
+            Self::Bytes => "Bytes",
             Self::Named(name) => return f.write_str(name),
             Self::Applied(name, args) => {
                 write!(f, "{name}<")?;

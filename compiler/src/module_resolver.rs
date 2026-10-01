@@ -67,6 +67,10 @@ impl UseKind {
                     | "parse_i32"
                     | "utf8_bytes"
                     | "utf8_decode"
+                    | "utf8_encode"
+                    | "utf8_decode_bytes"
+                    | "bytes_from_i32"
+                    | "bytes_to_i32"
                     | "join"
             ),
             Self::Type | Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
@@ -80,6 +84,7 @@ fn reserved(name: &str) -> bool {
         "i32"
             | "bool"
             | "String"
+            | "Bytes"
             | "Unit"
             | "Result"
             | "Option"
@@ -95,6 +100,10 @@ fn reserved(name: &str) -> bool {
             | "parse_i32"
             | "utf8_bytes"
             | "utf8_decode"
+            | "utf8_encode"
+            | "utf8_decode_bytes"
+            | "bytes_from_i32"
+            | "bytes_to_i32"
             | "join"
     )
 }
@@ -254,6 +263,7 @@ impl Resolver<'_> {
             Type::I32
             | Type::Bool
             | Type::String
+            | Type::Bytes
             | Type::Unit
             | Type::Never
             | Type::Param(_)

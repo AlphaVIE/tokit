@@ -16,7 +16,7 @@ An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load
 
 `Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.
 
-Pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` expose UTF-8 bytes for parser experiments. [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows a round trip; the integer-array representation is provisional.
+Experimental `Bytes` values store packed byte data, with UTF-8 and checked `[i32]` conversions. [byte_values.tok](examples/byte_values.tok) shows encoding, indexing, and decoding. The earlier pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` remain available for existing parser experiments; [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows that path.
 
 An experimental [JSON module](spec/JSON_MODULE_CANDIDATE.md) parses and renders recursive JSON values in Tokit. Its parser reports byte offsets and has an explicit nesting limit; packaging and performance work remain open.
 
