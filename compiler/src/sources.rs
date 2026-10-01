@@ -7,6 +7,7 @@ use crate::ast::SourceId;
 #[derive(Clone, Debug)]
 pub struct SourceFile {
     pub path: PathBuf,
+    pub display_override: Option<PathBuf>,
     pub text: String,
 }
 
@@ -27,8 +28,21 @@ impl SourceMap {
     }
 
     pub fn push(&mut self, path: PathBuf, text: String) -> SourceId {
+        self.push_labeled(path, text, None)
+    }
+
+    pub fn push_labeled(
+        &mut self,
+        path: PathBuf,
+        text: String,
+        display_override: Option<PathBuf>,
+    ) -> SourceId {
         let id = SourceId(self.files.len());
-        self.files.push(SourceFile { path, text });
+        self.files.push(SourceFile {
+            path,
+            display_override,
+            text,
+        });
         id
     }
 
@@ -38,6 +52,9 @@ impl SourceMap {
 
     pub fn display_path(&self, id: SourceId) -> Option<&Path> {
         let file = self.get(id)?;
+        if let Some(label) = &file.display_override {
+            return Some(label);
+        }
         let base = self.files.first()?.path.parent();
         Some(
             base.and_then(|base| file.path.strip_prefix(base).ok())

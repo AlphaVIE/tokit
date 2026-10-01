@@ -11,6 +11,7 @@ pub mod lexer;
 pub mod module_resolver;
 pub mod modules;
 pub mod native;
+pub mod packages;
 pub mod parser;
 pub mod sources;
 pub mod stats;

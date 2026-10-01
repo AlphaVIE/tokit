@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::ast::{ImportDecl, Program, SourceId, Span};
 use crate::diagnostic::Diagnostic;
 use crate::module_resolver::{self, ModuleUnit};
+use crate::packages;
 use crate::sources::SourceMap;
 
 pub struct LoadedProgram {
@@ -43,6 +44,8 @@ struct Loader {
     active: HashSet<PathBuf>,
     units: Vec<Option<ModuleUnit>>,
     order: Vec<SourceId>,
+    dependencies: Option<HashMap<String, packages::PackageSource>>,
+    package_files: HashMap<PathBuf, (String, String)>,
 }
 
 impl Loader {
@@ -54,10 +57,48 @@ impl Loader {
             active: HashSet::new(),
             units: Vec::new(),
             order: Vec::new(),
+            dependencies: None,
+            package_files: HashMap::new(),
         }
     }
 
-    fn resolve_import(&self, parent: &Path, import: &ImportDecl) -> Result<PathBuf, Diagnostic> {
+    fn resolve_import(
+        &mut self,
+        parent: &Path,
+        import: &ImportDecl,
+    ) -> Result<PathBuf, Diagnostic> {
+        if let Some(name) = import.path.strip_prefix("pkg:") {
+            if self.dependencies.is_none() {
+                let dependencies = packages::load(&self.root_dir)
+                    .map_err(|message| Diagnostic::new("E120", import.span, message))?;
+                for (name, package) in &dependencies {
+                    self.package_files
+                        .insert(package.path.clone(), (name.clone(), package.source.clone()));
+                }
+                self.dependencies = Some(dependencies);
+            }
+            let target = self
+                .dependencies
+                .as_ref()
+                .and_then(|dependencies| dependencies.get(name))
+                .map(|package| package.path.clone())
+                .ok_or_else(|| {
+                    Diagnostic::new("E120", import.span, format!("unknown dependency {name:?}"))
+                })?;
+            if let Some(source_id) = self.visited.get(&target)
+                && self
+                    .sources
+                    .get(*source_id)
+                    .is_some_and(|source| source.display_override.is_none())
+            {
+                return Err(Diagnostic::new(
+                    "E120",
+                    import.span,
+                    "package file was already imported by relative path",
+                ));
+            }
+            return Ok(target);
+        }
         let relative = Path::new(&import.path);
         if relative.as_os_str().is_empty() || relative.is_absolute() {
             return Err(Diagnostic::new(
@@ -91,6 +132,13 @@ impl Loader {
                 "import path must name a .tok file",
             ));
         }
+        if self.package_files.contains_key(&canonical) {
+            return Err(Diagnostic::new(
+                "E120",
+                import.span,
+                "package file must be imported through pkg:",
+            ));
+        }
         Ok(canonical)
     }
 
@@ -105,19 +153,34 @@ impl Loader {
         if let Some(id) = self.visited.get(&path) {
             return Ok(*id);
         }
-        let text = fs::read_to_string(&path).map_err(|error| {
-            Diagnostic::new(
-                "E118",
-                origin.unwrap_or_else(|| Span::new(0, 0)),
-                format!("cannot read {}: {error}", path.display()),
-            )
-        })?;
-        let source_id = self.sources.push(path.clone(), text);
+        let text = if let Some((_, source)) = self.package_files.get(&path) {
+            source.clone()
+        } else {
+            fs::read_to_string(&path).map_err(|error| {
+                Diagnostic::new(
+                    "E118",
+                    origin.unwrap_or_else(|| Span::new(0, 0)),
+                    format!("cannot read {}: {error}", path.display()),
+                )
+            })?
+        };
+        let label = self
+            .package_files
+            .get(&path)
+            .map(|(name, _)| PathBuf::from(format!("pkg/{name}.tok")));
+        let source_id = self.sources.push_labeled(path.clone(), text, label);
         self.units.push(None);
         self.visited.insert(path.clone(), source_id);
         self.active.insert(path.clone());
         let source = &self.sources.get(source_id).expect("registered source").text;
         let parsed = crate::parse_in_source(source, source_id)?;
+        if self.package_files.contains_key(&path) && !parsed.imports.is_empty() {
+            return Err(Diagnostic::new(
+                "E120",
+                parsed.imports[0].span,
+                "single-file package dependencies cannot import other modules",
+            ));
+        }
         let mut local_imports = HashSet::new();
         let mut aliases = HashMap::new();
         let parent = path.parent().expect("canonical file has parent");

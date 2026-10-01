@@ -1,0 +1,1 @@
+import json="pkg:json";fn main()->Option<String>{match json::parse("{\"ok\":true,\"items\":[1,null]}"){Ok(value)=>match json::render(value){Ok(text)=>Some(text),Err(error)=>None},Err(error)=>None}}
