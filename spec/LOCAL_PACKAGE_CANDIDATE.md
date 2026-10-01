@@ -25,7 +25,8 @@ calc = { path = "../lib", entry = "api.tok", sha256 = "00fd1e1fc160d2cd6010600a4
 The path is relative to `tok.toml`, not to the importing source. The
 `sha256` field is the lowercase SHA-256 digest of the exact source bytes;
 `tok pkg-hash path/to/file.tok` or `tok pkg-hash path/to/directory` prints
-it. A directory digest uses SHA-256 with the domain prefix
+it. Run `tok lock entry.tok` after editing `tok.toml` to generate the
+required `tok.lock` beside the entry file. A directory digest uses SHA-256 with the domain prefix
 `tokit-package-tree-v1\0`, followed by each `.tok` file in sorted relative
 path order. Each file contributes the big-endian 64-bit length of its
 slash-separated UTF-8 relative path, the path bytes, the big-endian 64-bit
@@ -36,6 +37,17 @@ content fails with `E120` until the manifest digest is updated. Sources
 must be UTF-8. A single-file dependency cannot import other files; a
 directory dependency can import relative `.tok` paths only within its
 pinned tree. Package-to-package imports remain unsupported.
+
+`tok.lock` format 1 records the compiler version, the `portable-source`
+target class, the SHA-256 digest of the exact manifest bytes, and each
+direct dependency's name, relative manifest path, optional entry file,
+content digest, and sorted logical source paths. The loader compares the
+file with a freshly computed canonical lock representation. A missing or
+stale file reports `E121`; invalid manifests or source content report
+`E120`. The lockfile contains no absolute checkout paths. The target
+field describes source compatibility only; it does not lock a native
+binary or host toolchain. See the checked-in [single-file lock](../examples/package_json/tok.lock)
+and [module-tree lock](../examples/package_tree/app/tok.lock).
 
 Imported declarations keep the same `pub` visibility rules as local file
 modules. Source maps, diagnostics, AI index names, and generated source use
@@ -49,7 +61,7 @@ path may leave it only when explicitly declared and pinned in the manifest.
 experimental JSON module from a separate directory. This is a candidate
 for reviewing package identity and import syntax, not a stable package
 manager. There is no registry, download, transitive package graph,
-package version resolution, signature, cache, lockfile,
+package version resolution, signature, cache,
 or `tok add` command yet. Source pinning verifies content but does not
 establish who published it. The design must be reviewed before expanding
 to remote packages or freezing compatibility guarantees.
