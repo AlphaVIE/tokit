@@ -4,6 +4,7 @@
 *.py text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf
+tok.lock text eol=lf
 *.tok text eol=lf
 *.yml text eol=lf
 *.c text eol=lf

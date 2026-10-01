@@ -95,7 +95,7 @@ impl Loader {
             }
             if self.dependencies.is_none() {
                 let dependencies = packages::load(&self.root_dir)
-                    .map_err(|message| Diagnostic::new("E120", import.span, message))?;
+                    .map_err(|error| Diagnostic::new(error.code, import.span, error.message))?;
                 for package in dependencies.values() {
                     for file in &package.files {
                         if self.visited.contains_key(&file.path) {

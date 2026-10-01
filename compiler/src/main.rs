@@ -177,6 +177,31 @@ fn main() {
         }
         return;
     }
+    if let [_, command, path] = args.as_slice()
+        && command == "lock"
+    {
+        let entry = match fs::canonicalize(path) {
+            Ok(entry) if entry.is_file() && entry.extension().is_some_and(|ext| ext == "tok") => {
+                entry
+            }
+            Ok(_) => {
+                eprintln!("tok lock needs an entry .tok file");
+                process::exit(2);
+            }
+            Err(error) => {
+                eprintln!("cannot open entry file: {error}");
+                process::exit(2);
+            }
+        };
+        match tokit_compiler::packages::write_lock(entry.parent().expect("entry has parent")) {
+            Ok(lock) => println!("{}", lock.display()),
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+        return;
+    }
     let fmt = match args.as_slice() {
         [_, command, path] if command == "fmt" => Some(("print", path)),
         [_, command, mode, path]
@@ -250,7 +275,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok|directory>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok|directory> | tok lock <entry.tok>"
             );
             process::exit(2);
         }
