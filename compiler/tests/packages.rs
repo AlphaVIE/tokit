@@ -88,7 +88,7 @@ fn pinned_package_import_runs_without_absolute_names() {
         packages::hash_file(&module).unwrap()
     );
     if Command::new("rustc").arg("--version").output().is_ok() {
-        let output = directory.join(format!("app{}", std::env::consts::EXE_SUFFIX));
+        let output = directory.join(format!("package-program{}", std::env::consts::EXE_SUFFIX));
         native::build_with_sources(&loaded.program, &loaded.sources, &output).unwrap();
         let result = Command::new(output).output().unwrap();
         assert!(result.status.success());
