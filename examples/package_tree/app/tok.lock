@@ -1,0 +1,11 @@
+compiler = "tokit-compiler/0.0.1"
+format = 1
+manifest_sha256 = "0271e434aa141a7992c334383f086867cd96ba927bbc53255319f70e7494d341"
+target = "portable-source"
+
+[[package]]
+entry = "api.tok"
+name = "calc"
+path = "../lib"
+sha256 = "00fd1e1fc160d2cd6010600a444a8dc8880bab3ad55e7c1f579992dc9efe9718"
+sources = ["pkg/calc/api.tok", "pkg/calc/internal/math.tok"]

@@ -22,6 +22,20 @@ pub struct PackageSource {
     pub files: Vec<PackageFile>,
 }
 
+#[derive(Debug)]
+pub struct PackageError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+struct LockEntry {
+    name: String,
+    path: String,
+    entry: Option<String>,
+    sha256: String,
+    sources: Vec<String>,
+}
+
 struct TreeFile {
     path: PathBuf,
     relative: String,
@@ -213,7 +227,44 @@ fn package_tree(
     })
 }
 
-pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, String> {
+fn render_lock(manifest_hash: String, mut entries: Vec<LockEntry>) -> Result<String, String> {
+    let mut lock = toml::Table::new();
+    lock.insert("format".to_owned(), toml::Value::Integer(1));
+    lock.insert(
+        "compiler".to_owned(),
+        toml::Value::String(format!("tokit-compiler/{}", env!("CARGO_PKG_VERSION"))),
+    );
+    lock.insert(
+        "target".to_owned(),
+        toml::Value::String("portable-source".to_owned()),
+    );
+    lock.insert(
+        "manifest_sha256".to_owned(),
+        toml::Value::String(manifest_hash),
+    );
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    let packages = entries
+        .into_iter()
+        .map(|entry| {
+            let mut record = toml::Table::new();
+            record.insert("name".to_owned(), toml::Value::String(entry.name));
+            record.insert("path".to_owned(), toml::Value::String(entry.path));
+            if let Some(main) = entry.entry {
+                record.insert("entry".to_owned(), toml::Value::String(main));
+            }
+            record.insert("sha256".to_owned(), toml::Value::String(entry.sha256));
+            record.insert(
+                "sources".to_owned(),
+                toml::Value::Array(entry.sources.into_iter().map(toml::Value::String).collect()),
+            );
+            toml::Value::Table(record)
+        })
+        .collect();
+    lock.insert("package".to_owned(), toml::Value::Array(packages));
+    toml::to_string(&lock).map_err(|error| format!("cannot serialize tok.lock: {error}"))
+}
+
+fn resolve(root_dir: &Path) -> Result<(HashMap<String, PackageSource>, String), String> {
     let manifest = root_dir.join("tok.toml");
     let source =
         fs::read_to_string(&manifest).map_err(|error| format!("cannot read tok.toml: {error}"))?;
@@ -225,6 +276,7 @@ pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, String> {
         .ok_or("tok.toml needs a [dependencies] table")?;
     let mut resolved = HashMap::new();
     let mut paths = HashSet::new();
+    let mut lock_entries = Vec::new();
     for (name, value) in dependencies {
         let mut chars = name.chars();
         if !chars
@@ -248,6 +300,7 @@ pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, String> {
         }
         let canonical = fs::canonicalize(root_dir.join(relative))
             .map_err(|error| format!("cannot resolve dependency {name}: {error}"))?;
+        let mut entry_name = None;
         let package = if canonical.is_file() {
             if entry.len() != 2 || !entry.contains_key("path") || !entry.contains_key("sha256") {
                 return Err(format!(
@@ -269,6 +322,7 @@ pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, String> {
                 .get("entry")
                 .and_then(toml::Value::as_str)
                 .ok_or_else(|| format!("dependency {name} entry must be a string"))?;
+            entry_name = Some(main.to_owned());
             package_tree(name, canonical, main, expected)?
         } else {
             return Err(format!(
@@ -280,7 +334,59 @@ pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, String> {
                 return Err(format!("dependency {name} repeats a package file"));
             }
         }
+        let mut sources = package
+            .files
+            .iter()
+            .map(|file| {
+                file.label
+                    .to_str()
+                    .expect("package labels are UTF-8")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        sources.sort();
+        lock_entries.push(LockEntry {
+            name: name.clone(),
+            path: path.to_owned(),
+            entry: entry_name,
+            sha256: expected.to_owned(),
+            sources,
+        });
         resolved.insert(name.clone(), package);
+    }
+    let lock = render_lock(hash_bytes(source.as_bytes()), lock_entries)?;
+    Ok((resolved, lock))
+}
+
+pub fn write_lock(root_dir: &Path) -> Result<PathBuf, String> {
+    let (_, contents) = resolve(root_dir)?;
+    let path = root_dir.join("tok.lock");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
+            return Err("tok.lock must be a regular file, not a symlink or directory".to_owned());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("cannot inspect tok.lock: {error}")),
+    }
+    fs::write(&path, contents).map_err(|error| format!("cannot write tok.lock: {error}"))?;
+    Ok(path)
+}
+
+pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, PackageError> {
+    let (resolved, expected) = resolve(root_dir).map_err(|message| PackageError {
+        code: "E120",
+        message,
+    })?;
+    let actual = fs::read_to_string(root_dir.join("tok.lock")).map_err(|error| PackageError {
+        code: "E121",
+        message: format!("cannot read tok.lock: {error}; run tok lock <entry.tok>"),
+    })?;
+    if actual != expected {
+        return Err(PackageError {
+            code: "E121",
+            message: "tok.lock is stale; run tok lock <entry.tok>".to_owned(),
+        });
     }
     Ok(resolved)
 }

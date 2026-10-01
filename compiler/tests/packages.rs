@@ -57,6 +57,7 @@ fn fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
         "import math=\"pkg:math\";fn main()->i32{math::twice(7)}",
     )
     .unwrap();
+    packages::write_lock(&app).unwrap();
     (entry, module, app.join("tok.toml"))
 }
 
@@ -91,6 +92,7 @@ fn tree_fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
         "import calc=\"pkg:calc\";fn main()->i32{calc::answer()}",
     )
     .unwrap();
+    packages::write_lock(&app).unwrap();
     (entry, library, manifest)
 }
 
@@ -154,6 +156,7 @@ fn package_manifest_and_content_are_enforced() {
     .unwrap();
     assert_eq!(modules::load(&entry).err().unwrap().diagnostic.code, "E120");
     std::fs::write(&manifest, "[dependencies]\n").unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     assert!(
         modules::load(&entry)
             .err()
@@ -189,6 +192,7 @@ fn package_files_cannot_escape_the_single_file_contract() {
         ),
     )
     .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     let error = modules::load(&entry).err().unwrap();
     assert_eq!(error.diagnostic.code, "E120");
     assert!(error.diagnostic.message.contains("cannot import"));
@@ -214,6 +218,7 @@ fn one_file_cannot_have_relative_and_package_identities() {
         format!("[dependencies]\nmath = {{ path = \"math.tok\", sha256 = \"{digest}\" }}\n"),
     )
     .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     for imports in [
         "import direct=\"math.tok\";import packaged=\"pkg:math\";",
         "import packaged=\"pkg:math\";import direct=\"math.tok\";",
@@ -262,6 +267,7 @@ fn package_diagnostics_use_logical_source_path() {
         ),
     )
     .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     let error = modules::load(&entry).err().unwrap();
     assert_eq!(error.diagnostic.code, "E102");
     assert!(error.display().contains("pkg/math.tok:E102"));
@@ -277,6 +283,8 @@ fn package_diagnostics_use_logical_source_path() {
 fn pinned_package_tree_loads_relative_modules_in_both_backends() {
     let directory = temporary_directory();
     let (entry, library, _) = tree_fixture(&directory);
+    let lock = std::fs::read_to_string(entry.parent().unwrap().join("tok.lock")).unwrap();
+    assert!(lock.contains("pkg/calc/unused.tok"));
     let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
     assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "42");
     let index = ai_index::index_loaded(&loaded);
@@ -332,6 +340,7 @@ fn tree_hash_covers_unused_sources_and_rejects_escape() {
         ),
     )
     .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     let error = modules::load(&entry).err().unwrap();
     assert_eq!(error.diagnostic.code, "E120");
     assert!(
@@ -354,6 +363,7 @@ fn tree_hash_covers_unused_sources_and_rejects_escape() {
         ),
     )
     .unwrap();
+    packages::write_lock(entry.parent().unwrap()).unwrap();
     let error = modules::load(&entry).err().unwrap();
     assert_eq!(error.diagnostic.code, "E120");
     assert!(error.diagnostic.message.contains("other packages yet"));
@@ -406,6 +416,100 @@ fn package_tree_rejects_symlink_entries_when_supported() {
     if created.is_ok() {
         let error = packages::hash_path(&library).unwrap_err();
         assert!(error.contains("symlinks"));
+    }
+    clean_fixture(&directory);
+}
+
+#[test]
+fn lockfile_is_required_and_cli_regenerates_it() {
+    let directory = temporary_directory();
+    let (entry, module, manifest) = fixture(&directory);
+    let lock = entry.parent().unwrap().join("tok.lock");
+    let original = std::fs::read_to_string(&lock).unwrap();
+    assert!(original.contains("compiler = \"tokit-compiler/0.0.1\""));
+    assert!(original.contains("target = \"portable-source\""));
+    assert!(original.contains("sources = [\"pkg/math.tok\"]"));
+    assert!(!original.contains(&directory.to_string_lossy().to_string()));
+
+    std::fs::remove_file(&lock).unwrap();
+    assert_eq!(modules::load(&entry).err().unwrap().diagnostic.code, "E121");
+    let checked = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .args(["check", "--json", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!checked.status.success());
+    assert!(
+        String::from_utf8(checked.stdout)
+            .unwrap()
+            .contains("\"code\":\"E121\"")
+    );
+    let command = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .args(["lock", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        command.status.success(),
+        "{}",
+        String::from_utf8_lossy(&command.stderr)
+    );
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), original);
+    modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+
+    std::fs::write(&lock, format!("{original}\n")).unwrap();
+    assert_eq!(modules::load(&entry).err().unwrap().diagnostic.code, "E121");
+    packages::write_lock(entry.parent().unwrap()).unwrap();
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), original);
+
+    std::fs::write(
+        &manifest,
+        format!("{}\n", std::fs::read_to_string(&manifest).unwrap()),
+    )
+    .unwrap();
+    assert_eq!(modules::load(&entry).err().unwrap().diagnostic.code, "E121");
+    packages::write_lock(entry.parent().unwrap()).unwrap();
+    modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+
+    std::fs::write(&module, "pub fn twice(n:i32)->i32{n*3}").unwrap();
+    assert!(
+        packages::write_lock(entry.parent().unwrap())
+            .unwrap_err()
+            .contains("sha256 mismatch")
+    );
+    clean_fixture(&directory);
+}
+
+#[test]
+fn lockfile_is_independent_of_checkout_path() {
+    let first = temporary_directory();
+    let second = temporary_directory();
+    let (first_entry, _, _) = fixture(&first);
+    let (second_entry, _, _) = fixture(&second);
+    let first_lock = std::fs::read(first_entry.parent().unwrap().join("tok.lock")).unwrap();
+    let second_lock = std::fs::read(second_entry.parent().unwrap().join("tok.lock")).unwrap();
+    assert_eq!(first_lock, second_lock);
+    clean_fixture(&first);
+    clean_fixture(&second);
+}
+
+#[test]
+fn lock_command_refuses_symlink_destination_when_supported() {
+    let directory = temporary_directory();
+    let (entry, _, _) = fixture(&directory);
+    let lock = entry.parent().unwrap().join("tok.lock");
+    let outside = directory.join("outside.txt");
+    std::fs::write(&outside, "keep").unwrap();
+    std::fs::remove_file(&lock).unwrap();
+    #[cfg(unix)]
+    let created = std::os::unix::fs::symlink(&outside, &lock);
+    #[cfg(windows)]
+    let created = std::os::windows::fs::symlink_file(&outside, &lock);
+    if created.is_ok() {
+        assert!(
+            packages::write_lock(entry.parent().unwrap())
+                .unwrap_err()
+                .contains("symlink")
+        );
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep");
     }
     clean_fixture(&directory);
 }
