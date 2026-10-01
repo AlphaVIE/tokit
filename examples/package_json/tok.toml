@@ -1,0 +1,2 @@
+[dependencies]
+json = { path = "../json/json.tok", sha256 = "6a89f202f1c9ddca87e07838691d9b63713761ba4c374e3c4ee159269c0997fc" }

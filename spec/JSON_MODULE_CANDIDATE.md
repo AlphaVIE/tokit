@@ -36,10 +36,10 @@ resource limit, not a claim that deeper JSON is invalid. The Unicode
 choice excludes ill-formed strings allowed by the ABNF but identified as
 non-interoperable in [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259.html).
 
-This is a library experiment, not a packaged standard library. The current
-file loader only imports paths inside the entry file's directory, so examples
-keep a copy of the module beside their entry file. The current
-implementation copies byte arrays between parser functions and
+This is a library experiment, not a packaged standard library. The
+[local package example](../examples/package_json/main.tok) consumes this
+module through a content-pinned `pkg:` import. The current implementation
+copies byte arrays between parser functions and
 concatenates strings during rendering. Performance evaluation and a
 packaged interface remain part of [the JSON issue](https://github.com/AlphaVIE/tokit/issues/83);
 no linear-time or low-allocation claim is made.

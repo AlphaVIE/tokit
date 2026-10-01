@@ -165,6 +165,18 @@ fn main() {
         test_command(&args[2..]);
         return;
     }
+    if let [_, command, path] = args.as_slice()
+        && command == "pkg-hash"
+    {
+        match tokit_compiler::packages::hash_file(Path::new(path)) {
+            Ok(digest) => println!("{digest}"),
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+        return;
+    }
     let fmt = match args.as_slice() {
         [_, command, path] if command == "fmt" => Some(("print", path)),
         [_, command, mode, path]
@@ -238,7 +250,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok>"
             );
             process::exit(2);
         }
