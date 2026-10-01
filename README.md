@@ -14,6 +14,8 @@ Experimental file imports let the CLI load relative `.tok` files inside the entr
 
 An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load a `.tok` file or module tree declared with a SHA-256 content pin in `tok.toml` and a matching `tok.lock`. [The JSON package example](examples/package_json/main.tok) and [module tree example](examples/package_tree/app/main.tok) demonstrate the provisional `pkg:` syntax.
 
+`tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>]` and `tok rm <entry.tok> <name>` manage local package declarations and refresh `tok.lock`. They preserve comments in `tok.toml`; registry packages and version resolution are not yet supported.
+
 `Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.
 
 Experimental `Bytes` values store packed byte data, with UTF-8 and checked `[i32]` conversions. [byte_values.tok](examples/byte_values.tok) shows encoding, indexing, and decoding. The earlier pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` remain available for existing parser experiments; [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows that path.

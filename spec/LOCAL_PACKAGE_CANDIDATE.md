@@ -5,7 +5,7 @@ outside its own directory when the entry directory contains `tok.toml`:
 
 ```toml
 [dependencies]
-json = { path = "../json/json.tok", sha256 = "6a89f202f1c9ddca87e07838691d9b63713761ba4c374e3c4ee159269c0997fc" }
+json = { path = "../json/json.tok", sha256 = "0481914ddcf03c76d9fac14a510e09f04ec028576b4ccf9faa9458e4b02d1f1b" }
 ```
 
 ```tok
@@ -25,8 +25,17 @@ calc = { path = "../lib", entry = "api.tok", sha256 = "00fd1e1fc160d2cd6010600a4
 The path is relative to `tok.toml`, not to the importing source. The
 `sha256` field is the lowercase SHA-256 digest of the exact source bytes;
 `tok pkg-hash path/to/file.tok` or `tok pkg-hash path/to/directory` prints
-it. Run `tok lock entry.tok` after editing `tok.toml` to generate the
-required `tok.lock` beside the entry file. A directory digest uses SHA-256 with the domain prefix
+it. `tok add <entry.tok> <name> <relative-path>` adds a local file dependency,
+calculates its pin, and updates both `tok.toml` and `tok.lock`. For a package
+directory use `tok add <entry.tok> <name> <relative-directory> --entry <relative.tok>`.
+`tok rm <entry.tok> <name>` removes its declaration and updates the lockfile;
+it does not delete package files or edit source imports. Paths use `/` and
+are relative to the entry file's directory. Existing manifest comments are
+preserved, and an existing dependency name is not overwritten. The commands
+validate the resulting package set before writing and reject symlink manifest
+or lockfile destinations. Manual edits remain valid: run `tok lock entry.tok`
+after editing `tok.toml` to generate the required `tok.lock` beside the entry
+file. A directory digest uses SHA-256 with the domain prefix
 `tokit-package-tree-v1\0`, followed by each `.tok` file in sorted relative
 path order. Each file contributes the big-endian 64-bit length of its
 slash-separated UTF-8 relative path, the path bytes, the big-endian 64-bit
@@ -61,7 +70,6 @@ path may leave it only when explicitly declared and pinned in the manifest.
 experimental JSON module from a separate directory. This is a candidate
 for reviewing package identity and import syntax, not a stable package
 manager. There is no registry, download, transitive package graph,
-package version resolution, signature, cache,
-or `tok add` command yet. Source pinning verifies content but does not
-establish who published it. The design must be reviewed before expanding
+package version resolution, signature, or cache yet. Source pinning verifies
+content but does not establish who published it. The design must be reviewed before expanding
 to remote packages or freezing compatibility guarantees.
