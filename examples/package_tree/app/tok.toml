@@ -1,0 +1,2 @@
+[dependencies]
+calc = { path = "../lib", entry = "api.tok", sha256 = "00fd1e1fc160d2cd6010600a444a8dc8880bab3ad55e7c1f579992dc9efe9718" }

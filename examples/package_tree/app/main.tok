@@ -1,0 +1,1 @@
+import calc="pkg:calc";fn main()->i32{calc::answer()}
