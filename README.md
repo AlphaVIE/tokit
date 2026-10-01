@@ -12,6 +12,8 @@ An experimental typed task primitive lets `spawn f(args)` start a pure function 
 
 Experimental file imports let the CLI load relative `.tok` files inside the entry directory. [The multi-file example](examples/modules/main.tok) uses an explicit alias (`import math="math.tok";`), a public declaration (`pub fn triple...`), and a qualified call (`math::triple(7)`). Other declarations stay private to their file. See the [module contract](spec/MODULE_SYSTEM_CANDIDATE.md).
 
+An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load a single `.tok` dependency declared with a SHA-256 content pin in `tok.toml`. [The JSON package example](examples/package_json/main.tok) demonstrates the provisional `pkg:` syntax.
+
 `Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.
 
 Pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` expose UTF-8 bytes for parser experiments. [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows a round trip; the integer-array representation is provisional.
