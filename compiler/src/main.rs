@@ -29,6 +29,16 @@ fn json_diagnostic(diagnostic: &Diagnostic, sources: &SourceMap) -> String {
     }
 }
 
+fn package_entry_root(path: &str) -> Result<std::path::PathBuf, String> {
+    match fs::canonicalize(path) {
+        Ok(entry) if entry.is_file() && entry.extension().is_some_and(|ext| ext == "tok") => {
+            Ok(entry.parent().expect("entry has parent").to_path_buf())
+        }
+        Ok(_) => Err("package command needs an entry .tok file".to_owned()),
+        Err(error) => Err(format!("cannot open entry file: {error}")),
+    }
+}
+
 fn run_command(args: &[String]) {
     let mut index = 0;
     let mut json = false;
@@ -180,20 +190,66 @@ fn main() {
     if let [_, command, path] = args.as_slice()
         && command == "lock"
     {
-        let entry = match fs::canonicalize(path) {
-            Ok(entry) if entry.is_file() && entry.extension().is_some_and(|ext| ext == "tok") => {
-                entry
-            }
-            Ok(_) => {
-                eprintln!("tok lock needs an entry .tok file");
-                process::exit(2);
-            }
+        let root = match package_entry_root(path) {
+            Ok(root) => root,
             Err(error) => {
-                eprintln!("cannot open entry file: {error}");
+                eprintln!("{error}");
                 process::exit(2);
             }
         };
-        match tokit_compiler::packages::write_lock(entry.parent().expect("entry has parent")) {
+        match tokit_compiler::packages::write_lock(&root) {
+            Ok(lock) => println!("{}", lock.display()),
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+        return;
+    }
+    if args
+        .get(1)
+        .is_some_and(|command| command == "add" || command == "rm")
+    {
+        let (path, name, dependency_path, dependency_entry) = match args.as_slice() {
+            [_, command, path, name, dependency_path] if command == "add" => {
+                (path, name, Some(dependency_path.as_str()), None)
+            }
+            [
+                _,
+                command,
+                path,
+                name,
+                dependency_path,
+                flag,
+                dependency_entry,
+            ] if command == "add" && flag == "--entry" => (
+                path,
+                name,
+                Some(dependency_path.as_str()),
+                Some(dependency_entry.as_str()),
+            ),
+            [_, command, path, name] if command == "rm" => (path, name, None, None),
+            _ => {
+                eprintln!(
+                    "usage: tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
+                );
+                process::exit(2);
+            }
+        };
+        let root = match package_entry_root(path) {
+            Ok(root) => root,
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(2);
+            }
+        };
+        let result = match dependency_path {
+            Some(dependency_path) => {
+                tokit_compiler::packages::add_local(&root, name, dependency_path, dependency_entry)
+            }
+            None => tokit_compiler::packages::remove_local(&root, name),
+        };
+        match result {
             Ok(lock) => println!("{}", lock.display()),
             Err(error) => {
                 eprintln!("{error}");
@@ -275,7 +331,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok|directory> | tok lock <entry.tok>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
             );
             process::exit(2);
         }

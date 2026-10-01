@@ -2,10 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write as IoWrite;
 use std::path::{Component, Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
+use toml_edit::{DocumentMut, InlineTable, Item, Table, Value};
 
 #[derive(Clone)]
 pub struct PackageFile {
@@ -40,6 +43,41 @@ struct TreeFile {
     path: PathBuf,
     relative: String,
     bytes: Vec<u8>,
+}
+
+struct StagedFile(PathBuf);
+
+impl StagedFile {
+    fn new(root: &Path, label: &str, contents: &[u8]) -> Result<Self, String> {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("cannot create staged file timestamp: {error}"))?
+            .as_nanos();
+        for attempt in 0..16 {
+            let path = root.join(format!(
+                ".tok-{label}-{}-{nonce}-{attempt}.tmp",
+                std::process::id()
+            ));
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut file) => {
+                    let staged = Self(path);
+                    file.write_all(contents)
+                        .and_then(|()| file.sync_all())
+                        .map_err(|error| format!("cannot stage {label}: {error}"))?;
+                    return Ok(staged);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(format!("cannot stage {label}: {error}")),
+            }
+        }
+        Err(format!("cannot find a free staged {label} filename"))
+    }
+}
+
+impl Drop for StagedFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
 }
 
 fn hex_digest(digest: impl AsRef<[u8]>) -> String {
@@ -264,12 +302,12 @@ fn render_lock(manifest_hash: String, mut entries: Vec<LockEntry>) -> Result<Str
     toml::to_string(&lock).map_err(|error| format!("cannot serialize tok.lock: {error}"))
 }
 
-fn resolve(root_dir: &Path) -> Result<(HashMap<String, PackageSource>, String), String> {
-    let manifest = root_dir.join("tok.toml");
-    let source =
-        fs::read_to_string(&manifest).map_err(|error| format!("cannot read tok.toml: {error}"))?;
+fn resolve_source(
+    root_dir: &Path,
+    source: &str,
+) -> Result<(HashMap<String, PackageSource>, String), String> {
     let table: toml::Table =
-        toml::from_str(&source).map_err(|error| format!("invalid tok.toml: {error}"))?;
+        toml::from_str(source).map_err(|error| format!("invalid tok.toml: {error}"))?;
     let dependencies = table
         .get("dependencies")
         .and_then(toml::Value::as_table)
@@ -358,18 +396,137 @@ fn resolve(root_dir: &Path) -> Result<(HashMap<String, PackageSource>, String), 
     Ok((resolved, lock))
 }
 
+fn resolve(root_dir: &Path) -> Result<(HashMap<String, PackageSource>, String), String> {
+    let source = fs::read_to_string(root_dir.join("tok.toml"))
+        .map_err(|error| format!("cannot read tok.toml: {error}"))?;
+    resolve_source(root_dir, &source)
+}
+
+fn check_regular_destination(path: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => Err(format!(
+            "{} must be a regular file, not a symlink or directory",
+            path.display()
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("cannot inspect {}: {error}", path.display())),
+    }
+}
+
+fn write_manifest_update(
+    root_dir: &Path,
+    source: &str,
+    previous: Option<&str>,
+) -> Result<PathBuf, String> {
+    let (_, lock) = resolve_source(root_dir, source)?;
+    let manifest = root_dir.join("tok.toml");
+    let lock_path = root_dir.join("tok.lock");
+    check_regular_destination(&manifest)?;
+    check_regular_destination(&lock_path)?;
+    let manifest_stage = StagedFile::new(root_dir, "manifest", source.as_bytes())?;
+    let lock_stage = StagedFile::new(root_dir, "lock", lock.as_bytes())?;
+    let previous_stage = previous
+        .map(|contents| StagedFile::new(root_dir, "rollback", contents.as_bytes()))
+        .transpose()?;
+    fs::rename(&manifest_stage.0, &manifest)
+        .map_err(|error| format!("cannot replace tok.toml: {error}"))?;
+    if let Err(error) = fs::rename(&lock_stage.0, &lock_path) {
+        let rollback = match previous_stage {
+            Some(stage) => fs::rename(&stage.0, &manifest),
+            None => fs::remove_file(&manifest),
+        };
+        return Err(match rollback {
+            Ok(()) => format!("cannot replace tok.lock: {error}; tok.toml restored"),
+            Err(restore) => {
+                format!("cannot replace tok.lock: {error}; cannot restore tok.toml: {restore}")
+            }
+        });
+    }
+    Ok(lock_path)
+}
+
+pub fn add_local(
+    root_dir: &Path,
+    name: &str,
+    path: &str,
+    entry: Option<&str>,
+) -> Result<PathBuf, String> {
+    let manifest = root_dir.join("tok.toml");
+    check_regular_destination(&manifest)?;
+    let previous = match fs::read_to_string(&manifest) {
+        Ok(source) => Some(source),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("cannot read tok.toml: {error}")),
+    };
+    let mut document = match &previous {
+        Some(source) => source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid tok.toml: {error}"))?,
+        None => DocumentMut::new(),
+    };
+    if document.get("dependencies").is_none() {
+        document["dependencies"] = Item::Table(Table::new());
+    }
+    let dependencies = document["dependencies"]
+        .as_table_mut()
+        .ok_or("tok.toml needs a [dependencies] table")?;
+    if dependencies.contains_key(name) {
+        return Err(format!("dependency {name} already exists"));
+    }
+    if path.is_empty() || path.contains('\\') || Path::new(path).is_absolute() {
+        return Err("dependency path must be a relative slash-separated path".to_owned());
+    }
+    let target = root_dir.join(path);
+    let metadata = fs::symlink_metadata(&target)
+        .map_err(|error| format!("cannot inspect dependency path: {error}"))?;
+    if metadata.file_type().is_symlink() {
+        return Err("dependency path must not be a symlink".to_owned());
+    }
+    if metadata.is_file() && entry.is_some() {
+        return Err("single-file dependency cannot have --entry".to_owned());
+    }
+    if metadata.is_dir() && entry.is_none() {
+        return Err("directory dependency needs --entry <relative.tok>".to_owned());
+    }
+    if !metadata.is_file() && !metadata.is_dir() {
+        return Err("dependency path must name a file or directory".to_owned());
+    }
+    let digest = hash_path(&target)?;
+    let mut item = InlineTable::new();
+    item.insert("path", Value::from(path));
+    if let Some(entry) = entry {
+        item.insert("entry", Value::from(entry));
+    }
+    item.insert("sha256", Value::from(digest));
+    dependencies.insert(name, Item::Value(Value::InlineTable(item)));
+    write_manifest_update(root_dir, &document.to_string(), previous.as_deref())
+}
+
+pub fn remove_local(root_dir: &Path, name: &str) -> Result<PathBuf, String> {
+    let manifest = root_dir.join("tok.toml");
+    check_regular_destination(&manifest)?;
+    let previous =
+        fs::read_to_string(&manifest).map_err(|error| format!("cannot read tok.toml: {error}"))?;
+    let mut document = previous
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid tok.toml: {error}"))?;
+    let dependencies = document
+        .get_mut("dependencies")
+        .and_then(Item::as_table_mut)
+        .ok_or("tok.toml needs a [dependencies] table")?;
+    if dependencies.remove(name).is_none() {
+        return Err(format!("unknown dependency {name}"));
+    }
+    write_manifest_update(root_dir, &document.to_string(), Some(&previous))
+}
+
 pub fn write_lock(root_dir: &Path) -> Result<PathBuf, String> {
     let (_, contents) = resolve(root_dir)?;
     let path = root_dir.join("tok.lock");
-    match fs::symlink_metadata(&path) {
-        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
-            return Err("tok.lock must be a regular file, not a symlink or directory".to_owned());
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(format!("cannot inspect tok.lock: {error}")),
-    }
-    fs::write(&path, contents).map_err(|error| format!("cannot write tok.lock: {error}"))?;
+    check_regular_destination(&path)?;
+    let staged = StagedFile::new(root_dir, "lock", contents.as_bytes())?;
+    fs::rename(&staged.0, &path).map_err(|error| format!("cannot replace tok.lock: {error}"))?;
     Ok(path)
 }
 
