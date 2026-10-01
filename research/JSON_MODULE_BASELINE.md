@@ -49,3 +49,7 @@ performance harness before making one. To reproduce this host's run:
 ```powershell
 python scripts/measure_json.py --rust-toolchain stable-x86_64-pc-windows-gnu --output research/results/json-windows-gnu.json
 ```
+
+A later paired local run compares the original integer-array parser input
+with packed `Bytes`; see [JSON_PACKED_INPUT.md](JSON_PACKED_INPUT.md). The
+table above remains the original seed observation.

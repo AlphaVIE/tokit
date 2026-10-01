@@ -39,7 +39,7 @@ non-interoperable in [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259.html).
 This is a library experiment, not a packaged standard library. The
 [local package example](../examples/package_json/main.tok) consumes this
 module through a content-pinned `pkg:` import. The current implementation
-copies byte arrays between parser functions and
+copies packed `Bytes` values between parser functions and
 concatenates strings during rendering. Performance evaluation and a
 packaged interface remain part of [the JSON issue](https://github.com/AlphaVIE/tokit/issues/83);
 no linear-time or low-allocation claim is made.
