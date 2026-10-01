@@ -1,18 +1,20 @@
 # Experimental filesystem capabilities
 
-The current subset exposes three built-in functions:
+The current subset exposes five built-in functions:
 
 ```text
 read_text(path:String) -> Result<String,IoError>
+read_bytes(path:String) -> Result<Bytes,IoError>
 write_text(path:String,text:String) -> Result<Unit,IoError>
+write_bytes(path:String,data:Bytes) -> Result<Unit,IoError>
 lines(text:String) -> [String]
 ```
 
-`IoError` is a reserved built-in enum with `Denied`, `NotFound`, `InvalidUtf8`, and `Other` variants. `read_text` decodes the entire file as UTF-8 and returns an error value rather than a runtime diagnostic. `write_text` writes the UTF-8 bytes of its second argument, replacing an existing file or creating a new file when its parent directory exists, and returns `Ok(())`. It does not create directories. `lines` follows Rust `str.lines()` behavior: it splits on LF, removes a CR immediately before LF, and does not add an empty final element for a trailing LF. Counting lines with `i32` arithmetic still reports `E201` on overflow.
+`IoError` is a reserved built-in enum with `Denied`, `NotFound`, `InvalidUtf8`, and `Other` variants. `read_text` decodes the entire file as UTF-8 and returns an error value rather than a runtime diagnostic. `read_bytes` returns the exact file bytes, including invalid UTF-8; it never produces `InvalidUtf8`. `write_text` writes the UTF-8 bytes of its second argument. `write_bytes` writes the exact `Bytes` value. Both replace an existing file or create a new file when its parent directory exists, return `Ok(())`, and do not create directories. `lines` follows Rust `str.lines()` behavior: it splits on LF, removes a CR immediately before LF, and does not add an empty final element for a trailing LF. Counting lines with `i32` arithmetic still reports `E201` on overflow.
 
-Reads and writes need **separate** explicit grants. Without the corresponding grant, each function returns `Err(IoError::Denied)`. The interpreter accepts `tok run [--allow-read <path>] [--allow-write <path>] file.tok`; the same flags work when launching a binary made with `tok build`. `tok test` accepts them too. Grant flags may appear in either order before the source or binary program arguments. Each root may be a file or directory. A nonexistent grant grants nothing.
+Reads and writes need **separate** explicit grants. Text and byte operations use the same respective grant and path policy. Without the corresponding grant, each function returns `Err(IoError::Denied)`. The interpreter accepts `tok run [--allow-read <path>] [--allow-write <path>] file.tok`; the same flags work when launching a binary made with `tok build`. `tok test` accepts them too. Grant flags may appear in either order before the source or binary program arguments. Each root may be a file or directory. A nonexistent grant grants nothing.
 
-Both runtimes canonicalize granted roots and existing requested paths, then require the resolved path to be the root or inside it. This resolves existing symlinks before the containment check. A missing read target returns `NotFound` only when its existing parent is inside the read grant; otherwise it returns `Denied`. To create a file, `write_text` resolves its existing parent directory and requires that parent inside the write grant. A dangling symlink is denied; an existing symlink into the grant writes its resolved target. A missing parent or path outside the grant is denied. Other OS write failures return `IoError::Other`.
+Both runtimes canonicalize granted roots and existing requested paths, then require the resolved path to be the root or inside it. This resolves existing symlinks before the containment check. A missing read target returns `NotFound` only when its existing parent is inside the read grant; otherwise it returns `Denied`. To create a file, `write_text` and `write_bytes` resolve its existing parent directory and require that parent inside the write grant. A dangling symlink is denied; an existing symlink into the grant writes its resolved target. A missing parent or path outside the grant is denied. Other OS write failures return `IoError::Other`.
 
 Program arguments can follow the source or binary after `--`, for example `tok run --allow-read data reader.tok -- data/input.txt` or `./reader --allow-read data -- data/input.txt`. The built-in `args()` sees only `data/input.txt` in these examples.
 

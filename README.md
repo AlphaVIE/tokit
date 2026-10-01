@@ -8,6 +8,8 @@ An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can pa
 
 Experimental [filesystem capabilities](spec/FILESYSTEM_CAPABILITY.md) let Tokit read and write UTF-8 files through separate path grants. See [file_copy.tok](examples/file_copy.tok) for a two-grant example.
 
+The same grants also protect `read_bytes` and `write_bytes` for exact binary data. [binary_copy.tok](examples/binary_copy.tok) copies a file even when it is not valid UTF-8.
+
 An experimental typed task primitive lets `spawn f(args)` start a pure function and `join(task)` recover its result. See [the task example](examples/task_square.tok) and [subset contract](spec/EXPERIMENTAL_SUBSET.md).
 
 Experimental file imports let the CLI load relative `.tok` files inside the entry directory. [The multi-file example](examples/modules/main.tok) uses an explicit alias (`import math="math.tok";`), a public declaration (`pub fn triple...`), and a qualified call (`math::triple(7)`). Other declarations stay private to their file. See the [module contract](spec/MODULE_SYSTEM_CANDIDATE.md).

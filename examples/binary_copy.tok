@@ -1,0 +1,9 @@
+fn main()->Result<Unit,IoError>{
+    let paths:[String]=args();
+    if len(paths)==2{
+        let data:Bytes=read_bytes(paths[0])?;
+        write_bytes(paths[1],data)
+    }else{
+        Err(IoError::Other)
+    }
+}
