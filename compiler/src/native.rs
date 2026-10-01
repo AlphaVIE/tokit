@@ -22,6 +22,12 @@ impl<T: __TokRender> __TokRender for Vec<T> {
         format!("[{}]", self.iter().map(|x| x.tok_render()).collect::<Vec<_>>().join(","))
     }
 }
+#[derive(Clone, PartialEq, Eq)] struct __TokBytes(Vec<u8>);
+impl __TokRender for __TokBytes {
+    fn tok_render(&self) -> String {
+        format!("Bytes({:?})", self.0)
+    }
+}
 impl<T: __TokRender, E: __TokRender> __TokRender for Result<T, E> {
     fn tok_render(&self) -> String {
         match self { Ok(x) => format!("Ok({})", x.tok_render()), Err(x) => format!("Err({})", x.tok_render()) }
@@ -60,6 +66,11 @@ fn __tok_div(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i3
 }
 fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize, column: usize) -> T {
     usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
+        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
+    })
+}
+fn __tok_byte_index(values: &__TokBytes, index: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    usize::try_from(index).ok().and_then(|i| values.0.get(i)).map(|byte| i32::from(*byte)).unwrap_or_else(|| {
         __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
     })
 }
@@ -120,6 +131,14 @@ fn __tok_utf8_bytes(text: String) -> Vec<i32> {
 fn __tok_utf8_decode(values: Vec<i32>) -> Option<String> {
     let bytes = values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>()?;
     String::from_utf8(bytes).ok()
+}
+fn __tok_utf8_encode(text: String) -> __TokBytes { __TokBytes(text.into_bytes()) }
+fn __tok_utf8_decode_bytes(values: __TokBytes) -> Option<String> { String::from_utf8(values.0).ok() }
+fn __tok_bytes_from_i32(values: Vec<i32>) -> Option<__TokBytes> {
+    values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>().map(__TokBytes)
+}
+fn __tok_bytes_to_i32(values: __TokBytes) -> Vec<i32> {
+    values.0.into_iter().map(i32::from).collect()
 }
 #[derive(Clone)] enum __TokTaskError { Failed }
 impl __TokRender for __TokTaskError {
@@ -229,6 +248,7 @@ fn rust_type(ty: &Type) -> String {
         Type::I32 => "i32".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
+        Type::Bytes => "__TokBytes".to_owned(),
         Type::Named(name) if name == builtins::IO_ERROR => "__TokIoError".to_owned(),
         Type::Named(name) if name == builtins::PARSE_ERROR => "__TokParseError".to_owned(),
         Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
@@ -339,8 +359,13 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
         ),
         ExprKind::Index(array, index) => {
             let (source_id, line, column) = location(source, expr.span);
+            let helper = if types.get(&array.span) == Some(&Type::Bytes) {
+                "__tok_byte_index"
+            } else {
+                "__tok_index"
+            };
             format!(
-                "__tok_index({},{},{source_id},{line},{column})",
+                "{helper}({},{},{source_id},{line},{column})",
                 emit_array_borrow(array, source, types),
                 emit_expr(index, source, types)
             )
@@ -367,16 +392,22 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
                 builtins::UTF8_BYTES => "__tok_utf8_bytes".to_owned(),
                 builtins::UTF8_DECODE => "__tok_utf8_decode".to_owned(),
+                builtins::UTF8_ENCODE => "__tok_utf8_encode".to_owned(),
+                builtins::UTF8_DECODE_BYTES => "__tok_utf8_decode_bytes".to_owned(),
+                builtins::BYTES_FROM_I32 => "__tok_bytes_from_i32".to_owned(),
+                builtins::BYTES_TO_I32 => "__tok_bytes_to_i32".to_owned(),
                 builtins::LEN => "__tok_len".to_owned(),
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
             if name == builtins::LEN {
                 let (source_id, line, column) = location(source, expr.span);
-                return format!(
-                    "__tok_len({},{source_id},{line},{column})",
+                let borrowed = if types.get(&args[0].span) == Some(&Type::Bytes) {
+                    format!("&({}).0", emit_expr(&args[0], source, types))
+                } else {
                     emit_array_borrow(&args[0], source, types)
-                );
+                };
+                return format!("__tok_len({},{source_id},{line},{column})", borrowed);
             }
             format!(
                 "{callee}({})",
@@ -540,7 +571,14 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             format!(
                 "for {} in {} {{ {discarded} }}\n",
                 user_name(name),
-                emit_expr(iterable, source, types)
+                if types.get(&iterable.span) == Some(&Type::Bytes) {
+                    format!(
+                        "{}.0.into_iter().map(i32::from)",
+                        emit_expr(iterable, source, types)
+                    )
+                } else {
+                    emit_expr(iterable, source, types)
+                }
             )
         }
         Stmt::While {
