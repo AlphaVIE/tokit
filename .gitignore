@@ -4,3 +4,4 @@ __pycache__/
 research/results/*.json
 research/.cache/
 target/
+benchmarks_*/
