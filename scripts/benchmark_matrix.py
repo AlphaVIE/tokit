@@ -34,6 +34,7 @@ CODE_EXTENSIONS = {
     ".tok": "tokit",
     ".js": "javascript",
     ".ts": "typescript",
+    ".go": "go",
     ".cpp": "cpp",
     ".cs": "csharp",
     ".py": "python",
@@ -79,7 +80,9 @@ def pick_token_encoder() -> TokenEncoder:
 
         return TokenEncoder(name="heuristic", encode=fallback_encode)
 
-    return TokenEncoder(name="cl100k_base", encode=tiktoken.get_encoding("cl100k_base").encode)
+    return TokenEncoder(
+        name="cl100k_base", encode=tiktoken.get_encoding("cl100k_base").encode
+    )
 
 
 def detect_benchmark_folders(patterns: list[str]) -> list[Path]:
@@ -125,6 +128,10 @@ def cxx_compiler() -> str:
         if path:
             return path
     raise FileNotFoundError("c++/clang++/g++")
+
+
+def go_compiler() -> str:
+    return ensure_tool("go")
 
 
 @lru_cache(maxsize=1)
@@ -194,10 +201,15 @@ def compile_and_run(
     elif language == "javascript":
         runtime_command = [ensure_tool("node"), str(source_path), str(iterations)]
     elif language == "typescript":
-        tsc = ensure_tool("tsc")
+        tsc = shutil.which("tsc")
+        if tsc is None:
+            npx = ensure_tool("npx")
+            tsc_command = [npx, "--yes", "-p", "typescript", "tsc"]
+        else:
+            tsc_command = [tsc]
         compiled = temp_dir / f"{source_path.stem}.js"
         compile_command = [
-            tsc,
+            *tsc_command,
             "--target",
             "ES2020",
             "--module",
@@ -210,6 +222,14 @@ def compile_and_run(
         if return_code:
             return compile_ns, 0, return_code, stderr.strip()
         runtime_command = [ensure_tool("node"), str(compiled), str(iterations)]
+    elif language == "go":
+        compiler = go_compiler()
+        output = temp_dir / (source_path.stem + (".exe" if os.name == "nt" else ""))
+        compile_command = [compiler, "build", "-o", str(output), str(source_path)]
+        return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
+        if return_code:
+            return compile_ns, 0, return_code, stderr.strip()
+        runtime_command = [str(output), str(iterations)]
     elif language == "cpp":
         compiler = cxx_compiler()
         output = temp_dir / (source_path.stem + (".exe" if os.name == "nt" else ""))

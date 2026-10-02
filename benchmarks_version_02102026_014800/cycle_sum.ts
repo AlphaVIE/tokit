@@ -1,3 +1,5 @@
+declare const process: { argv: string[] };
+
 function cycleSum(n: number): number {
   let value = 1;
   let total = 0;
