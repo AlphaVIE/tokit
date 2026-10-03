@@ -1,0 +1,19 @@
+#[derive(Clone)] enum __TokParseError { Invalid, OutOfRange }
+impl __TokRender for __TokParseError {
+    fn tok_render(&self) -> String {
+        match self {
+            Self::Invalid => "ParseError::Invalid",
+            Self::OutOfRange => "ParseError::OutOfRange",
+        }.to_owned()
+    }
+}
+fn __tok_parse_i32(text: String) -> Result<i32, __TokParseError> {
+    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(&text);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(__TokParseError::Invalid);
+    }
+    text.parse::<i32>().map_err(|error| match error.kind() {
+        std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => __TokParseError::OutOfRange,
+        _ => __TokParseError::Invalid,
+    })
+}

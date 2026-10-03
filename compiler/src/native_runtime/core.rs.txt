@@ -1,0 +1,106 @@
+trait __TokRender { fn tok_render(&self) -> String; }
+impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
+impl __TokRender for bool { fn tok_render(&self) -> String { self.to_string() } }
+impl __TokRender for String { fn tok_render(&self) -> String { format!("{:?}", self) } }
+impl __TokRender for () { fn tok_render(&self) -> String { "()".to_owned() } }
+impl<T: __TokRender> __TokRender for Vec<T> {
+    fn tok_render(&self) -> String {
+        format!("[{}]", self.iter().map(|x| x.tok_render()).collect::<Vec<_>>().join(","))
+    }
+}
+impl<T: __TokRender, E: __TokRender> __TokRender for Result<T, E> {
+    fn tok_render(&self) -> String {
+        match self { Ok(x) => format!("Ok({})", x.tok_render()), Err(x) => format!("Err({})", x.tok_render()) }
+    }
+}
+impl<T: __TokRender> __TokRender for Option<T> {
+    fn tok_render(&self) -> String {
+        match self { Some(x) => format!("Some({})", x.tok_render()), None => "None".to_owned() }
+    }
+}
+fn __tok_runtime_fail(code: &str, source_id: usize, line: usize, column: usize, message: &str) -> ! {
+    if __TOK_SOURCES.len() > 1 {
+        eprintln!("{}:{code}@{line}:{column} {message}", __TOK_SOURCES[source_id]);
+    } else {
+        eprintln!("{code}@{line}:{column} {message}");
+    }
+    std::process::exit(1)
+}
+fn __tok_fail(source_id: usize, line: usize, column: usize) -> ! {
+    __tok_runtime_fail("E201", source_id, line, column, "integer overflow or division by zero")
+}
+fn __tok_add(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_add(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_sub(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_sub(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_neg(a: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_neg().unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_mul(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_mul(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_div(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize, column: usize) -> T {
+    usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
+        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
+    })
+}
+fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i32 {
+    i32::try_from(values.len()).unwrap_or_else(|_| {
+        __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")
+    })
+}
+thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+struct __TokDepthGuard;
+impl __TokDepthGuard {
+    fn enter(source_id: usize, line: usize, column: usize) -> Self {
+        __TOK_DEPTH.with(|depth| {
+            if depth.get() >= 32 {
+                __tok_runtime_fail("E202", source_id, line, column, "call depth limit exceeded");
+            }
+            depth.set(depth.get() + 1);
+        });
+        Self
+    }
+}
+impl Drop for __TokDepthGuard {
+    fn drop(&mut self) { __TOK_DEPTH.with(|depth| depth.set(depth.get() - 1)); }
+}
+thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
+thread_local! { static __TOK_WRITE_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
+thread_local! { static __TOK_ARGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
+fn __tok_configure_runtime() {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let mut start = 0;
+    let mut saw_read = false;
+    let mut saw_write = false;
+    loop {
+        match args.get(start).map(String::as_str) {
+            Some("--allow-read") if !saw_read => {
+                let Some(root) = args.get(start + 1) else { eprintln!("missing read grant root"); std::process::exit(2); };
+                __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+                saw_read = true;
+                start += 2;
+            }
+            Some("--allow-write") if !saw_write => {
+                let Some(root) = args.get(start + 1) else { eprintln!("missing write grant root"); std::process::exit(2); };
+                __TOK_WRITE_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
+                saw_write = true;
+                start += 2;
+            }
+            _ => break,
+        }
+    }
+    if args.get(start).is_some_and(|arg| arg == "--") { start += 1; }
+    __TOK_ARGS.with(|cell| *cell.borrow_mut() = args[start..].to_vec());
+}
+fn __tok_args() -> Vec<String> {
+    __TOK_ARGS.with(|cell| cell.borrow().clone())
+}
+fn __tok_lines(text: String) -> Vec<String> {
+    text.lines().map(str::to_owned).collect()
+}

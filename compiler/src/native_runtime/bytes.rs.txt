@@ -1,0 +1,17 @@
+#[derive(Clone, PartialEq, Eq)] struct __TokBytes(Vec<u8>);
+impl __TokRender for __TokBytes {
+    fn tok_render(&self) -> String {
+        format!("Bytes({:?})", self.0)
+    }
+}
+fn __tok_byte_index(values: &__TokBytes, index: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    usize::try_from(index).ok().and_then(|i| values.0.get(i)).map(|byte| i32::from(*byte)).unwrap_or_else(|| {
+        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
+    })
+}
+fn __tok_byte_push(values: &mut __TokBytes, value: i32, source_id: usize, line: usize, column: usize) {
+    let byte = u8::try_from(value).unwrap_or_else(|_| {
+        __tok_runtime_fail("E207", source_id, line, column, "byte value outside 0..255")
+    });
+    values.0.push(byte);
+}

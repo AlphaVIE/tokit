@@ -1,0 +1,27 @@
+#[derive(Clone)] enum __TokTaskError { Failed }
+impl __TokRender for __TokTaskError {
+    fn tok_render(&self) -> String { "TaskError::Failed".to_owned() }
+}
+struct __TokTaskState<T> {
+    handle: Option<std::thread::JoinHandle<T>>,
+    result: Option<Result<T, __TokTaskError>>,
+}
+#[derive(Clone)] struct __TokTask<T>(std::sync::Arc<std::sync::Mutex<__TokTaskState<T>>>);
+impl<T> __TokRender for __TokTask<T> {
+    fn tok_render(&self) -> String { "<task>".to_owned() }
+}
+fn __tok_spawn<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> __TokTask<T> {
+    __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState {
+        handle: Some(std::thread::spawn(job)), result: None,
+    })))
+}
+fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
+    let mut state = task.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.result.is_none() {
+        state.result = Some(match state.handle.take() {
+            Some(handle) => handle.join().map_err(|_| __TokTaskError::Failed),
+            None => Err(__TokTaskError::Failed),
+        });
+    }
+    state.result.as_ref().expect("task result").clone()
+}
