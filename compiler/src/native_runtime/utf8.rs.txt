@@ -1,0 +1,15 @@
+fn __tok_utf8_bytes(text: String) -> Vec<i32> {
+    text.into_bytes().into_iter().map(i32::from).collect()
+}
+fn __tok_utf8_decode(values: Vec<i32>) -> Option<String> {
+    let bytes = values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
+fn __tok_utf8_encode(text: String) -> __TokBytes { __TokBytes(text.into_bytes()) }
+fn __tok_utf8_decode_bytes(values: __TokBytes) -> Option<String> { String::from_utf8(values.0).ok() }
+fn __tok_bytes_from_i32(values: Vec<i32>) -> Option<__TokBytes> {
+    values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>().map(__TokBytes)
+}
+fn __tok_bytes_to_i32(values: __TokBytes) -> Vec<i32> {
+    values.0.into_iter().map(i32::from).collect()
+}

@@ -1,0 +1,11 @@
+#[derive(Clone)] enum __TokIoError { Denied, NotFound, InvalidUtf8, Other }
+impl __TokRender for __TokIoError {
+    fn tok_render(&self) -> String {
+        match self {
+            Self::Denied => "IoError::Denied",
+            Self::NotFound => "IoError::NotFound",
+            Self::InvalidUtf8 => "IoError::InvalidUtf8",
+            Self::Other => "IoError::Other",
+        }.to_owned()
+    }
+}

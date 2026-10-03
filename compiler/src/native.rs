@@ -12,247 +12,40 @@ use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::sources::SourceMap;
 
-const PRELUDE: &str = r#"trait __TokRender { fn tok_render(&self) -> String; }
-impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
-impl __TokRender for bool { fn tok_render(&self) -> String { self.to_string() } }
-impl __TokRender for String { fn tok_render(&self) -> String { format!("{:?}", self) } }
-impl __TokRender for () { fn tok_render(&self) -> String { "()".to_owned() } }
-impl<T: __TokRender> __TokRender for Vec<T> {
-    fn tok_render(&self) -> String {
-        format!("[{}]", self.iter().map(|x| x.tok_render()).collect::<Vec<_>>().join(","))
+const PRELUDE_CORE: &str = include_str!("native_runtime/core.rs.txt");
+const PRELUDE_BYTES: &str = include_str!("native_runtime/bytes.rs.txt");
+const PRELUDE_IO_ERROR: &str = include_str!("native_runtime/io_error.rs.txt");
+const PRELUDE_PARSE: &str = include_str!("native_runtime/parse.rs.txt");
+const PRELUDE_UTF8: &str = include_str!("native_runtime/utf8.rs.txt");
+const PRELUDE_TASKS: &str = include_str!("native_runtime/tasks.rs.txt");
+const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt");
+
+fn runtime_prelude(body: &str) -> String {
+    let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
+    let uses_utf8 = body.contains("__tok_utf8_") || body.contains("__tok_bytes_");
+    let uses_bytes =
+        uses_io || uses_utf8 || body.contains("__TokBytes") || body.contains("__tok_byte_");
+    let mut prelude = String::from(PRELUDE_CORE);
+    if uses_bytes {
+        prelude.push_str(PRELUDE_BYTES);
     }
-}
-#[derive(Clone, PartialEq, Eq)] struct __TokBytes(Vec<u8>);
-impl __TokRender for __TokBytes {
-    fn tok_render(&self) -> String {
-        format!("Bytes({:?})", self.0)
+    if uses_io || body.contains("__TokIoError") {
+        prelude.push_str(PRELUDE_IO_ERROR);
     }
-}
-impl<T: __TokRender, E: __TokRender> __TokRender for Result<T, E> {
-    fn tok_render(&self) -> String {
-        match self { Ok(x) => format!("Ok({})", x.tok_render()), Err(x) => format!("Err({})", x.tok_render()) }
+    if body.contains("__TokParseError") || body.contains("__tok_parse_i32") {
+        prelude.push_str(PRELUDE_PARSE);
     }
-}
-impl<T: __TokRender> __TokRender for Option<T> {
-    fn tok_render(&self) -> String {
-        match self { Some(x) => format!("Some({})", x.tok_render()), None => "None".to_owned() }
+    if uses_utf8 {
+        prelude.push_str(PRELUDE_UTF8);
     }
-}
-fn __tok_runtime_fail(code: &str, source_id: usize, line: usize, column: usize, message: &str) -> ! {
-    if __TOK_SOURCES.len() > 1 {
-        eprintln!("{}:{code}@{line}:{column} {message}", __TOK_SOURCES[source_id]);
-    } else {
-        eprintln!("{code}@{line}:{column} {message}");
+    if body.contains("__TokTask") || body.contains("__tok_spawn") || body.contains("__tok_join") {
+        prelude.push_str(PRELUDE_TASKS);
     }
-    std::process::exit(1)
-}
-fn __tok_fail(source_id: usize, line: usize, column: usize) -> ! {
-    __tok_runtime_fail("E201", source_id, line, column, "integer overflow or division by zero")
-}
-fn __tok_add(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    a.checked_add(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
-}
-fn __tok_sub(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    a.checked_sub(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
-}
-fn __tok_neg(a: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    a.checked_neg().unwrap_or_else(|| __tok_fail(source_id, line, column))
-}
-fn __tok_mul(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    a.checked_mul(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
-}
-fn __tok_div(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
-}
-fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize, column: usize) -> T {
-    usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
-        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
-    })
-}
-fn __tok_byte_index(values: &__TokBytes, index: i32, source_id: usize, line: usize, column: usize) -> i32 {
-    usize::try_from(index).ok().and_then(|i| values.0.get(i)).map(|byte| i32::from(*byte)).unwrap_or_else(|| {
-        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
-    })
-}
-fn __tok_byte_push(values: &mut __TokBytes, value: i32, source_id: usize, line: usize, column: usize) {
-    let byte = u8::try_from(value).unwrap_or_else(|_| {
-        __tok_runtime_fail("E207", source_id, line, column, "byte value outside 0..255")
-    });
-    values.0.push(byte);
-}
-fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i32 {
-    i32::try_from(values.len()).unwrap_or_else(|_| {
-        __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")
-    })
-}
-thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
-struct __TokDepthGuard;
-impl __TokDepthGuard {
-    fn enter(source_id: usize, line: usize, column: usize) -> Self {
-        __TOK_DEPTH.with(|depth| {
-            if depth.get() >= 32 {
-                __tok_runtime_fail("E202", source_id, line, column, "call depth limit exceeded");
-            }
-            depth.set(depth.get() + 1);
-        });
-        Self
+    if uses_io {
+        prelude.push_str(PRELUDE_IO_HELPERS);
     }
+    prelude
 }
-impl Drop for __TokDepthGuard {
-    fn drop(&mut self) { __TOK_DEPTH.with(|depth| depth.set(depth.get() - 1)); }
-}
-#[derive(Clone)] enum __TokIoError { Denied, NotFound, InvalidUtf8, Other }
-impl __TokRender for __TokIoError {
-    fn tok_render(&self) -> String {
-        match self {
-            Self::Denied => "IoError::Denied",
-            Self::NotFound => "IoError::NotFound",
-            Self::InvalidUtf8 => "IoError::InvalidUtf8",
-            Self::Other => "IoError::Other",
-        }.to_owned()
-    }
-}
-#[derive(Clone)] enum __TokParseError { Invalid, OutOfRange }
-impl __TokRender for __TokParseError {
-    fn tok_render(&self) -> String {
-        match self {
-            Self::Invalid => "ParseError::Invalid",
-            Self::OutOfRange => "ParseError::OutOfRange",
-        }.to_owned()
-    }
-}
-fn __tok_parse_i32(text: String) -> Result<i32, __TokParseError> {
-    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(&text);
-    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(__TokParseError::Invalid);
-    }
-    text.parse::<i32>().map_err(|error| match error.kind() {
-        std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => __TokParseError::OutOfRange,
-        _ => __TokParseError::Invalid,
-    })
-}
-fn __tok_utf8_bytes(text: String) -> Vec<i32> {
-    text.into_bytes().into_iter().map(i32::from).collect()
-}
-fn __tok_utf8_decode(values: Vec<i32>) -> Option<String> {
-    let bytes = values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>()?;
-    String::from_utf8(bytes).ok()
-}
-fn __tok_utf8_encode(text: String) -> __TokBytes { __TokBytes(text.into_bytes()) }
-fn __tok_utf8_decode_bytes(values: __TokBytes) -> Option<String> { String::from_utf8(values.0).ok() }
-fn __tok_bytes_from_i32(values: Vec<i32>) -> Option<__TokBytes> {
-    values.into_iter().map(|value| u8::try_from(value).ok()).collect::<Option<Vec<_>>>().map(__TokBytes)
-}
-fn __tok_bytes_to_i32(values: __TokBytes) -> Vec<i32> {
-    values.0.into_iter().map(i32::from).collect()
-}
-#[derive(Clone)] enum __TokTaskError { Failed }
-impl __TokRender for __TokTaskError {
-    fn tok_render(&self) -> String { "TaskError::Failed".to_owned() }
-}
-struct __TokTaskState<T> {
-    handle: Option<std::thread::JoinHandle<T>>,
-    result: Option<Result<T, __TokTaskError>>,
-}
-#[derive(Clone)] struct __TokTask<T>(std::sync::Arc<std::sync::Mutex<__TokTaskState<T>>>);
-impl<T> __TokRender for __TokTask<T> {
-    fn tok_render(&self) -> String { "<task>".to_owned() }
-}
-fn __tok_spawn<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> __TokTask<T> {
-    __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState {
-        handle: Some(std::thread::spawn(job)), result: None,
-    })))
-}
-fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
-    let mut state = task.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if state.result.is_none() {
-        state.result = Some(match state.handle.take() {
-            Some(handle) => handle.join().map_err(|_| __TokTaskError::Failed),
-            None => Err(__TokTaskError::Failed),
-        });
-    }
-    state.result.as_ref().expect("task result").clone()
-}
-thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
-thread_local! { static __TOK_WRITE_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
-thread_local! { static __TOK_ARGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
-fn __tok_configure_runtime() {
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let mut start = 0;
-    let mut saw_read = false;
-    let mut saw_write = false;
-    loop {
-        match args.get(start).map(String::as_str) {
-            Some("--allow-read") if !saw_read => {
-                let Some(root) = args.get(start + 1) else { eprintln!("missing read grant root"); std::process::exit(2); };
-                __TOK_READ_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
-                saw_read = true;
-                start += 2;
-            }
-            Some("--allow-write") if !saw_write => {
-                let Some(root) = args.get(start + 1) else { eprintln!("missing write grant root"); std::process::exit(2); };
-                __TOK_WRITE_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
-                saw_write = true;
-                start += 2;
-            }
-            _ => break,
-        }
-    }
-    if args.get(start).is_some_and(|arg| arg == "--") { start += 1; }
-    __TOK_ARGS.with(|cell| *cell.borrow_mut() = args[start..].to_vec());
-}
-fn __tok_args() -> Vec<String> {
-    __TOK_ARGS.with(|cell| cell.borrow().clone())
-}
-fn __tok_read_error(kind: std::io::ErrorKind) -> __TokIoError {
-    if kind == std::io::ErrorKind::NotFound { __TokIoError::NotFound } else { __TokIoError::Other }
-}
-fn __tok_read_bytes(path: String) -> Result<__TokBytes, __TokIoError> {
-    let root = __TOK_READ_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
-    let requested = std::path::Path::new(&path);
-    let resolved = match requested.canonicalize() {
-        Ok(resolved) => resolved,
-        Err(error) => {
-            let parent = requested.parent().filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or(std::path::Path::new("."));
-            if parent.canonicalize().is_ok_and(|resolved| resolved.starts_with(&root)) {
-                return Err(__tok_read_error(error.kind()));
-            }
-            return Err(__TokIoError::Denied);
-        }
-    };
-    if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::read(resolved).map(__TokBytes).map_err(|error| __tok_read_error(error.kind()))
-}
-fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
-    String::from_utf8(__tok_read_bytes(path)?.0).map_err(|_| __TokIoError::InvalidUtf8)
-}
-fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError> {
-    let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
-    let requested = std::path::Path::new(&path);
-    let target = match requested.canonicalize() {
-        Ok(target) => target,
-        Err(_) => {
-            if requested.symlink_metadata().is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-                return Err(__TokIoError::Denied);
-            }
-            let parent = requested.parent().filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or(std::path::Path::new("."));
-            let parent = parent.canonicalize().map_err(|_| __TokIoError::Denied)?;
-            let name = requested.file_name().ok_or(__TokIoError::Other)?;
-            parent.join(name)
-        }
-    };
-    if !target.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::write(target, bytes.0).map_err(|error| __tok_read_error(error.kind()))
-}
-fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
-    __tok_write_bytes(path, __TokBytes(text.into_bytes()))
-}
-fn __tok_lines(text: String) -> Vec<String> {
-    text.lines().map(str::to_owned).collect()
-}
-"#;
 
 fn rust_type(ty: &Type) -> String {
     match ty {
@@ -662,7 +455,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             "main must have no parameters or type parameters",
         ));
     }
-    let mut out = String::from(PRELUDE);
+    let mut out = String::new();
     let paths = (0..source.len())
         .map(|id| {
             format!(
@@ -823,7 +616,9 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         user_name("main")
     )
     .expect("writing to String cannot fail");
-    Ok(out)
+    let mut generated = runtime_prelude(&out);
+    generated.push_str(&out);
+    Ok(generated)
 }
 
 pub fn build(program: &Program, source: &str, output: &Path) -> Result<(), String> {

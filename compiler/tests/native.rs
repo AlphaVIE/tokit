@@ -14,6 +14,23 @@ fn temporary_directory(label: &str) -> std::path::PathBuf {
 }
 
 #[test]
+fn native_emits_only_used_runtime_sections() {
+    let source = "fn main()->i32{42}";
+    let generated = native::emit(&check(source).unwrap(), source).unwrap();
+    assert!(generated.contains("fn __tok_configure_runtime"));
+    for unused in [
+        "struct __TokBytes",
+        "enum __TokIoError",
+        "enum __TokParseError",
+        "fn __tok_utf8_bytes",
+        "enum __TokTaskError",
+        "fn __tok_read_bytes",
+    ] {
+        assert!(!generated.contains(unused), "unexpected {unused}");
+    }
+}
+
+#[test]
 fn native_output_matches_reference_interpreter() {
     if Command::new("rustc").arg("--version").output().is_err() {
         assert_ne!(
