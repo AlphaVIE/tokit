@@ -14,7 +14,7 @@ An experimental typed task primitive lets `spawn f(args)` start a pure function 
 
 Experimental file imports let the CLI load relative `.tok` files inside the entry directory. [The multi-file example](examples/modules/main.tok) uses an explicit alias (`import math="math.tok";`), a public declaration (`pub fn triple...`), and a qualified call (`math::triple(7)`). Other declarations stay private to their file. See the [module contract](spec/MODULE_SYSTEM_CANDIDATE.md).
 
-An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load a `.tok` file or module tree declared with a SHA-256 content pin in `tok.toml` and a matching `tok.lock`. [The JSON package example](examples/package_json/main.tok) and [module tree example](examples/package_tree/app/main.tok) demonstrate the provisional `pkg:` syntax.
+An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load a `.tok` file or module tree declared with a SHA-256 content pin in `tok.toml` and a matching `tok.lock`. Local packages can declare their own pinned dependencies; the lockfile records the complete graph. [The JSON package example](examples/package_json/main.tok) and [module tree example](examples/package_tree/app/main.tok) demonstrate the provisional `pkg:` syntax.
 
 `tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>]` and `tok rm <entry.tok> <name>` manage local package declarations and refresh `tok.lock`. They preserve comments in `tok.toml`; registry packages and version resolution are not yet supported.
 
