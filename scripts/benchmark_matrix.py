@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""Measure benchmark snapshots and print a compact terminal matrix.
+"""Measure versioned benchmark snapshots with verified output and repeated runs.
 
-The script discovers benchmark folders by glob pattern, measures source-token
-counts for code files, and times three phases where they exist:
-
-- initialization: discovery, source loading, tokenization, and plan setup
-- compile: any language-specific build or transpile step
-- runtime: execution of the built artifact or interpreter entrypoint
-
-It is intentionally cross-platform and only depends on the standard library
-plus an optional tiktoken installation for source token counts.
+Compilation is timed once. Runtime includes process startup and reports the
+median of successful samples; every warmup and sample must produce the exact
+contract result. Source-token counts require tiktoken and are unavailable
+when it is not installed.
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
+import importlib.metadata
 import json
 import os
-import re
+import platform
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -55,10 +53,11 @@ class Measurement:
     file: str
     language: str
     source_bytes: int
-    source_tokens: int
-    init_ns: int | None = None
+    source_sha256: str
+    source_tokens: int | None
     compile_ns: int | None = None
     runtime_ns: int | None = None
+    runtime_samples_ns: list[int] = dataclasses.field(default_factory=list)
     status: str = "pending"
     note: str = ""
 
@@ -66,22 +65,22 @@ class Measurement:
 @dataclasses.dataclass(frozen=True)
 class TokenEncoder:
     name: str
+    version: str
     encode: Callable[[str], list[int]]
 
 
 def pick_token_encoder() -> TokenEncoder:
     try:
         import tiktoken
-    except ImportError as exc:  # pragma: no cover - only hit when dependency is missing
-        token_pattern = re.compile(r"\w+|[^\s\w]", re.UNICODE)
-
-        def fallback_encode(source: str) -> list[int]:
-            return [0 for _ in token_pattern.findall(source)]
-
-        return TokenEncoder(name="heuristic", encode=fallback_encode)
+    except ImportError as exc:
+        raise RuntimeError(
+            "token counts require tiktoken; install it before comparing source tokens"
+        ) from exc
 
     return TokenEncoder(
-        name="cl100k_base", encode=tiktoken.get_encoding("cl100k_base").encode
+        name="cl100k_base",
+        version=importlib.metadata.version("tiktoken"),
+        encode=tiktoken.get_encoding("cl100k_base").encode,
     )
 
 
@@ -106,10 +105,12 @@ def collect_sources(folder: Path) -> list[BenchSource]:
     return sources
 
 
-def run(command: list[str], *, cwd: Path | None = None) -> tuple[int, str, str, int]:
+def run(
+    command: list[str], *, cwd: Path | None = None, timeout: float | None = None
+) -> tuple[int, str, str, int]:
     start = time.perf_counter_ns()
     result = subprocess.run(
-        command, cwd=cwd, capture_output=True, text=True, check=False
+        command, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout
     )
     elapsed = time.perf_counter_ns() - start
     return result.returncode, result.stdout, result.stderr, elapsed
@@ -120,6 +121,31 @@ def ensure_tool(name: str) -> str:
     if not path:
         raise FileNotFoundError(name)
     return path
+
+
+def installed_tool_versions() -> dict[str, str | None]:
+    versions: dict[str, str | None] = {}
+    for name, arguments in {
+        "cargo": ["--version"],
+        "rustc": ["--version"],
+        "node": ["--version"],
+        "tsc": ["--version"],
+        "go": ["version"],
+        "dotnet": ["--version"],
+        "c++": ["--version"],
+    }.items():
+        path = shutil.which(name)
+        if path is None:
+            versions[name] = None
+            continue
+        try:
+            code, stdout, stderr, _ = run([path, *arguments], timeout=5)
+            versions[name] = (
+                (stdout or stderr).splitlines()[0] if code == 0 else None
+            )
+        except (OSError, subprocess.TimeoutExpired, IndexError):
+            versions[name] = None
+    return versions
 
 
 def cxx_compiler() -> str:
@@ -138,13 +164,13 @@ def go_compiler() -> str:
 def tok_binary() -> tuple[str, ...]:
     suffix = ".exe" if os.name == "nt" else ""
     candidate = ROOT / "target" / "debug" / f"tok{suffix}"
-    if candidate.exists():
-        return (str(candidate),)
     cargo = ensure_tool("cargo")
-    run(
+    code, _, stderr, _ = run(
         [cargo, "build", "-p", "tokit-compiler", "--bin", "tok"],
         cwd=ROOT,
     )
+    if code:
+        raise RuntimeError(f"Tokit compiler build failed: {stderr.strip()}")
     if not candidate.exists():
         raise FileNotFoundError(candidate)
     return (str(candidate),)
@@ -161,6 +187,7 @@ def make_cs_project(temp_dir: Path, source: Path) -> Path:
                 "    <OutputType>Exe</OutputType>",
                 "    <TargetFramework>net8.0</TargetFramework>",
                 "    <ImplicitUsings>enable</ImplicitUsings>",
+                "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>",
                 "    <Nullable>enable</Nullable>",
                 "  </PropertyGroup>",
                 "  <ItemGroup>",
@@ -176,13 +203,12 @@ def make_cs_project(temp_dir: Path, source: Path) -> Path:
 
 def compile_and_run(
     source: BenchSource, iterations: int, temp_dir: Path
-) -> tuple[int | None, int, int, str]:
-    """Return compile ns, runtime ns, exit code, and note."""
+) -> tuple[int | None, list[str] | None, int, str]:
+    """Compile once and return compile ns, runtime command, exit code, and note."""
 
     source_path = source.path
     language = source.language
     compile_ns: int | None = None
-    runtime_ns = 0
     return_code = 0
     note = ""
 
@@ -194,19 +220,14 @@ def compile_and_run(
             "-o",
             str(output),
         ]
-        return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
+        return_code, stdout, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip() or stdout.strip()
         runtime_command = [str(output), str(iterations)]
     elif language == "javascript":
         runtime_command = [ensure_tool("node"), str(source_path), str(iterations)]
     elif language == "typescript":
-        tsc = shutil.which("tsc")
-        if tsc is None:
-            npx = ensure_tool("npx")
-            tsc_command = [npx, "--yes", "-p", "typescript", "tsc"]
-        else:
-            tsc_command = [tsc]
+        tsc_command = [ensure_tool("tsc")]
         compiled = temp_dir / f"{source_path.stem}.js"
         compile_command = [
             *tsc_command,
@@ -220,7 +241,7 @@ def compile_and_run(
         ]
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip()
         runtime_command = [ensure_tool("node"), str(compiled), str(iterations)]
     elif language == "go":
         compiler = go_compiler()
@@ -228,7 +249,7 @@ def compile_and_run(
         compile_command = [compiler, "build", "-o", str(output), str(source_path)]
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip()
         runtime_command = [str(output), str(iterations)]
     elif language == "cpp":
         compiler = cxx_compiler()
@@ -243,10 +264,13 @@ def compile_and_run(
         ]
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip()
         runtime_command = [str(output), str(iterations)]
     elif language == "csharp":
         dotnet = ensure_tool("dotnet")
+        version_code, version, _, _ = run([dotnet, "--version"])
+        if version_code or int(version.strip().split(".", 1)[0]) < 8:
+            raise FileNotFoundError("dotnet SDK 8 or newer")
         project_dir = temp_dir / source_path.stem
         project_dir.mkdir(parents=True, exist_ok=True)
         copied_source = project_dir / source_path.name
@@ -264,9 +288,9 @@ def compile_and_run(
             str(project_dir / "out"),
             "-nologo",
         ]
-        return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
+        return_code, stdout, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip() or stdout.strip()
         runtime_command = [
             dotnet,
             str(project_dir / "out" / f"{source_path.stem}.dll"),
@@ -288,16 +312,34 @@ def compile_and_run(
         ]
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, 0, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip()
         runtime_command = [str(output), str(iterations)]
     else:
         raise ValueError(f"unsupported language: {language}")
 
-    return_code, stdout, stderr, runtime_ns = run(runtime_command, cwd=ROOT)
-    if return_code:
-        return compile_ns, runtime_ns, return_code, stderr.strip() or stdout.strip()
-    note = stdout.strip()
-    return compile_ns, runtime_ns, return_code, note
+    return compile_ns, runtime_command, return_code, note
+
+
+def expected_output(iterations: int) -> str:
+    cycles, remainder = divmod(iterations, 3)
+    total = 6 * cycles + remainder * (remainder + 1) // 2
+    return f"Ok({total})"
+
+
+def measure_runtime(
+    command: list[str], iterations: int, warmups: int, samples: int, timeout: float
+) -> tuple[list[int], str]:
+    expected = expected_output(iterations)
+    times: list[int] = []
+    for attempt in range(warmups + samples):
+        code, stdout, stderr, elapsed = run(command, cwd=ROOT, timeout=timeout)
+        if code != 0:
+            raise RuntimeError(f"exit {code}: {stderr.strip() or stdout.strip()}")
+        if stdout.strip() != expected:
+            raise RuntimeError(f"wrong output: expected {expected!r}, got {stdout.strip()!r}")
+        if attempt >= warmups:
+            times.append(elapsed)
+    return times, expected
 
 
 def format_ns(value: int | None) -> str:
@@ -311,7 +353,6 @@ def render_table(rows: list[Measurement]) -> str:
         "folder",
         "file",
         "lang",
-        "init_ms",
         "compile_ms",
         "runtime_ms",
         "tokens",
@@ -323,10 +364,9 @@ def render_table(rows: list[Measurement]) -> str:
             row.folder,
             row.file,
             row.language,
-            format_ns(row.init_ns),
             format_ns(row.compile_ns),
             format_ns(row.runtime_ns),
-            str(row.source_tokens),
+            str(row.source_tokens) if row.source_tokens is not None else "n/a",
             str(row.source_bytes),
             row.status,
         ]
@@ -356,74 +396,118 @@ def main() -> None:
         nargs="*",
         help="benchmark folder glob patterns relative to the repository root",
     )
-    parser.add_argument("--iterations", type=int, default=99_999_999)
+    parser.add_argument("--iterations", type=int, default=300_000)
+    parser.add_argument("--warmups", type=int, default=1)
+    parser.add_argument("--samples", type=int, default=5)
+    parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument(
         "--json", action="store_true", help="also print machine-readable JSON"
     )
+    parser.add_argument("--output", type=Path, help="write raw JSON report to this file")
     args = parser.parse_args()
 
     patterns = args.patterns or DEFAULT_PATTERNS
     folders = detect_benchmark_folders(patterns)
     if not folders:
         raise SystemExit(f"no benchmark folders matched: {', '.join(patterns)}")
-    if args.iterations <= 0:
-        raise SystemExit("iterations must be positive")
+    if not 0 <= args.iterations <= 1_073_741_823:
+        raise SystemExit("iterations must be 0..1073741823 for the i32 result contract")
+    if args.warmups < 0 or args.samples < 1 or args.timeout <= 0:
+        raise SystemExit("warmups must be nonnegative; samples and timeout must be positive")
 
-    token_encoder = pick_token_encoder()
+    try:
+        token_encoder = pick_token_encoder()
+    except RuntimeError as exc:
+        token_encoder = None
+        print(f"token counts unavailable: {exc}", file=sys.stderr)
     results: list[Measurement] = []
 
     with tempfile.TemporaryDirectory(prefix="tokit-benchmark-matrix-") as temp_root:
         temp_root_path = Path(temp_root)
         for folder in folders:
             for source in collect_sources(folder):
-                init_start = time.perf_counter_ns()
-                source_text = source.path.read_text(encoding="utf-8")
-                source_bytes = len(source.path.read_bytes())
-                source_tokens = len(token_encoder.encode(source_text))
-                init_ns = time.perf_counter_ns() - init_start
+                source_data = source.path.read_bytes()
+                source_text = source_data.decode("utf-8")
+                source_bytes = len(source_data)
+                source_tokens = (
+                    len(token_encoder.encode(source_text)) if token_encoder else None
+                )
 
                 measurement = Measurement(
                     folder=folder.name,
                     file=source.path.name,
                     language=source.language,
                     source_bytes=source_bytes,
+                    source_sha256=hashlib.sha256(source_data).hexdigest(),
                     source_tokens=source_tokens,
-                    init_ns=init_ns,
                 )
 
                 try:
                     run_root = temp_root_path / folder.name / source.path.stem
                     run_root.mkdir(parents=True, exist_ok=True)
-                    compile_ns, runtime_ns, code, note = compile_and_run(
+                    compile_ns, runtime_command, code, note = compile_and_run(
                         source,
                         args.iterations,
                         run_root,
                     )
                     measurement.compile_ns = compile_ns
-                    measurement.runtime_ns = runtime_ns
-                    measurement.status = "ok" if code == 0 else f"exit:{code}"
-                    measurement.note = note
+                    if code != 0:
+                        measurement.status = f"build-exit:{code}"
+                        measurement.note = note
+                    else:
+                        assert runtime_command is not None
+                        samples, verified = measure_runtime(
+                            runtime_command,
+                            args.iterations,
+                            args.warmups,
+                            args.samples,
+                            args.timeout,
+                        )
+                        measurement.runtime_samples_ns = samples
+                        measurement.runtime_ns = int(statistics.median(samples))
+                        measurement.status = "ok"
+                        measurement.note = verified
                 except FileNotFoundError as exc:
                     measurement.status = "missing-tool"
                     measurement.note = str(exc)
-                except (
-                    Exception
-                ) as exc:  # pragma: no cover - surfaced in terminal on real use
+                except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
                     measurement.status = "error"
                     measurement.note = str(exc)
 
                 results.append(measurement)
 
-    print(f"tokenizer: {token_encoder.name}")
+    tokenizer_label = (
+        f"{token_encoder.name} (tiktoken {token_encoder.version})"
+        if token_encoder else "unavailable"
+    )
+    print(f"tokenizer: {tokenizer_label}")
+    print(
+        f"iterations: {args.iterations}; warmups: {args.warmups}; "
+        f"samples: {args.samples}; timeout_s: {args.timeout:g}"
+    )
     print(render_table(results))
+    for row in results:
+        if row.status != "ok":
+            print(f"{row.file}: {row.status}: {row.note}", file=sys.stderr)
+    report = {
+        "iterations": args.iterations,
+        "warmups": args.warmups,
+        "samples": args.samples,
+        "timeout_s": args.timeout,
+        "tokenizer": token_encoder.name if token_encoder else None,
+        "tiktoken_version": token_encoder.version if token_encoder else None,
+        "host": platform.platform(),
+        "python": sys.version.split()[0],
+        "tool_versions": installed_tool_versions(),
+        "complete": all(row.status == "ok" for row in results),
+        "measurements": [dataclasses.asdict(row) for row in results],
+    }
+    if args.output:
+        args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if args.json:
-        print(
-            json.dumps(
-                [dataclasses.asdict(row) for row in results],
-                indent=2,
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    if any(row.status not in {"ok", "missing-tool"} for row in results):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
