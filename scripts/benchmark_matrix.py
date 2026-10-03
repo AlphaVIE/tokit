@@ -105,6 +105,23 @@ def collect_sources(folder: Path) -> list[BenchSource]:
     return sources
 
 
+def array_values_for_folder(folder: Path) -> list[int] | None:
+    contract_path = folder / "contract.json"
+    if not contract_path.exists():
+        return None
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    values = contract.get("array_values") if isinstance(contract, dict) else None
+    if (
+        not isinstance(contract, dict)
+        or set(contract) != {"array_values"}
+        or not isinstance(values, list)
+        or len(values) != 3
+        or any(type(value) is not int or not 0 <= value <= 255 for value in values)
+    ):
+        raise ValueError(f"{contract_path}: expected three byte-range array_values")
+    return values
+
+
 def run(
     command: list[str], *, cwd: Path | None = None, timeout: float | None = None
 ) -> tuple[int, str, str, int]:
@@ -202,7 +219,7 @@ def make_cs_project(temp_dir: Path, source: Path) -> Path:
 
 
 def compile_and_run(
-    source: BenchSource, iterations: int, temp_dir: Path
+    source: BenchSource, arguments: list[str], temp_dir: Path
 ) -> tuple[int | None, list[str] | None, int, str]:
     """Compile once and return compile ns, runtime command, exit code, and note."""
 
@@ -223,9 +240,9 @@ def compile_and_run(
         return_code, stdout, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
             return compile_ns, None, return_code, stderr.strip() or stdout.strip()
-        runtime_command = [str(output), str(iterations)]
+        runtime_command = [str(output), *arguments]
     elif language == "javascript":
-        runtime_command = [ensure_tool("node"), str(source_path), str(iterations)]
+        runtime_command = [ensure_tool("node"), str(source_path), *arguments]
     elif language == "typescript":
         tsc_command = [ensure_tool("tsc")]
         compiled = temp_dir / f"{source_path.stem}.js"
@@ -242,7 +259,7 @@ def compile_and_run(
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
             return compile_ns, None, return_code, stderr.strip()
-        runtime_command = [ensure_tool("node"), str(compiled), str(iterations)]
+        runtime_command = [ensure_tool("node"), str(compiled), *arguments]
     elif language == "go":
         compiler = go_compiler()
         output = temp_dir / (source_path.stem + (".exe" if os.name == "nt" else ""))
@@ -250,7 +267,7 @@ def compile_and_run(
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
             return compile_ns, None, return_code, stderr.strip()
-        runtime_command = [str(output), str(iterations)]
+        runtime_command = [str(output), *arguments]
     elif language == "cpp":
         compiler = cxx_compiler()
         output = temp_dir / (source_path.stem + (".exe" if os.name == "nt" else ""))
@@ -265,7 +282,7 @@ def compile_and_run(
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
             return compile_ns, None, return_code, stderr.strip()
-        runtime_command = [str(output), str(iterations)]
+        runtime_command = [str(output), *arguments]
     elif language == "csharp":
         dotnet = ensure_tool("dotnet")
         version_code, version, _, _ = run([dotnet, "--version"])
@@ -294,10 +311,10 @@ def compile_and_run(
         runtime_command = [
             dotnet,
             str(project_dir / "out" / f"{source_path.stem}.dll"),
-            str(iterations),
+            *arguments,
         ]
     elif language == "python":
-        runtime_command = [sys.executable, str(source_path), str(iterations)]
+        runtime_command = [sys.executable, str(source_path), *arguments]
     elif language == "rust":
         compiler = ensure_tool("rustc")
         output = temp_dir / (source_path.stem + (".exe" if os.name == "nt" else ""))
@@ -313,23 +330,27 @@ def compile_and_run(
         return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
             return compile_ns, None, return_code, stderr.strip()
-        runtime_command = [str(output), str(iterations)]
+        runtime_command = [str(output), *arguments]
     else:
         raise ValueError(f"unsupported language: {language}")
 
     return compile_ns, runtime_command, return_code, note
 
 
-def expected_output(iterations: int) -> str:
+def cycle_total(iterations: int, values: list[int] | None = None) -> int:
+    if values is None:
+        values = [1, 2, 3]
     cycles, remainder = divmod(iterations, 3)
-    total = 6 * cycles + remainder * (remainder + 1) // 2
-    return f"Ok({total})"
+    return sum(values) * cycles + sum(values[:remainder])
+
+
+def expected_output(iterations: int, values: list[int] | None = None) -> str:
+    return f"Ok({cycle_total(iterations, values)})"
 
 
 def measure_runtime(
-    command: list[str], iterations: int, warmups: int, samples: int, timeout: float
+    command: list[str], expected: str, warmups: int, samples: int, timeout: float
 ) -> tuple[list[int], str]:
-    expected = expected_output(iterations)
     times: list[int] = []
     for attempt in range(warmups + samples):
         code, stdout, stderr, elapsed = run(command, cwd=ROOT, timeout=timeout)
@@ -421,10 +442,16 @@ def main() -> None:
         token_encoder = None
         print(f"token counts unavailable: {exc}", file=sys.stderr)
     results: list[Measurement] = []
+    contracts = {folder.name: array_values_for_folder(folder) for folder in folders}
 
     with tempfile.TemporaryDirectory(prefix="tokit-benchmark-matrix-") as temp_root:
         temp_root_path = Path(temp_root)
         for folder in folders:
+            values = contracts[folder.name]
+            expected = expected_output(args.iterations, values)
+            if cycle_total(args.iterations, values) > 2_147_483_647:
+                raise SystemExit(f"{folder.name}: result exceeds i32")
+            arguments = [str(args.iterations), *map(str, values or [])]
             for source in collect_sources(folder):
                 source_data = source.path.read_bytes()
                 source_text = source_data.decode("utf-8")
@@ -447,7 +474,7 @@ def main() -> None:
                     run_root.mkdir(parents=True, exist_ok=True)
                     compile_ns, runtime_command, code, note = compile_and_run(
                         source,
-                        args.iterations,
+                        arguments,
                         run_root,
                     )
                     measurement.compile_ns = compile_ns
@@ -458,7 +485,7 @@ def main() -> None:
                         assert runtime_command is not None
                         samples, verified = measure_runtime(
                             runtime_command,
-                            args.iterations,
+                            expected,
                             args.warmups,
                             args.samples,
                             args.timeout,
@@ -499,6 +526,10 @@ def main() -> None:
         "host": platform.platform(),
         "python": sys.version.split()[0],
         "tool_versions": installed_tool_versions(),
+        "contracts": {
+            name: {"array_values": values} if values is not None else {"cycle": [1, 2, 3]}
+            for name, values in contracts.items()
+        },
         "complete": all(row.status == "ok" for row in results),
         "measurements": [dataclasses.asdict(row) for row in results],
     }
