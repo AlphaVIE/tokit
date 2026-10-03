@@ -60,3 +60,7 @@ jobs:
         run: python3 scripts/bench_native.py --rust-toolchain 1.98.1 --iterations 30000 --warmups 0 --samples 1 --build-samples 1
       - name: Smoke-test array-read benchmark
         run: python3 scripts/bench_native.py --workload array-cycle --rust-toolchain 1.98.1 --iterations 30000 --warmups 0 --samples 1 --build-samples 1
+      - name: Verify versioned array benchmark outputs
+        run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_005141 --iterations 3000 --warmups 0 --samples 1
+        env:
+          RUSTUP_TOOLCHAIN: '1.98.1'
