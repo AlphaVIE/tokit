@@ -1,0 +1,2 @@
+fn cycle_sum(n:i32)->i32{var i:i32=0;var value:i32=1;var total:i32=0;while i<n{total=total+value;if value==3{value=1;}else{value=value+1;};i=i+1;}total}
+fn main()->Result<i32,ParseError>{let values:[String]=args();if len(values)==1{let n:i32=parse_i32(values[0])?;Ok(cycle_sum(n))}else{Err(ParseError::Invalid)}}

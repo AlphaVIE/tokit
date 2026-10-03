@@ -12,4 +12,5 @@ tok.lock text eol=lf
 *.go text eol=lf
 *.java text eol=lf
 *.ts text eol=lf
+*.tok linguist-language=Tokit
 *.json text eol=lf
