@@ -51,8 +51,8 @@
       "folder": "benchmarks_version_04102026_003229",
       "file": "cycle_sum.cs",
       "language": "csharp",
-      "source_bytes": 438,
-      "source_sha256": "9a7e0a4a37b575e9346f17976a184ecad970c39c9b016d20e419ca8d4f4a3566",
+      "source_bytes": 413,
+      "source_sha256": "8a438f122c01b48a134731b3846eaafc0f10f8a4d7ccf3b72865e4cb0844a9bd",
       "source_tokens": 117,
       "compile_ns": null,
       "runtime_ns": null,
@@ -77,17 +77,17 @@
       "folder": "benchmarks_version_04102026_003229",
       "file": "cycle_sum.js",
       "language": "javascript",
-      "source_bytes": 449,
-      "source_sha256": "6fb00130dfb5c2a18a902c897e45bb878fa481a914847fa06fc98cedd75f1628",
-      "source_tokens": 134,
+      "source_bytes": 426,
+      "source_sha256": "e4069a9dbb9b2c1c4df0387e982c6430051e03344d737d3992bc177233b1384d",
+      "source_tokens": 133,
       "compile_ns": null,
-      "runtime_ns": 116696300,
+      "runtime_ns": 115688900,
       "runtime_samples_ns": [
-        116696300,
-        117483500,
-        113177800,
-        117705000,
-        113525300
+        115077200,
+        115714000,
+        115688900,
+        118277400,
+        112012300
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -100,13 +100,13 @@
       "source_sha256": "7d352e5e83668d77e0afd19f4c4a4c44a047d5d701e0520458d18815ff68bf66",
       "source_tokens": 89,
       "compile_ns": null,
-      "runtime_ns": 3586008800,
+      "runtime_ns": 3590880900,
       "runtime_samples_ns": [
-        3576275100,
-        3593904300,
-        3596294800,
-        3586008800,
-        3567642800
+        3590880900,
+        3606540800,
+        3511370100,
+        3594291500,
+        3582329800
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -118,14 +118,14 @@
       "source_bytes": 520,
       "source_sha256": "bc9522d8e3e553a954040c364b314b6dee4e1af52646e4326fdb32db4b715bda",
       "source_tokens": 157,
-      "compile_ns": 288036300,
-      "runtime_ns": 51168300,
+      "compile_ns": 288304000,
+      "runtime_ns": 51009500,
       "runtime_samples_ns": [
-        51422600,
-        51349200,
-        50996200,
-        51072400,
-        51168300
+        51009500,
+        50980100,
+        51034100,
+        51163900,
+        50963900
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -137,14 +137,14 @@
       "source_bytes": 287,
       "source_sha256": "a8f7e9a174feff26d1adbd4b9e56e38625a583811ae89495a24ac06a70cdf1e5",
       "source_tokens": 105,
-      "compile_ns": 497695300,
-      "runtime_ns": 51312800,
+      "compile_ns": 489585100,
+      "runtime_ns": 50891800,
       "runtime_samples_ns": [
-        51368200,
-        51525000,
-        51312800,
-        50924100,
-        51024400
+        51087800,
+        51133100,
+        50891800,
+        50858400,
+        50819400
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -179,9 +179,9 @@
       "folder": "benchmarks_version_04102026_005141",
       "file": "array_cycle.cs",
       "language": "csharp",
-      "source_bytes": 561,
-      "source_sha256": "98779ddf9a87bb65d42c5cd6b67fec761392358fe37c37224eae807e7a10afa4",
-      "source_tokens": 153,
+      "source_bytes": 543,
+      "source_sha256": "192faa2b86e4bebf8b8dc49e6e42fa268abccd6a63e484e81ffe4c35a34a0cf9",
+      "source_tokens": 152,
       "compile_ns": null,
       "runtime_ns": null,
       "runtime_samples_ns": [],
@@ -205,17 +205,17 @@
       "folder": "benchmarks_version_04102026_005141",
       "file": "array_cycle.js",
       "language": "javascript",
-      "source_bytes": 606,
-      "source_sha256": "45ceca6e0e9967abe524a877dbcfbbd0a89e45837baa2c3db0f25b204b1d6d1c",
+      "source_bytes": 591,
+      "source_sha256": "974723d0c0cffc7b4dbb711dd976ce814b5c073511475a987d9c3fbac794d730",
       "source_tokens": 171,
       "compile_ns": null,
-      "runtime_ns": 122484800,
+      "runtime_ns": 123352200,
       "runtime_samples_ns": [
-        122484800,
-        121224700,
-        121852900,
-        122578500,
-        125572100
+        123491700,
+        122115500,
+        121593600,
+        123352200,
+        123615800
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -228,13 +228,13 @@
       "source_sha256": "69210f2eda3f9a0c444cb76926a12df8346e5626b8a5277d6c23c65e1e7162fa",
       "source_tokens": 112,
       "compile_ns": null,
-      "runtime_ns": 5248481100,
+      "runtime_ns": 5187303300,
       "runtime_samples_ns": [
-        5157779100,
-        5248481100,
-        5252754200,
-        5256154600,
-        5025166200
+        5312294700,
+        5133488600,
+        5179352900,
+        5293902900,
+        5187303300
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -246,14 +246,14 @@
       "source_bytes": 1009,
       "source_sha256": "6fb2f90ff7fa325efe6ade08e32c56a81db2182b3c91cf5caf27468119e02e57",
       "source_tokens": 287,
-      "compile_ns": 351835600,
-      "runtime_ns": 51015300,
+      "compile_ns": 352477500,
+      "runtime_ns": 51177800,
       "runtime_samples_ns": [
-        51015300,
-        51069700,
-        50935600,
-        50960200,
-        51056300
+        51065300,
+        51158700,
+        51434000,
+        51485400,
+        51177800
       ],
       "status": "ok",
       "note": "Ok(199999998)"
@@ -265,14 +265,14 @@
       "source_bytes": 387,
       "source_sha256": "ac9c648588fef4bf139db3c4849645e278153cd4c27e34baea518114228c5365",
       "source_tokens": 145,
-      "compile_ns": 499714500,
-      "runtime_ns": 51020600,
+      "compile_ns": 497308800,
+      "runtime_ns": 51065800,
       "runtime_samples_ns": [
-        51020600,
-        50836100,
-        51145200,
-        50674100,
-        51188800
+        50907500,
+        51065800,
+        51054400,
+        51132800,
+        51136200
       ],
       "status": "ok",
       "note": "Ok(199999998)"

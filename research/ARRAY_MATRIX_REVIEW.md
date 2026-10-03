@@ -13,15 +13,16 @@ the program reads the supplied values instead of a baked-in constant.
 The [10-million-iteration](results/array-access-matrix-2026-10-04-windows-gnu.json)
 and [99,999,999-iteration](results/array-access-matrix-long-2026-10-04-windows-gnu.json)
 raw reports keep five runtime samples per available language and source
-SHA-256 hashes. The longer Windows GNU run measured these process-runtime
+SHA-256 hashes. JavaScript and C# sources are pinned to LF line endings so
+their measured bytes and tokens agree across platforms. The longer Windows GNU run measured these process-runtime
 medians in milliseconds:
 
 | Language | Scalar cycle | Runtime-value array cycle |
 | --- | ---: | ---: |
-| Tokit native | 51.31 | 51.02 |
-| Rust | 51.17 | 51.02 |
-| JavaScript | 116.70 | 122.49 |
-| Python | 3586.01 | 5248.48 |
+| Tokit native | 50.89 | 51.07 |
+| Rust | 51.01 | 51.18 |
+| JavaScript | 115.69 | 123.35 |
+| Python | 3590.88 | 5187.30 |
 
 The Tokit and Rust differences are within the noise of this local run.
 The benchmark therefore does not establish an array-access speed advantage
