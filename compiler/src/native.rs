@@ -74,6 +74,12 @@ fn __tok_byte_index(values: &__TokBytes, index: i32, source_id: usize, line: usi
         __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
     })
 }
+fn __tok_byte_push(values: &mut __TokBytes, value: i32, source_id: usize, line: usize, column: usize) {
+    let byte = u8::try_from(value).unwrap_or_else(|_| {
+        __tok_runtime_fail("E207", source_id, line, column, "byte value outside 0..255")
+    });
+    values.0.push(byte);
+}
 fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i32 {
     i32::try_from(values.len()).unwrap_or_else(|_| {
         __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")
@@ -564,11 +570,22 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 emit_expr(value, source, types)
             )
         }
-        Stmt::Push { name, value, .. } => format!(
-            "{{ let __tok_push_value = {}; {}.push(__tok_push_value); }}\n",
-            emit_expr(value, source, types),
-            user_name(name)
-        ),
+        Stmt::Push { name, value, span } => {
+            if types.get(span) == Some(&Type::Bytes) {
+                let (source_id, line, column) = location(source, *span);
+                format!(
+                    "__tok_byte_push(&mut {},{},{source_id},{line},{column});\n",
+                    user_name(name),
+                    emit_expr(value, source, types)
+                )
+            } else {
+                format!(
+                    "{{ let __tok_push_value = {}; {}.push(__tok_push_value); }}\n",
+                    emit_expr(value, source, types),
+                    user_name(name)
+                )
+            }
+        }
         Stmt::For {
             name,
             iterable,

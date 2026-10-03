@@ -1291,15 +1291,20 @@ fn infer(
                                 format!("cannot push to immutable binding {name}"),
                             ));
                         }
-                        let Type::Array(element) = &binding.ty else {
-                            return Err(Diagnostic::new(
-                                "E110",
-                                *span,
-                                format!("push requires an array, got {}", binding.ty),
-                            ));
+                        let element = match &binding.ty {
+                            Type::Array(element) => element.as_ref(),
+                            Type::Bytes => &Type::I32,
+                            _ => {
+                                return Err(Diagnostic::new(
+                                    "E110",
+                                    *span,
+                                    format!("push requires an array or Bytes, got {}", binding.ty),
+                                ));
+                            }
                         };
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
                         require(element, &actual, value.span, "array element")?;
+                        types.insert(*span, binding.ty.clone());
                         (Type::Unit, *span)
                     }
                     Stmt::For {
