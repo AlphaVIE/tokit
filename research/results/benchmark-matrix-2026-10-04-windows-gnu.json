@@ -1,0 +1,150 @@
+{
+  "iterations": 300000,
+  "warmups": 1,
+  "samples": 5,
+  "timeout_s": 30.0,
+  "tokenizer": "cl100k_base",
+  "tiktoken_version": "0.14.0",
+  "host": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "tool_versions": {
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "node": "v24.16.0",
+    "tsc": null,
+    "go": null,
+    "dotnet": "2.1.818",
+    "c++": null
+  },
+  "complete": false,
+  "measurements": [
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.cpp",
+      "language": "cpp",
+      "source_bytes": 504,
+      "source_sha256": "e177791da21ad40acdf06144e9a37e6f6711cb4708831d69198e72d792ef0822",
+      "source_tokens": 157,
+      "compile_ns": null,
+      "runtime_ns": null,
+      "runtime_samples_ns": [],
+      "status": "missing-tool",
+      "note": "c++/clang++/g++"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.cs",
+      "language": "csharp",
+      "source_bytes": 438,
+      "source_sha256": "9a7e0a4a37b575e9346f17976a184ecad970c39c9b016d20e419ca8d4f4a3566",
+      "source_tokens": 117,
+      "compile_ns": null,
+      "runtime_ns": null,
+      "runtime_samples_ns": [],
+      "status": "missing-tool",
+      "note": "dotnet SDK 8 or newer"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.go",
+      "language": "go",
+      "source_bytes": 486,
+      "source_sha256": "0e415f0812a52a7fbf4c1d11945fbd3076db69730f5a800c368d7c9a00fd32ab",
+      "source_tokens": 144,
+      "compile_ns": null,
+      "runtime_ns": null,
+      "runtime_samples_ns": [],
+      "status": "missing-tool",
+      "note": "go"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.js",
+      "language": "javascript",
+      "source_bytes": 449,
+      "source_sha256": "6fb00130dfb5c2a18a902c897e45bb878fa481a914847fa06fc98cedd75f1628",
+      "source_tokens": 134,
+      "compile_ns": null,
+      "runtime_ns": 41587900,
+      "runtime_samples_ns": [
+        42074600,
+        40590500,
+        41469700,
+        41587900,
+        42354100
+      ],
+      "status": "ok",
+      "note": "Ok(600000)"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.py",
+      "language": "python",
+      "source_bytes": 293,
+      "source_sha256": "7d352e5e83668d77e0afd19f4c4a4c44a047d5d701e0520458d18815ff68bf66",
+      "source_tokens": 89,
+      "compile_ns": null,
+      "runtime_ns": 32088800,
+      "runtime_samples_ns": [
+        32208900,
+        31850900,
+        32059100,
+        32088800,
+        32563500
+      ],
+      "status": "ok",
+      "note": "Ok(600000)"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.rs",
+      "language": "rust",
+      "source_bytes": 520,
+      "source_sha256": "bc9522d8e3e553a954040c364b314b6dee4e1af52646e4326fdb32db4b715bda",
+      "source_tokens": 157,
+      "compile_ns": 289799000,
+      "runtime_ns": 7162600,
+      "runtime_samples_ns": [
+        7625600,
+        7162600,
+        7202900,
+        7001400,
+        7081900
+      ],
+      "status": "ok",
+      "note": "Ok(600000)"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.tok",
+      "language": "tokit",
+      "source_bytes": 312,
+      "source_sha256": "a9bc14a3c2e1e47b2a94770ad2a7d4a1fc5976f67e301a898ea421339ea6d67e",
+      "source_tokens": 116,
+      "compile_ns": 491967800,
+      "runtime_ns": 7089500,
+      "runtime_samples_ns": [
+        7207400,
+        7032600,
+        7089500,
+        7124800,
+        6970400
+      ],
+      "status": "ok",
+      "note": "Ok(600000)"
+    },
+    {
+      "folder": "benchmarks_version_02102026_014800",
+      "file": "cycle_sum.ts",
+      "language": "typescript",
+      "source_bytes": 486,
+      "source_sha256": "8564adb2f9920f7ddfd37ab30a5e09417e529bbcb49220ed249500604647ecb2",
+      "source_tokens": 146,
+      "compile_ns": null,
+      "runtime_ns": null,
+      "runtime_samples_ns": [],
+      "status": "missing-tool",
+      "note": "tsc"
+    }
+  ]
+}
