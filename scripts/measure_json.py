@@ -60,7 +60,10 @@ def summary(samples: list[int]) -> dict[str, int | list[int]]:
 
 
 def main() -> None:
+    global ENTRY, MODULE
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--entry", type=Path, default=ENTRY,
+                        help="benchmark entry; its sibling json.tok is the module under test")
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
@@ -70,6 +73,10 @@ def main() -> None:
                         default=ROOT / "target" / "debug" / ("tok.exe" if os.name == "nt" else "tok"))
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    ENTRY = args.entry.resolve()
+    MODULE = ENTRY.with_name("json.tok")
+    if not MODULE.is_file():
+        parser.error(f"missing JSON module: {MODULE}")
     if args.iterations < 1 or args.iterations > 10_000:
         parser.error("iterations must be between 1 and 10000")
     if args.warmups < 0 or args.samples < 1 or args.build_samples < 1:
