@@ -96,6 +96,176 @@ fn tree_fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
     (entry, library, manifest)
 }
 
+fn transitive_fixture(directory: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let app = directory.join("app");
+    let core = directory.join("core");
+    let util = directory.join("util");
+    std::fs::create_dir(&app).unwrap();
+    std::fs::create_dir(&core).unwrap();
+    std::fs::create_dir(&util).unwrap();
+    std::fs::write(util.join("api.tok"), "pub fn triple(n:i32)->i32{n*3}").unwrap();
+    let util_hash = packages::hash_path(&util).unwrap();
+    std::fs::write(
+        core.join("tok.toml"),
+        format!("[dependencies]\nutil = {{ path = \"../util\", entry = \"api.tok\", sha256 = \"{util_hash}\" }}\n"),
+    ).unwrap();
+    std::fs::write(
+        core.join("api.tok"),
+        "import util=\"pkg:util\";pub fn answer()->i32{util::triple(14)}",
+    )
+    .unwrap();
+    let core_hash = packages::hash_path(&core).unwrap();
+    std::fs::write(
+        app.join("tok.toml"),
+        format!("[dependencies]\ncore = {{ path = \"../core\", entry = \"api.tok\", sha256 = \"{core_hash}\" }}\n"),
+    ).unwrap();
+    let entry = app.join("main.tok");
+    std::fs::write(
+        &entry,
+        "import core=\"pkg:core\";fn main()->i32{core::answer()}",
+    )
+    .unwrap();
+    packages::write_lock(&app).unwrap();
+    (entry, core, util)
+}
+
+#[test]
+fn transitive_package_graph_is_pinned_portable_and_runs_in_both_backends() {
+    let first = temporary_directory();
+    let second = temporary_directory();
+    let (entry, core, util) = transitive_fixture(&first);
+    let (other_entry, _, _) = transitive_fixture(&second);
+    let lock = std::fs::read_to_string(entry.parent().unwrap().join("tok.lock")).unwrap();
+    assert_eq!(
+        lock,
+        std::fs::read_to_string(other_entry.parent().unwrap().join("tok.lock")).unwrap()
+    );
+    assert!(lock.contains("format = 2"));
+    assert!(lock.contains("id = \"core/util\""));
+    assert!(lock.contains("target = \"core/util\""));
+    assert!(lock.contains("pkg/@/core/util/api.tok"));
+    assert!(!lock.contains(&first.to_string_lossy().to_string()));
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "42");
+    assert_eq!(loaded.sources.len(), 3);
+    if Command::new("rustc").arg("--version").output().is_ok() {
+        let binary = first.join(format!("transitive{}", std::env::consts::EXE_SUFFIX));
+        native::build_with_sources(&loaded.program, &loaded.sources, &binary).unwrap();
+        let output = Command::new(&binary).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "42");
+    } else {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+    }
+    let core_manifest = core.join("tok.toml");
+    let original_manifest = std::fs::read(&core_manifest).unwrap();
+    std::fs::write(&core_manifest, "[dependencies]\n").unwrap();
+    let error = modules::load(&entry).err().unwrap();
+    assert_eq!(error.diagnostic.code, "E120");
+    assert!(error.diagnostic.message.contains("sha256 mismatch"));
+    std::fs::write(&core_manifest, original_manifest).unwrap();
+    std::fs::write(util.join("api.tok"), "pub fn triple(n:i32)->i32{n*4}").unwrap();
+    let error = modules::load(&entry).err().unwrap();
+    assert_eq!(error.diagnostic.code, "E120");
+    assert!(error.diagnostic.message.contains("sha256 mismatch"));
+    clean_fixture(&first);
+    clean_fixture(&second);
+}
+
+#[test]
+fn shared_transitive_package_has_one_identity_and_conflicting_pins_fail() {
+    let directory = temporary_directory();
+    let app = directory.join("app");
+    let shared = directory.join("shared");
+    let left = directory.join("left");
+    let right = directory.join("right");
+    for path in [&app, &shared, &left, &right] {
+        std::fs::create_dir(path).unwrap();
+    }
+    std::fs::write(shared.join("api.tok"), "pub fn value()->i32{21}").unwrap();
+    let shared_hash = packages::hash_path(&shared).unwrap();
+    for (path, function) in [(&left, "a"), (&right, "b")] {
+        std::fs::write(
+            path.join("tok.toml"),
+            format!("[dependencies]\nshared = {{ path = \"../shared\", entry = \"api.tok\", sha256 = \"{shared_hash}\" }}\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            path.join("api.tok"),
+            format!("import shared=\"pkg:shared\";pub fn {function}()->i32{{shared::value()}}"),
+        )
+        .unwrap();
+    }
+    let left_hash = packages::hash_path(&left).unwrap();
+    let right_hash = packages::hash_path(&right).unwrap();
+    std::fs::write(
+        app.join("tok.toml"),
+        format!("[dependencies]\nleft = {{ path = \"../left\", entry = \"api.tok\", sha256 = \"{left_hash}\" }}\nright = {{ path = \"../right\", entry = \"api.tok\", sha256 = \"{right_hash}\" }}\n"),
+    )
+    .unwrap();
+    let entry = app.join("main.tok");
+    std::fs::write(
+        &entry,
+        "import left=\"pkg:left\";import right=\"pkg:right\";fn main()->i32{left::a()+right::b()}",
+    )
+    .unwrap();
+    packages::write_lock(&app).unwrap();
+    let lock = std::fs::read_to_string(app.join("tok.lock")).unwrap();
+    assert_eq!(lock.matches("id = \"left/shared\"").count(), 1);
+    assert_eq!(lock.matches("target = \"left/shared\"").count(), 2);
+    let loaded = modules::load(&entry).unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(loaded.sources.len(), 4);
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "42");
+
+    std::fs::write(
+        right.join("tok.toml"),
+        format!("[dependencies]\nshared = {{ path = \"../shared\", entry = \"api.tok\", sha256 = \"{}\" }}\n", "0".repeat(64)),
+    )
+    .unwrap();
+    let right_hash = packages::hash_path(&right).unwrap();
+    std::fs::write(
+        app.join("tok.toml"),
+        format!("[dependencies]\nleft = {{ path = \"../left\", entry = \"api.tok\", sha256 = \"{left_hash}\" }}\nright = {{ path = \"../right\", entry = \"api.tok\", sha256 = \"{right_hash}\" }}\n"),
+    )
+    .unwrap();
+    assert!(
+        packages::write_lock(&app)
+            .unwrap_err()
+            .contains("conflicting checksums")
+    );
+    clean_fixture(&directory);
+}
+
+#[test]
+fn transitive_dependency_cycle_is_rejected() {
+    let directory = temporary_directory();
+    let (entry, core, _) = transitive_fixture(&directory);
+    std::fs::write(
+        core.join("tok.toml"),
+        format!(
+            "[dependencies]\nself = {{ path = \".\", entry = \"api.tok\", sha256 = \"{}\" }}\n",
+            "0".repeat(64)
+        ),
+    )
+    .unwrap();
+    let core_hash = packages::hash_path(&core).unwrap();
+    std::fs::write(
+        entry.parent().unwrap().join("tok.toml"),
+        format!("[dependencies]\ncore = {{ path = \"../core\", entry = \"api.tok\", sha256 = \"{core_hash}\" }}\n"),
+    )
+    .unwrap();
+    assert!(
+        packages::write_lock(entry.parent().unwrap())
+            .unwrap_err()
+            .contains("cycle")
+    );
+    clean_fixture(&directory);
+}
+
 #[test]
 fn pinned_package_import_runs_without_absolute_names() {
     let directory = temporary_directory();
@@ -366,7 +536,7 @@ fn tree_hash_covers_unused_sources_and_rejects_escape() {
     packages::write_lock(entry.parent().unwrap()).unwrap();
     let error = modules::load(&entry).err().unwrap();
     assert_eq!(error.diagnostic.code, "E120");
-    assert!(error.diagnostic.message.contains("other packages yet"));
+    assert!(error.diagnostic.message.contains("unknown dependency"));
     clean_fixture(&directory);
 }
 

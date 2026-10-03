@@ -35,22 +35,33 @@ preserved, and an existing dependency name is not overwritten. The commands
 validate the resulting package set before writing and reject symlink manifest
 or lockfile destinations. Manual edits remain valid: run `tok lock entry.tok`
 after editing `tok.toml` to generate the required `tok.lock` beside the entry
-file. A directory digest uses SHA-256 with the domain prefix
-`tokit-package-tree-v1\0`, followed by each `.tok` file in sorted relative
+file. A directory without `tok.toml` uses SHA-256 with the domain prefix
+`tokit-package-tree-v1\0`. A directory with `tok.toml` uses
+`tokit-package-tree-v2\0`, followed by the big-endian 64-bit manifest byte
+length and exact manifest bytes. Both forms then hash each `.tok` file in sorted relative
 path order. Each file contributes the big-endian 64-bit length of its
 slash-separated UTF-8 relative path, the path bytes, the big-endian 64-bit
 content length, and the exact content bytes. Other files are ignored;
 symlinks anywhere in the tree are rejected. The loader checks all declared
 sources, then parses those same verified byte snapshots. Changed source
 content fails with `E120` until the manifest digest is updated. Sources
-must be UTF-8. A single-file dependency cannot import other files; a
+must be UTF-8. A single-file dependency cannot import relative files; a
 directory dependency can import relative `.tok` paths only within its
-pinned tree. Package-to-package imports remain unsupported.
+pinned tree. A directory package can import `pkg:name` when its directory
+has a `tok.toml` declaring `name` under `[dependencies]`. Dependency paths
+in that manifest are relative to the package directory. The root app and
+every package resolve their own names; an undeclared package is inaccessible.
+Cycles, conflicting pins or entry files for one physical package, and
+overlapping source ownership are rejected. The same package reached by
+several paths is loaded once. A package directory cannot contain a nested
+package's `.tok` files; place dependent packages in separate directories.
 
-`tok.lock` format 1 records the compiler version, the `portable-source`
-target class, the SHA-256 digest of the exact manifest bytes, and each
-direct dependency's name, relative manifest path, optional entry file,
-content digest, and sorted logical source paths. The loader compares the
+`tok.lock` format 2 records the compiler version, the `portable-source`
+target class, the SHA-256 digest of the exact root manifest bytes, root
+dependency names, and each reachable package's stable graph ID, manifest
+path relative to its parent, optional entry file, content digest, optional
+manifest digest, sorted logical source paths, and named dependency edges.
+The loader compares the
 file with a freshly computed canonical lock representation. A missing or
 stale file reports `E121`; invalid manifests or source content report
 `E120`. The lockfile contains no absolute checkout paths. The target
@@ -69,7 +80,7 @@ path may leave it only when explicitly declared and pinned in the manifest.
 [The JSON example](../examples/package_json/main.tok) consumes the
 experimental JSON module from a separate directory. This is a candidate
 for reviewing package identity and import syntax, not a stable package
-manager. There is no registry, download, transitive package graph,
-package version resolution, signature, or cache yet. Source pinning verifies
+manager. There is no registry, download, package version resolution,
+signature, or cache yet. Source pinning verifies
 content but does not establish who published it. The design must be reviewed before expanding
 to remote packages or freezing compatibility guarantees.

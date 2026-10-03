@@ -44,7 +44,7 @@ struct Loader {
     active: HashSet<PathBuf>,
     units: Vec<Option<ModuleUnit>>,
     order: Vec<SourceId>,
-    dependencies: Option<HashMap<String, packages::PackageSource>>,
+    dependencies: Option<packages::PackageGraph>,
     package_files: HashMap<PathBuf, packages::PackageFile>,
 }
 
@@ -86,17 +86,10 @@ impl Loader {
         import: &ImportDecl,
     ) -> Result<PathBuf, Diagnostic> {
         if let Some(name) = import.path.strip_prefix("pkg:") {
-            if self.package_files.contains_key(source_path) {
-                return Err(Diagnostic::new(
-                    "E120",
-                    import.span,
-                    "package sources cannot import other packages yet",
-                ));
-            }
             if self.dependencies.is_none() {
-                let dependencies = packages::load(&self.root_dir)
+                let dependencies = packages::load_graph(&self.root_dir)
                     .map_err(|error| Diagnostic::new(error.code, import.span, error.message))?;
-                for package in dependencies.values() {
+                for package in dependencies.packages.values() {
                     for file in &package.files {
                         if self.visited.contains_key(&file.path) {
                             return Err(Diagnostic::new(
@@ -110,11 +103,15 @@ impl Loader {
                 }
                 self.dependencies = Some(dependencies);
             }
+            let owner = self
+                .package_files
+                .get(source_path)
+                .map(|file| file.owner.as_path());
             let target = self
                 .dependencies
                 .as_ref()
-                .and_then(|dependencies| dependencies.get(name))
-                .map(|package| package.path.clone())
+                .and_then(|dependencies| dependencies.entry(owner, name))
+                .map(Path::to_path_buf)
                 .ok_or_else(|| {
                     Diagnostic::new("E120", import.span, format!("unknown dependency {name:?}"))
                 })?;
@@ -227,12 +224,20 @@ impl Loader {
             .package_files
             .get(&path)
             .is_some_and(|file| !file.multi_file)
-            && !parsed.imports.is_empty()
+            && parsed
+                .imports
+                .iter()
+                .any(|import| !import.path.starts_with("pkg:"))
         {
             return Err(Diagnostic::new(
                 "E120",
-                parsed.imports[0].span,
-                "single-file package dependencies cannot import other modules",
+                parsed
+                    .imports
+                    .iter()
+                    .find(|import| !import.path.starts_with("pkg:"))
+                    .expect("relative import exists")
+                    .span,
+                "single-file package dependencies cannot import relative modules",
             ));
         }
         let mut local_imports = HashSet::new();

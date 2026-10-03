@@ -16,13 +16,40 @@ pub struct PackageFile {
     pub source: String,
     pub label: PathBuf,
     pub root: PathBuf,
+    pub owner: PathBuf,
     pub multi_file: bool,
 }
 
+#[derive(Clone)]
 pub struct PackageSource {
     pub path: PathBuf,
     pub source: String,
     pub files: Vec<PackageFile>,
+    manifest: Option<String>,
+}
+
+pub struct PackageGraph {
+    pub roots: HashMap<String, PathBuf>,
+    pub packages: HashMap<PathBuf, PackageSource>,
+    pub children: HashMap<PathBuf, HashMap<String, PathBuf>>,
+}
+
+impl PackageGraph {
+    pub fn get(&self, name: &str) -> Option<&PackageSource> {
+        self.roots
+            .get(name)
+            .and_then(|owner| self.packages.get(owner))
+    }
+
+    pub fn entry(&self, owner: Option<&Path>, name: &str) -> Option<&Path> {
+        let target = match owner {
+            Some(owner) => self.children.get(owner)?.get(name)?,
+            None => self.roots.get(name)?,
+        };
+        self.packages
+            .get(target)
+            .map(|package| package.path.as_path())
+    }
 }
 
 #[derive(Debug)]
@@ -32,10 +59,13 @@ pub struct PackageError {
 }
 
 struct LockEntry {
+    id: String,
     name: String,
     path: String,
     entry: Option<String>,
     sha256: String,
+    manifest_sha256: Option<String>,
+    owner: PathBuf,
     sources: Vec<String>,
 }
 
@@ -147,9 +177,15 @@ fn collect_tree(root: &Path) -> Result<Vec<TreeFile>, String> {
     Ok(files)
 }
 
-fn hash_tree(files: &[TreeFile]) -> String {
+fn hash_tree(files: &[TreeFile], manifest: Option<&[u8]>) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"tokit-package-tree-v1\0");
+    if let Some(manifest) = manifest {
+        hasher.update(b"tokit-package-tree-v2\0");
+        hasher.update((manifest.len() as u64).to_be_bytes());
+        hasher.update(manifest);
+    } else {
+        hasher.update(b"tokit-package-tree-v1\0");
+    }
     for file in files {
         let name = file.relative.as_bytes();
         hasher.update((name.len() as u64).to_be_bytes());
@@ -160,11 +196,22 @@ fn hash_tree(files: &[TreeFile]) -> String {
     hex_digest(hasher.finalize())
 }
 
+fn tree_manifest(root: &Path) -> Result<Option<Vec<u8>>, String> {
+    match fs::read(root.join("tok.toml")) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("cannot read package tok.toml: {error}")),
+    }
+}
+
 pub fn hash_path(path: &Path) -> Result<String, String> {
     if path.is_dir() {
         let root = fs::canonicalize(path)
             .map_err(|error| format!("cannot resolve package directory: {error}"))?;
-        Ok(hash_tree(&collect_tree(&root)?))
+        Ok(hash_tree(
+            &collect_tree(&root)?,
+            tree_manifest(&root)?.as_deref(),
+        ))
     } else {
         hash_file(path)
     }
@@ -206,12 +253,18 @@ fn package_file(name: &str, path: PathBuf, expected: &str) -> Result<PackageSour
         path: path.clone(),
         source: source.clone(),
         files: vec![PackageFile {
-            path,
+            path: path.clone(),
             source,
-            label: PathBuf::from(format!("pkg/{name}.tok")),
+            label: if name.contains('/') {
+                PathBuf::from(format!("pkg/@/{name}.tok"))
+            } else {
+                PathBuf::from(format!("pkg/{name}.tok"))
+            },
             root,
+            owner: path.clone(),
             multi_file: false,
         }],
+        manifest: None,
     })
 }
 
@@ -234,7 +287,8 @@ fn package_tree(
         ));
     }
     let files = collect_tree(&root)?;
-    if hash_tree(&files) != expected {
+    let manifest = tree_manifest(&root)?;
+    if hash_tree(&files, manifest.as_deref()) != expected {
         return Err(format!("dependency {name} sha256 mismatch"));
     }
     let entry_path = files
@@ -253,8 +307,13 @@ fn package_tree(
         package_files.push(PackageFile {
             path: file.path,
             source,
-            label: PathBuf::from(format!("pkg/{name}/{}", file.relative)),
+            label: if name.contains('/') {
+                PathBuf::from(format!("pkg/@/{name}/{}", file.relative))
+            } else {
+                PathBuf::from(format!("pkg/{name}/{}", file.relative))
+            },
             root: root.clone(),
+            owner: root.clone(),
             multi_file: true,
         });
     }
@@ -262,12 +321,211 @@ fn package_tree(
         path: entry_path,
         source: entry_source.expect("entry was found in pinned files"),
         files: package_files,
+        manifest: manifest
+            .map(|bytes| {
+                String::from_utf8(bytes)
+                    .map_err(|_| format!("dependency {name} tok.toml is not UTF-8"))
+            })
+            .transpose()?,
     })
 }
 
-fn render_lock(manifest_hash: String, mut entries: Vec<LockEntry>) -> Result<String, String> {
+struct GraphBuilder {
+    graph: PackageGraph,
+    paths: HashSet<PathBuf>,
+    active: HashSet<PathBuf>,
+    digests: HashMap<PathBuf, String>,
+    ids: HashMap<PathBuf, String>,
+    entries: Vec<LockEntry>,
+}
+
+impl GraphBuilder {
+    fn new() -> Self {
+        Self {
+            graph: PackageGraph {
+                roots: HashMap::new(),
+                packages: HashMap::new(),
+                children: HashMap::new(),
+            },
+            paths: HashSet::new(),
+            active: HashSet::new(),
+            digests: HashMap::new(),
+            ids: HashMap::new(),
+            entries: Vec::new(),
+        }
+    }
+
+    fn resolve_dependencies(
+        &mut self,
+        root_dir: &Path,
+        source: &str,
+        parent: Option<&Path>,
+    ) -> Result<(), String> {
+        let table: toml::Table =
+            toml::from_str(source).map_err(|error| format!("invalid tok.toml: {error}"))?;
+        let dependencies = table
+            .get("dependencies")
+            .and_then(toml::Value::as_table)
+            .ok_or("tok.toml needs a [dependencies] table")?;
+        let mut names = dependencies.keys().collect::<Vec<_>>();
+        names.sort();
+        for name in names {
+            let mut chars = name.chars();
+            if !chars
+                .next()
+                .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+                || !chars.all(|character| character.is_ascii_alphanumeric() || character == '_')
+            {
+                return Err(format!("invalid dependency name {name:?}"));
+            }
+            let record = dependencies[name]
+                .as_table()
+                .ok_or_else(|| format!("dependency {name} must be a table"))?;
+            let path = record
+                .get("path")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| format!("dependency {name} path must be a string"))?;
+            let expected = checked_digest(name, record)?;
+            let relative = Path::new(path);
+            if path.is_empty() || path.contains('\\') || relative.is_absolute() {
+                return Err(format!("dependency {name} path must be relative and use /"));
+            }
+            let canonical = fs::canonicalize(root_dir.join(relative))
+                .map_err(|error| format!("cannot resolve dependency {name}: {error}"))?;
+            let mut entry_name = None;
+            if canonical.is_file() {
+                if record.len() != 2
+                    || !record.contains_key("path")
+                    || !record.contains_key("sha256")
+                {
+                    return Err(format!(
+                        "dependency {name} needs only path and sha256 fields"
+                    ));
+                }
+            } else if canonical.is_dir() {
+                if record.len() != 3
+                    || !record.contains_key("path")
+                    || !record.contains_key("sha256")
+                    || !record.contains_key("entry")
+                {
+                    return Err(format!(
+                        "dependency {name} needs path, entry, and sha256 fields"
+                    ));
+                }
+                entry_name = Some(
+                    record
+                        .get("entry")
+                        .and_then(toml::Value::as_str)
+                        .ok_or_else(|| format!("dependency {name} entry must be a string"))?,
+                );
+            } else {
+                return Err(format!(
+                    "dependency {name} path must name a file or directory"
+                ));
+            }
+            let owner = canonical.clone();
+            if self.active.contains(&owner) {
+                return Err(format!("dependency cycle reaches {name}"));
+            }
+            if let Some(previous) = self.digests.get(&owner) {
+                if previous != expected {
+                    return Err(format!(
+                        "dependency {name} uses one package with conflicting checksums"
+                    ));
+                }
+                let package = self
+                    .graph
+                    .packages
+                    .get(&owner)
+                    .expect("resolved package exists");
+                if entry_name.is_some_and(|entry| package.path != canonical.join(entry)) {
+                    return Err(format!(
+                        "dependency {name} uses one package with conflicting entry files"
+                    ));
+                }
+            } else {
+                let id = parent.map_or_else(
+                    || name.clone(),
+                    |parent| format!("{}/{}", self.ids[parent], name),
+                );
+                let package = if canonical.is_file() {
+                    package_file(&id, canonical, expected)?
+                } else {
+                    package_tree(
+                        &id,
+                        canonical,
+                        entry_name.expect("directory entry checked"),
+                        expected,
+                    )?
+                };
+                for file in &package.files {
+                    if !self.paths.insert(file.path.clone()) {
+                        return Err(format!("dependency {name} overlaps another package source"));
+                    }
+                }
+                let mut sources = package
+                    .files
+                    .iter()
+                    .map(|file| {
+                        file.label
+                            .to_str()
+                            .expect("package label is UTF-8")
+                            .to_owned()
+                    })
+                    .collect::<Vec<_>>();
+                sources.sort();
+                let manifest_sha256 = package
+                    .manifest
+                    .as_ref()
+                    .map(|source| hash_bytes(source.as_bytes()));
+                let manifest = package.manifest.clone();
+                self.ids.insert(owner.clone(), id.clone());
+                self.digests.insert(owner.clone(), expected.to_owned());
+                self.graph.packages.insert(owner.clone(), package);
+                self.active.insert(owner.clone());
+                if let Some(manifest) = manifest {
+                    self.resolve_dependencies(&owner, &manifest, Some(&owner))?;
+                }
+                self.active.remove(&owner);
+                self.entries.push(LockEntry {
+                    id,
+                    name: name.clone(),
+                    path: path.to_owned(),
+                    entry: entry_name.map(str::to_owned),
+                    sha256: expected.to_owned(),
+                    manifest_sha256,
+                    owner: owner.clone(),
+                    sources,
+                });
+            }
+            match parent {
+                Some(parent) => {
+                    self.graph
+                        .children
+                        .entry(parent.to_path_buf())
+                        .or_default()
+                        .insert(name.clone(), owner);
+                }
+                None => {
+                    self.graph.roots.insert(name.clone(), owner);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn render_lock(
+    manifest_hash: String,
+    graph: &PackageGraph,
+    mut entries: Vec<LockEntry>,
+) -> Result<String, String> {
     let mut lock = toml::Table::new();
-    lock.insert("format".to_owned(), toml::Value::Integer(1));
+    let ids = entries
+        .iter()
+        .map(|entry| (entry.owner.clone(), entry.id.clone()))
+        .collect::<HashMap<_, _>>();
+    lock.insert("format".to_owned(), toml::Value::Integer(2));
     lock.insert(
         "compiler".to_owned(),
         toml::Value::String(format!("tokit-compiler/{}", env!("CARGO_PKG_VERSION"))),
@@ -280,20 +538,54 @@ fn render_lock(manifest_hash: String, mut entries: Vec<LockEntry>) -> Result<Str
         "manifest_sha256".to_owned(),
         toml::Value::String(manifest_hash),
     );
-    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut roots = toml::Table::new();
+    for (name, owner) in &graph.roots {
+        roots.insert(name.clone(), toml::Value::String(ids[owner].clone()));
+    }
+    lock.insert("roots".to_owned(), toml::Value::Table(roots));
+    entries.sort_by(|left, right| left.id.cmp(&right.id));
     let packages = entries
         .into_iter()
         .map(|entry| {
             let mut record = toml::Table::new();
+            record.insert("id".to_owned(), toml::Value::String(entry.id));
             record.insert("name".to_owned(), toml::Value::String(entry.name));
             record.insert("path".to_owned(), toml::Value::String(entry.path));
             if let Some(main) = entry.entry {
                 record.insert("entry".to_owned(), toml::Value::String(main));
             }
             record.insert("sha256".to_owned(), toml::Value::String(entry.sha256));
+            if let Some(digest) = entry.manifest_sha256 {
+                record.insert("manifest_sha256".to_owned(), toml::Value::String(digest));
+            }
             record.insert(
                 "sources".to_owned(),
                 toml::Value::Array(entry.sources.into_iter().map(toml::Value::String).collect()),
+            );
+            let mut edges = graph
+                .children
+                .get(&entry.owner)
+                .into_iter()
+                .flat_map(|dependencies| dependencies.iter())
+                .map(|(name, owner)| (name.clone(), owner.clone()))
+                .collect::<Vec<_>>();
+            edges.sort_by(|left, right| left.0.cmp(&right.0));
+            record.insert(
+                "dependencies".to_owned(),
+                toml::Value::Array(
+                    edges
+                        .into_iter()
+                        .map(|(name, owner)| {
+                            let mut edge = toml::Table::new();
+                            edge.insert("name".to_owned(), toml::Value::String(name));
+                            edge.insert(
+                                "target".to_owned(),
+                                toml::Value::String(ids[&owner].clone()),
+                            );
+                            toml::Value::Table(edge)
+                        })
+                        .collect(),
+                ),
             );
             toml::Value::Table(record)
         })
@@ -302,101 +594,18 @@ fn render_lock(manifest_hash: String, mut entries: Vec<LockEntry>) -> Result<Str
     toml::to_string(&lock).map_err(|error| format!("cannot serialize tok.lock: {error}"))
 }
 
-fn resolve_source(
-    root_dir: &Path,
-    source: &str,
-) -> Result<(HashMap<String, PackageSource>, String), String> {
-    let table: toml::Table =
-        toml::from_str(source).map_err(|error| format!("invalid tok.toml: {error}"))?;
-    let dependencies = table
-        .get("dependencies")
-        .and_then(toml::Value::as_table)
-        .ok_or("tok.toml needs a [dependencies] table")?;
-    let mut resolved = HashMap::new();
-    let mut paths = HashSet::new();
-    let mut lock_entries = Vec::new();
-    for (name, value) in dependencies {
-        let mut chars = name.chars();
-        if !chars
-            .next()
-            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
-            || !chars.all(|character| character.is_ascii_alphanumeric() || character == '_')
-        {
-            return Err(format!("invalid dependency name {name:?}"));
-        }
-        let entry = value
-            .as_table()
-            .ok_or_else(|| format!("dependency {name} must be a table"))?;
-        let path = entry
-            .get("path")
-            .and_then(toml::Value::as_str)
-            .ok_or_else(|| format!("dependency {name} path must be a string"))?;
-        let expected = checked_digest(name, entry)?;
-        let relative = Path::new(path);
-        if path.is_empty() || relative.is_absolute() {
-            return Err(format!("dependency {name} path must be relative"));
-        }
-        let canonical = fs::canonicalize(root_dir.join(relative))
-            .map_err(|error| format!("cannot resolve dependency {name}: {error}"))?;
-        let mut entry_name = None;
-        let package = if canonical.is_file() {
-            if entry.len() != 2 || !entry.contains_key("path") || !entry.contains_key("sha256") {
-                return Err(format!(
-                    "dependency {name} needs only path and sha256 fields"
-                ));
-            }
-            package_file(name, canonical, expected)?
-        } else if canonical.is_dir() {
-            if entry.len() != 3
-                || !entry.contains_key("path")
-                || !entry.contains_key("sha256")
-                || !entry.contains_key("entry")
-            {
-                return Err(format!(
-                    "dependency {name} needs path, entry, and sha256 fields"
-                ));
-            }
-            let main = entry
-                .get("entry")
-                .and_then(toml::Value::as_str)
-                .ok_or_else(|| format!("dependency {name} entry must be a string"))?;
-            entry_name = Some(main.to_owned());
-            package_tree(name, canonical, main, expected)?
-        } else {
-            return Err(format!(
-                "dependency {name} path must name a file or directory"
-            ));
-        };
-        for file in &package.files {
-            if !paths.insert(file.path.clone()) {
-                return Err(format!("dependency {name} repeats a package file"));
-            }
-        }
-        let mut sources = package
-            .files
-            .iter()
-            .map(|file| {
-                file.label
-                    .to_str()
-                    .expect("package labels are UTF-8")
-                    .to_owned()
-            })
-            .collect::<Vec<_>>();
-        sources.sort();
-        lock_entries.push(LockEntry {
-            name: name.clone(),
-            path: path.to_owned(),
-            entry: entry_name,
-            sha256: expected.to_owned(),
-            sources,
-        });
-        resolved.insert(name.clone(), package);
-    }
-    let lock = render_lock(hash_bytes(source.as_bytes()), lock_entries)?;
-    Ok((resolved, lock))
+fn resolve_source(root_dir: &Path, source: &str) -> Result<(PackageGraph, String), String> {
+    let mut builder = GraphBuilder::new();
+    builder.resolve_dependencies(root_dir, source, None)?;
+    let lock = render_lock(
+        hash_bytes(source.as_bytes()),
+        &builder.graph,
+        builder.entries,
+    )?;
+    Ok((builder.graph, lock))
 }
 
-fn resolve(root_dir: &Path) -> Result<(HashMap<String, PackageSource>, String), String> {
+fn resolve(root_dir: &Path) -> Result<(PackageGraph, String), String> {
     let source = fs::read_to_string(root_dir.join("tok.toml"))
         .map_err(|error| format!("cannot read tok.toml: {error}"))?;
     resolve_source(root_dir, &source)
@@ -530,7 +739,7 @@ pub fn write_lock(root_dir: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, PackageError> {
+pub fn load_graph(root_dir: &Path) -> Result<PackageGraph, PackageError> {
     let (resolved, expected) = resolve(root_dir).map_err(|message| PackageError {
         code: "E120",
         message,
@@ -546,4 +755,13 @@ pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, PackageEr
         });
     }
     Ok(resolved)
+}
+
+pub fn load(root_dir: &Path) -> Result<HashMap<String, PackageSource>, PackageError> {
+    let graph = load_graph(root_dir)?;
+    Ok(graph
+        .roots
+        .iter()
+        .map(|(name, owner)| (name.clone(), graph.packages[owner].clone()))
+        .collect())
 }
