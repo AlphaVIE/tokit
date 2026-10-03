@@ -470,7 +470,9 @@ def main() -> None:
                 )
 
                 try:
-                    run_root = temp_root_path / folder.name / source.path.stem
+                    run_root = (
+                        temp_root_path / folder.name / f"{source.path.stem}-{source.language}"
+                    )
                     run_root.mkdir(parents=True, exist_ok=True)
                     compile_ns, runtime_command, code, note = compile_and_run(
                         source,
