@@ -122,7 +122,9 @@ fn count_stmt(stmt: &Stmt, nodes: &mut usize, ops: &mut usize) {
     match stmt {
         Stmt::Let { ty, value, .. } => {
             *ops += 1;
-            count_type(ty, nodes);
+            if let Some(ty) = ty {
+                count_type(ty, nodes);
+            }
             count_expr(value, nodes, ops);
         }
         Stmt::Assign { value, .. } | Stmt::Push { value, .. } | Stmt::Return { value, .. } => {

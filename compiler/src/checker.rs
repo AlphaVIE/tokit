@@ -642,6 +642,18 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
     }
 }
 
+fn binding_type_is_known(ty: &Type) -> bool {
+    match ty {
+        Type::Never | Type::EmptyArray => false,
+        Type::Array(element) | Type::Option(element) | Type::Task(element) => {
+            binding_type_is_known(element)
+        }
+        Type::Result(ok, err) => binding_type_is_known(ok) && binding_type_is_known(err),
+        Type::Applied(_, args) => args.iter().all(binding_type_is_known),
+        _ => true,
+    }
+}
+
 fn join(left: &Type, right: &Type) -> Option<Type> {
     if left == right {
         return Some(left.clone());
@@ -1231,12 +1243,23 @@ fn infer(
                                     .then_some((name.clone(), signature.type_params.len()))
                             })
                             .collect();
-                        validate_type(ty, &arities, *span)?;
-                        require(ty, &actual, value.span, "binding")?;
+                        let binding_ty = if let Some(ty) = ty {
+                            validate_type(ty, &arities, *span)?;
+                            require(ty, &actual, value.span, "binding")?;
+                            ty.clone()
+                        } else if binding_type_is_known(&actual) {
+                            actual.clone()
+                        } else {
+                            return Err(Diagnostic::new(
+                                "E115",
+                                value.span,
+                                "binding needs a type annotation for this value",
+                            ));
+                        };
                         scope.insert(
                             name.clone(),
                             Binding {
-                                ty: ty.clone(),
+                                ty: binding_ty,
                                 mutable: *mutable,
                             },
                         );

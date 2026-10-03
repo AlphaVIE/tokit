@@ -149,7 +149,7 @@ pub enum ExprKind {
 pub enum Stmt {
     Let {
         name: String,
-        ty: Type,
+        ty: Option<Type>,
         value: Expr,
         mutable: bool,
         span: Span,
