@@ -355,8 +355,12 @@ impl Parser {
                 let mutable = self.at(&Kind::Var);
                 let first = self.bump().span;
                 let (name, _) = self.ident()?;
-                self.expect(Kind::Colon)?;
-                let ty = self.ty()?;
+                let ty = if self.at(&Kind::Colon) {
+                    self.bump();
+                    Some(self.ty()?)
+                } else {
+                    None
+                };
                 self.expect(Kind::Eq)?;
                 let value = self.expr(0)?;
                 let end = self.expect(Kind::Semicolon)?.span;

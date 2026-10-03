@@ -543,13 +543,20 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             value,
             mutable,
             ..
-        } => format!(
-            "let {}{}: {} = {};\n",
-            if *mutable { "mut " } else { "" },
-            user_name(name),
-            rust_type(ty),
-            emit_expr(value, source, types)
-        ),
+        } => {
+            let binding_ty = ty.as_ref().unwrap_or_else(|| {
+                types
+                    .get(&value.span)
+                    .expect("checked binding has a value type")
+            });
+            format!(
+                "let {}{}: {} = {};\n",
+                if *mutable { "mut " } else { "" },
+                user_name(name),
+                rust_type(binding_ty),
+                emit_expr(value, source, types)
+            )
+        }
         Stmt::Assign { name, value, .. } => {
             format!(
                 "{} = {};\n",

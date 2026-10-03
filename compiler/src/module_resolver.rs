@@ -342,7 +342,9 @@ impl Resolver<'_> {
             Stmt::Let {
                 ty, value, span, ..
             } => {
-                self.ty(ty, *span)?;
+                if let Some(ty) = ty {
+                    self.ty(ty, *span)?;
+                }
                 self.expr(value)?;
             }
             Stmt::Assign { value, .. }
