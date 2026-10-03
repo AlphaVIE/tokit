@@ -36,6 +36,10 @@ fn byte_values_match_interpreter_and_native() {
             "429",
         ),
         (
+            "fn main()->Bytes{var data=utf8_encode(\"\");data.push(0);data.push(255);data}",
+            "Bytes([0, 255])",
+        ),
+        (
             "fn main()->bool{utf8_encode(\"A\")==utf8_encode(\"A\")}",
             "true",
         ),
@@ -94,6 +98,7 @@ fn byte_values_reject_wrong_types_and_reserved_names() {
         "fn main()->Option<Bytes>{bytes_from_i32(\"A\")}",
         "fn main()->[i32]{bytes_to_i32([1])}",
         "fn main()->Bytes{utf8_encode(\"A\")[0]}",
+        "fn main()->Bytes{var data=utf8_encode(\"\");data.push(true);data}",
     ] {
         assert!(check(source).is_err(), "{source}");
     }
@@ -103,6 +108,41 @@ fn byte_values_reject_wrong_types_and_reserved_names() {
     ] {
         assert_eq!(check(source).unwrap_err().code, "E106", "{source}");
     }
+}
+
+#[test]
+fn byte_push_range_matches_native_diagnostic() {
+    for value in ["-1", "256"] {
+        let source =
+            format!("fn main()->Bytes{{var data=utf8_encode(\"\");data.push({value});data}}");
+        assert_eq!(run(&source).unwrap_err().code, "E207");
+    }
+    assert_eq!(
+        check("fn main()->Bytes{let data=utf8_encode(\"\");data.push(1);data}")
+            .unwrap_err()
+            .code,
+        "E109"
+    );
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let source = "fn main()->Bytes{var data=utf8_encode(\"\");data.push(256);data}";
+    let expected = run(source).unwrap_err().display(source);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let output = std::env::temp_dir().join(format!(
+        "tokit-byte-push-{}-{nonce}{}",
+        std::process::id(),
+        std::env::consts::EXE_SUFFIX
+    ));
+    native::build(&check(source).unwrap(), source, &output).unwrap();
+    let result = Command::new(&output).output().unwrap();
+    assert!(!result.status.success());
+    assert_eq!(String::from_utf8_lossy(&result.stderr).trim(), expected);
+    std::fs::remove_file(output).unwrap();
 }
 
 #[test]

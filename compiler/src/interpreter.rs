@@ -659,10 +659,18 @@ fn eval(
                             )
                         })?;
                         let mut array = cell.borrow_mut();
-                        let Value::Array(items) = &mut *array else {
-                            return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
-                        };
-                        items.push(value);
+                        match (&mut *array, value) {
+                            (Value::Array(items), value) => items.push(value),
+                            (Value::Bytes(items), Value::I32(value)) => {
+                                let byte = u8::try_from(value).map_err(|_| {
+                                    Diagnostic::new("E207", *span, "byte value outside 0..255")
+                                })?;
+                                items.push(byte);
+                            }
+                            _ => {
+                                return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
+                            }
+                        }
                     }
                     Stmt::For {
                         name,
