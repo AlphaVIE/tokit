@@ -1,0 +1,2 @@
+fn walk(n:i32,x:[i32])->i32{var i=0;var j=0;var s=0;while i<n{j=x[j];s=s+j;i=i+1;}s}
+fn main()->Result<i32,ParseError>{let a=args();if len(a)>=3{let n=parse_i32(a[0])?;var x:[i32]=[];var i=1;while i<len(a){x.push(parse_i32(a[i])?);i=i+1;}Ok(walk(n,x))}else{Err(ParseError::Invalid)}}

@@ -64,3 +64,7 @@ jobs:
         run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_005141 --iterations 3000 --warmups 0 --samples 1
         env:
           RUSTUP_TOOLCHAIN: '1.98.1'
+      - name: Verify pointer-chase benchmark outputs
+        run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_213748 --iterations 3000 --warmups 0 --samples 1
+        env:
+          RUSTUP_TOOLCHAIN: '1.98.1'

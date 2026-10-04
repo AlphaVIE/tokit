@@ -5,7 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.benchmark_matrix import array_values_for_folder, expected_output, measure_runtime
+from scripts.benchmark_matrix import (
+    arguments_for_contract,
+    array_values_for_folder,
+    contract_for_folder,
+    expected_for_contract,
+    expected_output,
+    measure_runtime,
+)
 
 
 class BenchmarkMatrixTests(unittest.TestCase):
@@ -31,6 +38,27 @@ class BenchmarkMatrixTests(unittest.TestCase):
             contract.write_text('{"array_values":[1,256,3]}', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "byte-range"):
                 array_values_for_folder(folder)
+
+    def test_pointer_contract_requires_a_full_runtime_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            contract_path = folder / "contract.json"
+            contract_path.write_text(
+                '{"kind":"pointer_chase","next_indices":[1,2,3,0]}', encoding="utf-8"
+            )
+            contract = contract_for_folder(folder)
+            self.assertEqual(expected_for_contract(7, contract), "Ok(12)")
+            self.assertEqual(arguments_for_contract(7, contract), ["7", "1", "2", "3", "0"])
+            contract_path.write_text(
+                '{"kind":"pointer_chase","next_indices":[1,1,0]}', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "visit every index"):
+                contract_for_folder(folder)
+            contract_path.write_text(
+                '{"kind":"pointer_chase","next_indices":[1,3,0]}', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "in-range"):
+                contract_for_folder(folder)
 
     def test_runtime_measurement_keeps_all_verified_samples(self) -> None:
         command = [sys.executable, "-c", "print('Ok(6)')"]
