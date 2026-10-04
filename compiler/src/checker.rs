@@ -1294,16 +1294,20 @@ fn infer(
                         let element = match &binding.ty {
                             Type::Array(element) => element.as_ref(),
                             Type::Bytes => &Type::I32,
+                            Type::String => &Type::String,
                             _ => {
                                 return Err(Diagnostic::new(
                                     "E110",
                                     *span,
-                                    format!("push requires an array or Bytes, got {}", binding.ty),
+                                    format!(
+                                        "push requires an array, Bytes, or String, got {}",
+                                        binding.ty
+                                    ),
                                 ));
                             }
                         };
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
-                        require(element, &actual, value.span, "array element")?;
+                        require(element, &actual, value.span, "append value")?;
                         types.insert(*span, binding.ty.clone());
                         (Type::Unit, *span)
                     }

@@ -106,7 +106,7 @@ fn parsed_arguments_can_fill_an_array() {
         }
     }
     let program = check(source).unwrap();
-    assert!(explain::explain(&program).contains("array append"));
+    assert!(explain::explain(&program).contains("mutable append"));
     assert!(stats::measure(source, &program).semantic_ops >= 5);
     std::fs::remove_dir_all(directory).unwrap();
 }
