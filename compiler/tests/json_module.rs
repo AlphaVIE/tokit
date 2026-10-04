@@ -12,6 +12,19 @@ fn example(name: &str) -> std::path::PathBuf {
 }
 
 #[test]
+fn json_benchmarks_reject_same_length_wrong_output() {
+    for entry in ["bench_main.tok", "render_bench_main.tok"] {
+        let path = example(entry);
+        let output = Command::new(env!("CARGO_BIN_EXE_tok"))
+            .args(["run", path.to_str().unwrap(), "--", "{}", "1", "[]"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{entry}");
+        assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "None");
+    }
+}
+
+#[test]
 fn json_module_tests_pass_and_invalid_number_is_typed() {
     let tests =
         modules::load(&example("tests.tok")).unwrap_or_else(|error| panic!("{}", error.display()));
