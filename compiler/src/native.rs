@@ -374,6 +374,12 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                     user_name(name),
                     emit_expr(value, source, types)
                 )
+            } else if types.get(span) == Some(&Type::String) {
+                format!(
+                    "{{ let __tok_push_value = {}; {}.push_str(&__tok_push_value); }}\n",
+                    emit_expr(value, source, types),
+                    user_name(name)
+                )
             } else {
                 format!(
                     "{{ let __tok_push_value = {}; {}.push(__tok_push_value); }}\n",

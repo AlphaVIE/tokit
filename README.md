@@ -32,6 +32,8 @@ The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)-
 
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
 
+Mutable strings support `text.push(piece);` with a `String` piece. [string_builder.tok](examples/string_builder.tok) demonstrates append without rebuilding the accumulated text on each step.
+
 The experimental `while` statement handles iterative control flow beyond array traversal; [iterative_factorial.tok](examples/iterative_factorial.tok) shows its current syntax.
 
 Both `for` and `while` support loop-local `break;` and `continue;`; [loop_control.tok](examples/loop_control.tok) combines them.

@@ -662,6 +662,7 @@ fn eval(
                         let mut array = cell.borrow_mut();
                         match (&mut *array, value) {
                             (Value::Array(items), value) => items.push(value),
+                            (Value::String(text), Value::String(piece)) => text.push_str(&piece),
                             (Value::Bytes(items), Value::I32(value)) => {
                                 let byte = u8::try_from(value).map_err(|_| {
                                     Diagnostic::new("E207", *span, "byte value outside 0..255")

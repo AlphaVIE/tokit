@@ -136,7 +136,7 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 match statement {
                     Stmt::Let { value, .. } | Stmt::Assign { value, .. } => visit(value, facts),
                     Stmt::Push { value, .. } => {
-                        facts.operations.insert("array append");
+                        facts.operations.insert("mutable append");
                         visit(value, facts);
                     }
                     Stmt::For { iterable, body, .. } => {
