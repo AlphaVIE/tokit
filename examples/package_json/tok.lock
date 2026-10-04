@@ -1,6 +1,6 @@
 compiler = "tokit-compiler/0.0.1"
 format = 2
-manifest_sha256 = "2278f683fc2bc3c722d1b634de179e2041d461dedf2704b8526458a1aac43ceb"
+manifest_sha256 = "79c365fea66f44593a58ec3b8a6d6156816d8d0957bcc783db3c64c860d1c6f5"
 target = "portable-source"
 
 [[package]]
@@ -8,7 +8,7 @@ dependencies = []
 id = "json"
 name = "json"
 path = "../json/json.tok"
-sha256 = "11b1a108cb1e0ed7198bfd326c420ebb87a72458cdc06df8d21a8a7dce5888ac"
+sha256 = "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96"
 sources = ["pkg/json.tok"]
 
 [roots]
