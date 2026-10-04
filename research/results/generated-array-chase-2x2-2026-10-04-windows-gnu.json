@@ -1,0 +1,643 @@
+{
+  "run_order": [
+    "small_8191",
+    "large_8191",
+    "large_13",
+    "small_13"
+  ],
+  "reports": {
+    "small_8191": {
+      "iterations": 40000000,
+      "warmups": 1,
+      "samples": 5,
+      "timeout_s": 30.0,
+      "tokenizer": "cl100k_base",
+      "tiktoken_version": "0.14.0",
+      "host": "Windows-10-10.0.26200-SP0",
+      "python": "3.11.9",
+      "tool_versions": {
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "node": "v24.16.0",
+        "tsc": null,
+        "go": null,
+        "dotnet": "2.1.818",
+        "c++": null
+      },
+      "contracts": {
+        "benchmarks_version_04102026_220333": {
+          "kind": "generated_chase",
+          "size": 16384,
+          "stride": 8191
+        }
+      },
+      "contract_override": "benchmarks_version_04102026_220333\\contract_small.json",
+      "complete": false,
+      "measurements": [
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cpp",
+          "language": "cpp",
+          "source_bytes": 843,
+          "source_sha256": "9403beaac5481349f789955b22c3fb1e699b1c71378556bcbc27e700c6ab600f",
+          "source_tokens": 253,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "c++/clang++/g++"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cs",
+          "language": "csharp",
+          "source_bytes": 594,
+          "source_sha256": "14b8d02ce8cf3bc96a7ec8a7f9c9736e48e5d64cf94f9cb1f15b983a01d9a8f7",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "dotnet SDK 8 or newer"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.go",
+          "language": "go",
+          "source_bytes": 845,
+          "source_sha256": "380ef368ed33366e709ad31ea4d3cb9b5693d1be7d6dddc469601f6798530adb",
+          "source_tokens": 248,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "go"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.js",
+          "language": "javascript",
+          "source_bytes": 553,
+          "source_sha256": "9c28507c10882f4acffa2ff59f548c41d5fc83e198ab948f6749cefdbcb5d72e",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": 97062100,
+          "runtime_samples_ns": [
+            97062100,
+            99861600,
+            94830000,
+            97597600,
+            95982600
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.py",
+          "language": "python",
+          "source_bytes": 501,
+          "source_sha256": "8b8e03f814f2d48fa9f9d10986b4cd18eeaf10ed4940f8577f0d75f49856e367",
+          "source_tokens": 138,
+          "compile_ns": null,
+          "runtime_ns": 1191291700,
+          "runtime_samples_ns": [
+            1189527100,
+            1191291700,
+            1220740300,
+            1197724500,
+            1190256900
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.rs",
+          "language": "rust",
+          "source_bytes": 793,
+          "source_sha256": "527306e70e5d07478763e12fc6b829417e96c664d8c1f988651c4249c1967523",
+          "source_tokens": 238,
+          "compile_ns": 338875400,
+          "runtime_ns": 51913700,
+          "runtime_samples_ns": [
+            51913700,
+            51522000,
+            52002900,
+            51547200,
+            54971600
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.tok",
+          "language": "tokit",
+          "source_bytes": 458,
+          "source_sha256": "ebefedb1971dc3ee3f383271b55fe885848065ad29341b2063a31e7f9829604c",
+          "source_tokens": 170,
+          "compile_ns": 483612100,
+          "runtime_ns": 51818800,
+          "runtime_samples_ns": [
+            51606500,
+            51818800,
+            51939300,
+            51697300,
+            51864700
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.ts",
+          "language": "typescript",
+          "source_bytes": 639,
+          "source_sha256": "79800e5fb8970c63ee1c8e52de3ad168330d2f096c6fccd17fc59492927b2901",
+          "source_tokens": 189,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "tsc"
+        }
+      ]
+    },
+    "large_8191": {
+      "iterations": 40000000,
+      "warmups": 1,
+      "samples": 5,
+      "timeout_s": 30.0,
+      "tokenizer": "cl100k_base",
+      "tiktoken_version": "0.14.0",
+      "host": "Windows-10-10.0.26200-SP0",
+      "python": "3.11.9",
+      "tool_versions": {
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "node": "v24.16.0",
+        "tsc": null,
+        "go": null,
+        "dotnet": "2.1.818",
+        "c++": null
+      },
+      "contracts": {
+        "benchmarks_version_04102026_220333": {
+          "kind": "generated_chase",
+          "size": 262144,
+          "stride": 8191
+        }
+      },
+      "contract_override": null,
+      "complete": false,
+      "measurements": [
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cpp",
+          "language": "cpp",
+          "source_bytes": 843,
+          "source_sha256": "9403beaac5481349f789955b22c3fb1e699b1c71378556bcbc27e700c6ab600f",
+          "source_tokens": 253,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "c++/clang++/g++"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cs",
+          "language": "csharp",
+          "source_bytes": 594,
+          "source_sha256": "14b8d02ce8cf3bc96a7ec8a7f9c9736e48e5d64cf94f9cb1f15b983a01d9a8f7",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "dotnet SDK 8 or newer"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.go",
+          "language": "go",
+          "source_bytes": 845,
+          "source_sha256": "380ef368ed33366e709ad31ea4d3cb9b5693d1be7d6dddc469601f6798530adb",
+          "source_tokens": 248,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "go"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.js",
+          "language": "javascript",
+          "source_bytes": 553,
+          "source_sha256": "9c28507c10882f4acffa2ff59f548c41d5fc83e198ab948f6749cefdbcb5d72e",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": 179513100,
+          "runtime_samples_ns": [
+            179513100,
+            166163500,
+            161322900,
+            198305600,
+            197636800
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.py",
+          "language": "python",
+          "source_bytes": 501,
+          "source_sha256": "8b8e03f814f2d48fa9f9d10986b4cd18eeaf10ed4940f8577f0d75f49856e367",
+          "source_tokens": 138,
+          "compile_ns": null,
+          "runtime_ns": 1568295600,
+          "runtime_samples_ns": [
+            1452962600,
+            1454657000,
+            1568295600,
+            1855953500,
+            1713373700
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.rs",
+          "language": "rust",
+          "source_bytes": 793,
+          "source_sha256": "527306e70e5d07478763e12fc6b829417e96c664d8c1f988651c4249c1967523",
+          "source_tokens": 238,
+          "compile_ns": 335956300,
+          "runtime_ns": 108266400,
+          "runtime_samples_ns": [
+            100519000,
+            108491700,
+            108266400,
+            109747100,
+            105904500
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.tok",
+          "language": "tokit",
+          "source_bytes": 458,
+          "source_sha256": "ebefedb1971dc3ee3f383271b55fe885848065ad29341b2063a31e7f9829604c",
+          "source_tokens": 170,
+          "compile_ns": 501006500,
+          "runtime_ns": 104009300,
+          "runtime_samples_ns": [
+            116232900,
+            103944900,
+            102936600,
+            104009300,
+            108972000
+          ],
+          "status": "ok",
+          "note": "Ok(20000000)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.ts",
+          "language": "typescript",
+          "source_bytes": 639,
+          "source_sha256": "79800e5fb8970c63ee1c8e52de3ad168330d2f096c6fccd17fc59492927b2901",
+          "source_tokens": 189,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "tsc"
+        }
+      ]
+    },
+    "large_13": {
+      "iterations": 40000000,
+      "warmups": 1,
+      "samples": 5,
+      "timeout_s": 30.0,
+      "tokenizer": "cl100k_base",
+      "tiktoken_version": "0.14.0",
+      "host": "Windows-10-10.0.26200-SP0",
+      "python": "3.11.9",
+      "tool_versions": {
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "node": "v24.16.0",
+        "tsc": null,
+        "go": null,
+        "dotnet": "2.1.818",
+        "c++": null
+      },
+      "contracts": {
+        "benchmarks_version_04102026_220333": {
+          "kind": "generated_chase",
+          "size": 262144,
+          "stride": 13
+        }
+      },
+      "contract_override": "benchmarks_version_04102026_220333\\contract_large_stride13.json",
+      "complete": false,
+      "measurements": [
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cpp",
+          "language": "cpp",
+          "source_bytes": 843,
+          "source_sha256": "9403beaac5481349f789955b22c3fb1e699b1c71378556bcbc27e700c6ab600f",
+          "source_tokens": 253,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "c++/clang++/g++"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cs",
+          "language": "csharp",
+          "source_bytes": 594,
+          "source_sha256": "14b8d02ce8cf3bc96a7ec8a7f9c9736e48e5d64cf94f9cb1f15b983a01d9a8f7",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "dotnet SDK 8 or newer"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.go",
+          "language": "go",
+          "source_bytes": 845,
+          "source_sha256": "380ef368ed33366e709ad31ea4d3cb9b5693d1be7d6dddc469601f6798530adb",
+          "source_tokens": 248,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "go"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.js",
+          "language": "javascript",
+          "source_bytes": 553,
+          "source_sha256": "9c28507c10882f4acffa2ff59f548c41d5fc83e198ab948f6749cefdbcb5d72e",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": 119455600,
+          "runtime_samples_ns": [
+            119455600,
+            117900500,
+            125030300,
+            119391300,
+            129099800
+          ],
+          "status": "ok",
+          "note": "Ok(20003605)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.py",
+          "language": "python",
+          "source_bytes": 501,
+          "source_sha256": "8b8e03f814f2d48fa9f9d10986b4cd18eeaf10ed4940f8577f0d75f49856e367",
+          "source_tokens": 138,
+          "compile_ns": null,
+          "runtime_ns": 1213412800,
+          "runtime_samples_ns": [
+            1231382700,
+            1213412800,
+            1259328000,
+            1210876900,
+            1203534900
+          ],
+          "status": "ok",
+          "note": "Ok(20003605)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.rs",
+          "language": "rust",
+          "source_bytes": 793,
+          "source_sha256": "527306e70e5d07478763e12fc6b829417e96c664d8c1f988651c4249c1967523",
+          "source_tokens": 238,
+          "compile_ns": 344599800,
+          "runtime_ns": 57579100,
+          "runtime_samples_ns": [
+            60458000,
+            56433500,
+            54772100,
+            57579100,
+            57648900
+          ],
+          "status": "ok",
+          "note": "Ok(20003605)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.tok",
+          "language": "tokit",
+          "source_bytes": 458,
+          "source_sha256": "ebefedb1971dc3ee3f383271b55fe885848065ad29341b2063a31e7f9829604c",
+          "source_tokens": 170,
+          "compile_ns": 496358000,
+          "runtime_ns": 53907400,
+          "runtime_samples_ns": [
+            53572600,
+            53907400,
+            53706500,
+            54529400,
+            54052200
+          ],
+          "status": "ok",
+          "note": "Ok(20003605)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.ts",
+          "language": "typescript",
+          "source_bytes": 639,
+          "source_sha256": "79800e5fb8970c63ee1c8e52de3ad168330d2f096c6fccd17fc59492927b2901",
+          "source_tokens": 189,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "tsc"
+        }
+      ]
+    },
+    "small_13": {
+      "iterations": 40000000,
+      "warmups": 1,
+      "samples": 5,
+      "timeout_s": 30.0,
+      "tokenizer": "cl100k_base",
+      "tiktoken_version": "0.14.0",
+      "host": "Windows-10-10.0.26200-SP0",
+      "python": "3.11.9",
+      "tool_versions": {
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "node": "v24.16.0",
+        "tsc": null,
+        "go": null,
+        "dotnet": "2.1.818",
+        "c++": null
+      },
+      "contracts": {
+        "benchmarks_version_04102026_220333": {
+          "kind": "generated_chase",
+          "size": 16384,
+          "stride": 13
+        }
+      },
+      "contract_override": "benchmarks_version_04102026_220333\\contract_small_stride13.json",
+      "complete": false,
+      "measurements": [
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cpp",
+          "language": "cpp",
+          "source_bytes": 843,
+          "source_sha256": "9403beaac5481349f789955b22c3fb1e699b1c71378556bcbc27e700c6ab600f",
+          "source_tokens": 253,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "c++/clang++/g++"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.cs",
+          "language": "csharp",
+          "source_bytes": 594,
+          "source_sha256": "14b8d02ce8cf3bc96a7ec8a7f9c9736e48e5d64cf94f9cb1f15b983a01d9a8f7",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "dotnet SDK 8 or newer"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.go",
+          "language": "go",
+          "source_bytes": 845,
+          "source_sha256": "380ef368ed33366e709ad31ea4d3cb9b5693d1be7d6dddc469601f6798530adb",
+          "source_tokens": 248,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "go"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.js",
+          "language": "javascript",
+          "source_bytes": 553,
+          "source_sha256": "9c28507c10882f4acffa2ff59f548c41d5fc83e198ab948f6749cefdbcb5d72e",
+          "source_tokens": 169,
+          "compile_ns": null,
+          "runtime_ns": 110592000,
+          "runtime_samples_ns": [
+            109869900,
+            110592000,
+            113382400,
+            112842100,
+            109947400
+          ],
+          "status": "ok",
+          "note": "Ok(20000178)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.py",
+          "language": "python",
+          "source_bytes": 501,
+          "source_sha256": "8b8e03f814f2d48fa9f9d10986b4cd18eeaf10ed4940f8577f0d75f49856e367",
+          "source_tokens": 138,
+          "compile_ns": null,
+          "runtime_ns": 1200548900,
+          "runtime_samples_ns": [
+            1200548900,
+            1228386900,
+            1254031500,
+            1191655200,
+            1192464500
+          ],
+          "status": "ok",
+          "note": "Ok(20000178)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.rs",
+          "language": "rust",
+          "source_bytes": 793,
+          "source_sha256": "527306e70e5d07478763e12fc6b829417e96c664d8c1f988651c4249c1967523",
+          "source_tokens": 238,
+          "compile_ns": 344098600,
+          "runtime_ns": 58488900,
+          "runtime_samples_ns": [
+            58488900,
+            56018500,
+            56604600,
+            60387000,
+            58809200
+          ],
+          "status": "ok",
+          "note": "Ok(20000178)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.tok",
+          "language": "tokit",
+          "source_bytes": 458,
+          "source_sha256": "ebefedb1971dc3ee3f383271b55fe885848065ad29341b2063a31e7f9829604c",
+          "source_tokens": 170,
+          "compile_ns": 590838200,
+          "runtime_ns": 54226600,
+          "runtime_samples_ns": [
+            54226600,
+            53881200,
+            54080700,
+            54850500,
+            54678300
+          ],
+          "status": "ok",
+          "note": "Ok(20000178)"
+        },
+        {
+          "folder": "benchmarks_version_04102026_220333",
+          "file": "generated_chase.ts",
+          "language": "typescript",
+          "source_bytes": 639,
+          "source_sha256": "79800e5fb8970c63ee1c8e52de3ad168330d2f096c6fccd17fc59492927b2901",
+          "source_tokens": 189,
+          "compile_ns": null,
+          "runtime_ns": null,
+          "runtime_samples_ns": [],
+          "status": "missing-tool",
+          "note": "tsc"
+        }
+      ]
+    }
+  },
+  "note": "Same eight source files and iteration count in all cases. Each row records one warmup and five exact-output-verified runtime samples; local Windows lacks four toolchains. Size and stride are runtime arguments. The order reflects these final canonical-contract runs, not all earlier exploratory runs."
+}
