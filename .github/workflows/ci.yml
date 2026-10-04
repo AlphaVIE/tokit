@@ -68,3 +68,15 @@ jobs:
         run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_213748 --iterations 3000 --warmups 0 --samples 1
         env:
           RUSTUP_TOOLCHAIN: '1.98.1'
+      - name: Verify generated-array chase benchmark outputs
+        run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_220333 --iterations 3000 --warmups 0 --samples 1
+        env:
+          RUSTUP_TOOLCHAIN: '1.98.1'
+      - name: Verify small-array chase benchmark outputs
+        run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_220333 --contract benchmarks_version_04102026_220333/contract_small.json --iterations 3000 --warmups 0 --samples 1
+        env:
+          RUSTUP_TOOLCHAIN: '1.98.1'
+      - name: Verify alternate-stride chase benchmark outputs
+        run: python3 scripts/benchmark_matrix.py benchmarks_version_04102026_220333 --contract benchmarks_version_04102026_220333/contract_large_stride13.json --iterations 3000 --warmups 0 --samples 1
+        env:
+          RUSTUP_TOOLCHAIN: '1.98.1'

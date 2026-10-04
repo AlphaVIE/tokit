@@ -14,6 +14,7 @@ import dataclasses
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import platform
 import shutil
@@ -105,10 +106,7 @@ def collect_sources(folder: Path) -> list[BenchSource]:
     return sources
 
 
-def contract_for_folder(folder: Path) -> dict[str, object] | None:
-    contract_path = folder / "contract.json"
-    if not contract_path.exists():
-        return None
+def contract_from_path(contract_path: Path) -> dict[str, object]:
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     if not isinstance(contract, dict):
         raise ValueError(f"{contract_path}: expected an object")
@@ -139,7 +137,24 @@ def contract_for_folder(folder: Path) -> dict[str, object] | None:
         if index != 0:
             raise ValueError(f"{contract_path}: pointer chase must return to zero")
         return contract
+    if set(contract) == {"kind", "size", "stride"} and contract["kind"] == "generated_chase":
+        size = contract["size"]
+        stride = contract["stride"]
+        if (
+            type(size) is not int
+            or type(stride) is not int
+            or not 2 <= size <= 1_048_576
+            or not 1 <= stride < size
+            or math.gcd(size, stride) != 1
+        ):
+            raise ValueError(f"{contract_path}: expected coprime size and stride in range")
+        return contract
     raise ValueError(f"{contract_path}: unknown benchmark contract")
+
+
+def contract_for_folder(folder: Path) -> dict[str, object] | None:
+    contract_path = folder / "contract.json"
+    return contract_from_path(contract_path) if contract_path.exists() else None
 
 
 def array_values_for_folder(folder: Path) -> list[int] | None:
@@ -281,9 +296,9 @@ def compile_and_run(
             str(temp_dir),
             str(source_path),
         ]
-        return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
+        return_code, stdout, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, None, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip() or stdout.strip()
         runtime_command = [ensure_tool("node"), str(compiled), *arguments]
     elif language == "go":
         compiler = go_compiler()
@@ -383,9 +398,21 @@ def pointer_total(iterations: int, values: list[int]) -> int:
     return cycles * sum(route) + sum(route[:remainder])
 
 
+def generated_total(iterations: int, size: int, stride: int) -> int:
+    cycles, remainder = divmod(iterations, size)
+    total = cycles * (size // 2)
+    index = 0
+    for _ in range(remainder):
+        index = (index + stride) % size
+        total += index < size // 2
+    return total
+
+
 def total_for_contract(iterations: int, contract: dict[str, object] | None) -> int:
     if contract and contract.get("kind") == "pointer_chase":
         return pointer_total(iterations, contract["next_indices"])
+    if contract and contract.get("kind") == "generated_chase":
+        return generated_total(iterations, contract["size"], contract["stride"])
     return cycle_total(iterations, contract["array_values"] if contract else None)
 
 
@@ -396,6 +423,8 @@ def expected_for_contract(iterations: int, contract: dict[str, object] | None) -
 def arguments_for_contract(iterations: int, contract: dict[str, object] | None) -> list[str]:
     if contract is None:
         return [str(iterations)]
+    if contract.get("kind") == "generated_chase":
+        return [str(iterations), str(contract["size"]), str(contract["stride"])]
     values = contract.get("next_indices", contract.get("array_values", []))
     return [str(iterations), *map(str, values)]
 
@@ -474,6 +503,9 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument(
+        "--contract", type=Path, help="use this validated contract for one benchmark folder"
+    )
+    parser.add_argument(
         "--json", action="store_true", help="also print machine-readable JSON"
     )
     parser.add_argument("--output", type=Path, help="write raw JSON report to this file")
@@ -483,6 +515,10 @@ def main() -> None:
     folders = detect_benchmark_folders(patterns)
     if not folders:
         raise SystemExit(f"no benchmark folders matched: {', '.join(patterns)}")
+    if args.contract and len(folders) != 1:
+        parser.error("--contract requires exactly one benchmark folder")
+    if args.contract and not args.contract.is_file():
+        parser.error(f"contract does not exist: {args.contract}")
     if not 0 <= args.iterations <= 1_073_741_823:
         raise SystemExit("iterations must be 0..1073741823 for the i32 result contract")
     if args.warmups < 0 or args.samples < 1 or args.timeout <= 0:
@@ -494,7 +530,12 @@ def main() -> None:
         token_encoder = None
         print(f"token counts unavailable: {exc}", file=sys.stderr)
     results: list[Measurement] = []
-    contracts = {folder.name: contract_for_folder(folder) for folder in folders}
+    contracts = {
+        folder.name: contract_from_path(args.contract)
+        if args.contract
+        else contract_for_folder(folder)
+        for folder in folders
+    }
 
     with tempfile.TemporaryDirectory(prefix="tokit-benchmark-matrix-") as temp_root:
         temp_root_path = Path(temp_root)
@@ -585,6 +626,7 @@ def main() -> None:
             name: contract if contract is not None else {"cycle": [1, 2, 3]}
             for name, contract in contracts.items()
         },
+        "contract_override": str(args.contract) if args.contract else None,
         "complete": all(row.status == "ok" for row in results),
         "measurements": [dataclasses.asdict(row) for row in results],
     }

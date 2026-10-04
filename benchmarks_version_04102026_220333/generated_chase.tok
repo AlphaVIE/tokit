@@ -1,0 +1,2 @@
+fn walk(n:i32,size:i32,stride:i32)->i32{var next:[i32]=[];var i=0;while i<size{let value=i+stride;if value>=size{next.push(value-size);}else{next.push(value);};i=i+1;}var index=0;var step=0;var total=0;let half=size/2;while step<n{index=next[index];if index<half{total=total+1;}else{};step=step+1;}total}
+fn main()->Result<i32,ParseError>{let a=args();if len(a)==3{Ok(walk(parse_i32(a[0])?,parse_i32(a[1])?,parse_i32(a[2])?))}else{Err(ParseError::Invalid)}}
