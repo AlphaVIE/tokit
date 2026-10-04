@@ -1,4 +1,4 @@
-#[derive(Clone, PartialEq, Eq)] struct __TokBytes(Vec<u8>);
+#[derive(Clone, PartialEq, Eq)] struct __TokBytes(std::sync::Arc<Vec<u8>>);
 impl __TokRender for __TokBytes {
     fn tok_render(&self) -> String {
         format!("Bytes({:?})", self.0)
@@ -13,5 +13,8 @@ fn __tok_byte_push(values: &mut __TokBytes, value: i32, source_id: usize, line: 
     let byte = u8::try_from(value).unwrap_or_else(|_| {
         __tok_runtime_fail("E207", source_id, line, column, "byte value outside 0..255")
     });
-    values.0.push(byte);
+    std::sync::Arc::make_mut(&mut values.0).push(byte);
+}
+fn __tok_into_bytes(values: __TokBytes) -> Vec<u8> {
+    std::sync::Arc::try_unwrap(values.0).unwrap_or_else(|shared| (*shared).clone())
 }

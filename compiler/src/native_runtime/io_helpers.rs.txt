@@ -16,10 +16,10 @@ fn __tok_read_bytes(path: String) -> Result<__TokBytes, __TokIoError> {
         }
     };
     if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::read(resolved).map(__TokBytes).map_err(|error| __tok_read_error(error.kind()))
+    std::fs::read(resolved).map(|bytes| __TokBytes(std::sync::Arc::new(bytes))).map_err(|error| __tok_read_error(error.kind()))
 }
 fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
-    String::from_utf8(__tok_read_bytes(path)?.0).map_err(|_| __TokIoError::InvalidUtf8)
+    String::from_utf8(__tok_into_bytes(__tok_read_bytes(path)?)).map_err(|_| __TokIoError::InvalidUtf8)
 }
 fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError> {
     let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
@@ -38,8 +38,8 @@ fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError
         }
     };
     if !target.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::write(target, bytes.0).map_err(|error| __tok_read_error(error.kind()))
+    std::fs::write(target, bytes.0.as_slice()).map_err(|error| __tok_read_error(error.kind()))
 }
 fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
-    __tok_write_bytes(path, __TokBytes(text.into_bytes()))
+    __tok_write_bytes(path, __TokBytes(std::sync::Arc::new(text.into_bytes())))
 }

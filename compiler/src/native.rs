@@ -23,8 +23,11 @@ const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt"
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
     let uses_utf8 = body.contains("__tok_utf8_") || body.contains("__tok_bytes_");
-    let uses_bytes =
-        uses_io || uses_utf8 || body.contains("__TokBytes") || body.contains("__tok_byte_");
+    let uses_bytes = uses_io
+        || uses_utf8
+        || body.contains("__TokBytes")
+        || body.contains("__tok_byte_")
+        || body.contains("__tok_into_bytes");
     let mut prelude = String::from(PRELUDE_CORE);
     if uses_bytes {
         prelude.push_str(PRELUDE_BYTES);
@@ -397,7 +400,7 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 user_name(name),
                 if types.get(&iterable.span) == Some(&Type::Bytes) {
                     format!(
-                        "{}.0.into_iter().map(i32::from)",
+                        "__tok_into_bytes({}).into_iter().map(i32::from)",
                         emit_expr(iterable, source, types)
                     )
                 } else {

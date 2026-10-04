@@ -40,6 +40,10 @@ fn byte_values_match_interpreter_and_native() {
             "Bytes([0, 255])",
         ),
         (
+            "fn main()->[i32]{var data=utf8_encode(\"A\");let previous=data;data.push(66);bytes_to_i32(previous)}",
+            "[65]",
+        ),
+        (
             "fn main()->bool{utf8_encode(\"A\")==utf8_encode(\"A\")}",
             "true",
         ),
