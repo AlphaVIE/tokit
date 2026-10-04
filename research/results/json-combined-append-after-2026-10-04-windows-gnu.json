@@ -1,0 +1,120 @@
+{
+  "host": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+    "logical_cpus": 16,
+    "python": "3.11.9"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+  },
+  "sources_sha256": {
+    ".git/json-render-pair/after/bench_main.tok": "a136bf07f57b759ee314328feddcae8b7403d8d418cf48e9dc14b863bd9a2afc",
+    ".git/json-render-pair/after/json.tok": "11b1a108cb1e0ed7198bfd326c420ebb87a72458cdc06df8d21a8a7dce5888ac"
+  },
+  "iterations": 5,
+  "warmups": 1,
+  "samples": 3,
+  "build": {
+    "samples_ns": [
+      1062172600
+    ],
+    "median_ns": 1062172600
+  },
+  "binary_bytes": 5046531,
+  "workloads": {
+    "record": {
+      "input_bytes": 81,
+      "normalized_bytes": 81,
+      "expected_output": "Some(405)",
+      "run": {
+        "interpreter": {
+          "samples_ns": [
+            22621600,
+            22462600,
+            22310500
+          ],
+          "median_ns": 22462600
+        },
+        "native": {
+          "samples_ns": [
+            7534900,
+            7071700,
+            7416000
+          ],
+          "median_ns": 7416000
+        }
+      }
+    },
+    "nested": {
+      "input_bytes": 608,
+      "normalized_bytes": 608,
+      "expected_output": "Some(3040)",
+      "run": {
+        "interpreter": {
+          "samples_ns": [
+            80963800,
+            78812700,
+            78201100
+          ],
+          "median_ns": 78812700
+        },
+        "native": {
+          "samples_ns": [
+            9513700,
+            8778200,
+            9279200
+          ],
+          "median_ns": 9279200
+        }
+      }
+    },
+    "wide": {
+      "input_bytes": 6494,
+      "normalized_bytes": 6494,
+      "expected_output": "Some(32470)",
+      "run": {
+        "interpreter": {
+          "samples_ns": [
+            693265900,
+            693011200,
+            701511700
+          ],
+          "median_ns": 693265900
+        },
+        "native": {
+          "samples_ns": [
+            22273300,
+            21775100,
+            22806600
+          ],
+          "median_ns": 22273300
+        }
+      }
+    },
+    "escapes": {
+      "input_bytes": 684,
+      "normalized_bytes": 588,
+      "expected_output": "Some(2940)",
+      "run": {
+        "interpreter": {
+          "samples_ns": [
+            61945700,
+            60886800,
+            61589200
+          ],
+          "median_ns": 61589200
+        },
+        "native": {
+          "samples_ns": [
+            7862500,
+            7362700,
+            8739000
+          ],
+          "median_ns": 7862500
+        }
+      }
+    }
+  }
+}
