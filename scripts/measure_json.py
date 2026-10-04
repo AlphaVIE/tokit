@@ -102,8 +102,8 @@ def main() -> None:
         for name, (document, normalized) in FIXTURES.items():
             expected = f"Some({len(normalized.encode('utf-8')) * args.iterations})"
             commands = {
-                "interpreter": [tok, "run", str(ENTRY), "--", document, str(args.iterations)],
-                "native": [str(binary), "--", document, str(args.iterations)],
+                "interpreter": [tok, "run", str(ENTRY), "--", document, str(args.iterations), normalized],
+                "native": [str(binary), "--", document, str(args.iterations), normalized],
             }
             for _ in range(args.warmups):
                 for command in commands.values():

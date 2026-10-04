@@ -10,12 +10,12 @@ asymptotic-complexity claim.
 The [raw Windows GNU report](results/json-render-baseline-2026-10-04-windows-gnu.json)
 uses `scripts/measure_json.py --entry examples/json/render_bench_main.tok
 --iterations 20 --warmups 1 --samples 3 --build-samples 2`. The runner checks
-every execution against the expected byte count. The 6,494-byte wide JSON
-case has a median of 1,035.04 ms in the interpreter and 42.02 ms natively;
-the warm native build median is 1,065.81 ms. These are local wall-clock times
+every rendered document against the exact expected text on each iteration,
+then checks the total byte count. The 6,494-byte wide JSON
+case has a median of 1,039.55 ms in the interpreter and 43.05 ms natively;
+the warm native build median is 1,070.79 ms. These are local wall-clock times
 on rustc 1.98.1, including startup.
 
-The timed workload checks output length. The separate JSON corpus tests check
-exact parser and renderer output, including escapes, ordering, and errors.
-Future renderer experiments should compare against this snapshot and retain
-both kinds of verification.
+The separate JSON corpus tests cover escapes, ordering, and error behavior
+beyond these four valid documents. Future renderer experiments should compare
+against this snapshot and retain both kinds of verification.

@@ -10,7 +10,7 @@
     "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
   },
   "sources_sha256": {
-    "examples/json/render_bench_main.tok": "998406ffb2ecb95d7f427ae995e79dd344f69ea2a960f46ced612bc2761d6c4d",
+    "examples/json/render_bench_main.tok": "6371818b4b9422d7af4699f5dd3d1130c0de79c35be543a44da239f7e09a9e85",
     "examples/json/json.tok": "a377e89ad234b87cd2cce76c076cd497f56e43becbe618673c5045bf826ecda2"
   },
   "iterations": 20,
@@ -18,12 +18,12 @@
   "samples": 3,
   "build": {
     "samples_ns": [
-      1067544700,
-      1064072600
+      1080938100,
+      1060637500
     ],
-    "median_ns": 1065808650
+    "median_ns": 1070787800
   },
-  "binary_bytes": 5043657,
+  "binary_bytes": 5043668,
   "workloads": {
     "record": {
       "input_bytes": 81,
@@ -32,19 +32,19 @@
       "run": {
         "interpreter": {
           "samples_ns": [
-            26609200,
-            25902200,
-            25718800
+            25905500,
+            25476900,
+            25404900
           ],
-          "median_ns": 25902200
+          "median_ns": 25476900
         },
         "native": {
           "samples_ns": [
-            7892100,
-            7716100,
-            7729200
+            7664100,
+            7130800,
+            7566700
           ],
-          "median_ns": 7729200
+          "median_ns": 7566700
         }
       }
     },
@@ -55,19 +55,19 @@
       "run": {
         "interpreter": {
           "samples_ns": [
-            110429900,
-            111754800,
-            110192000
+            110549300,
+            108131000,
+            111798400
           ],
-          "median_ns": 110429900
+          "median_ns": 110549300
         },
         "native": {
           "samples_ns": [
-            11112600,
-            10192200,
-            11151000
+            11033600,
+            10081600,
+            11238100
           ],
-          "median_ns": 11112600
+          "median_ns": 11033600
         }
       }
     },
@@ -78,19 +78,19 @@
       "run": {
         "interpreter": {
           "samples_ns": [
-            1031968700,
-            1035036900,
-            1041793200
+            1024055800,
+            1039554500,
+            1043639500
           ],
-          "median_ns": 1035036900
+          "median_ns": 1039554500
         },
         "native": {
           "samples_ns": [
-            42022800,
-            41884400,
-            43606200
+            42553900,
+            43048000,
+            45001000
           ],
-          "median_ns": 42022800
+          "median_ns": 43048000
         }
       }
     },
@@ -101,19 +101,19 @@
       "run": {
         "interpreter": {
           "samples_ns": [
-            99664300,
-            100003700,
-            99592400
+            102665600,
+            109684300,
+            102100600
           ],
-          "median_ns": 99664300
+          "median_ns": 102665600
         },
         "native": {
           "samples_ns": [
-            9538800,
-            8609500,
-            8318500
+            9392000,
+            11081200,
+            9190300
           ],
-          "median_ns": 8609500
+          "median_ns": 9392000
         }
       }
     }
