@@ -18,4 +18,4 @@ function walk(n: number, size: number, stride: number): number {
 
 const args = process.argv.slice(2).map(Number);
 if (args.length !== 3 || !args.every(Number.isInteger)) throw new Error("invalid arguments");
-console.log(`Ok(${walk(...args)})`);
+console.log(`Ok(${walk(args[0], args[1], args[2])})`);

@@ -14,10 +14,10 @@ milliseconds on one Windows GNU host were:
 
 | Elements | Stride | Tokit native | Rust | JavaScript | Python |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 16,384 | 13 | 54.23 | 58.49 | 110.59 | 1200.55 |
-| 262,144 | 13 | 53.91 | 57.58 | 119.46 | 1213.41 |
-| 16,384 | 8,191 | 51.82 | 51.91 | 97.06 | 1191.29 |
-| 262,144 | 8,191 | 104.01 | 108.27 | 179.51 | 1568.30 |
+| 16,384 | 13 | 54.20 | 53.16 | 109.13 | 1183.70 |
+| 262,144 | 13 | 57.36 | 55.79 | 118.24 | 1210.23 |
+| 16,384 | 8,191 | 52.19 | 51.55 | 97.90 | 1194.07 |
+| 262,144 | 8,191 | 103.25 | 101.43 | 180.24 | 1464.45 |
 
 The large, wide-stride case is about twice as slow as the small case for
 Tokit and Rust. With stride 13, changing the size produced little difference

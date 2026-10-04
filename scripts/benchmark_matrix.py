@@ -296,9 +296,9 @@ def compile_and_run(
             str(temp_dir),
             str(source_path),
         ]
-        return_code, _, stderr, compile_ns = run(compile_command, cwd=ROOT)
+        return_code, stdout, stderr, compile_ns = run(compile_command, cwd=ROOT)
         if return_code:
-            return compile_ns, None, return_code, stderr.strip()
+            return compile_ns, None, return_code, stderr.strip() or stdout.strip()
         runtime_command = [ensure_tool("node"), str(compiled), *arguments]
     elif language == "go":
         compiler = go_compiler()
