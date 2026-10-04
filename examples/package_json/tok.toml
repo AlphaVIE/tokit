@@ -1,2 +1,2 @@
 [dependencies]
-json = { path = "../json/json.tok", sha256 = "a377e89ad234b87cd2cce76c076cd497f56e43becbe618673c5045bf826ecda2" }
+json = { path = "../json/json.tok", sha256 = "11b1a108cb1e0ed7198bfd326c420ebb87a72458cdc06df8d21a8a7dce5888ac" }
