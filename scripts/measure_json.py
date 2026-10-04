@@ -28,11 +28,17 @@ NESTED = json.dumps(
                 for i in range(12)]},
     ensure_ascii=False, separators=(",", ":"),
 )
+WIDE = json.dumps(
+    {"events": [{"id": i, "ok": i % 2 == 0, "notes": ["plain", "line\nend"]}
+                for i in range(128)]},
+    ensure_ascii=False, separators=(",", ":"),
+)
 ESCAPE_VALUE = {"text": "quote \" slash / backslash \\ tab\t emoji 😀" * 12,
                 "control": "\u0000\n\r\t"}
 FIXTURES = {
     "record": (RECORD, RECORD),
     "nested": (NESTED, NESTED),
+    "wide": (WIDE, WIDE),
     "escapes": (
         json.dumps(ESCAPE_VALUE, ensure_ascii=True, separators=(",", ":")),
         json.dumps(ESCAPE_VALUE, ensure_ascii=False, separators=(",", ":")),

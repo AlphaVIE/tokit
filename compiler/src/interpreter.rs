@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::ast::{Expr, ExprKind, Function, Op, PatternKind, Program, Span, Stmt};
@@ -12,7 +13,7 @@ pub enum Value {
     I32(i32),
     Bool(bool),
     String(String),
-    Bytes(Vec<u8>),
+    Bytes(Arc<Vec<u8>>),
     Array(Vec<Value>),
     Record(String, Vec<(String, Value)>),
     Enum(String, String, Option<Box<Value>>),
@@ -257,7 +258,7 @@ fn eval_utf8_builtin(
                 "invalid utf8_encode call",
             )));
         };
-        return Some(Ok(Value::Bytes(text.as_bytes().to_vec())));
+        return Some(Ok(Value::Bytes(Arc::new(text.as_bytes().to_vec()))));
     }
     if name == builtins::UTF8_DECODE_BYTES {
         let [Value::Bytes(bytes)] = values else {
@@ -267,7 +268,7 @@ fn eval_utf8_builtin(
                 "invalid utf8_decode_bytes call",
             )));
         };
-        return Some(Ok(String::from_utf8(bytes.clone())
+        return Some(Ok(String::from_utf8(bytes.as_ref().clone())
             .ok()
             .map_or(Value::None, |text| {
                 Value::Some(Box::new(Value::String(text)))
@@ -289,7 +290,7 @@ fn eval_utf8_builtin(
             })
             .collect::<Option<Vec<_>>>();
         return Some(Ok(bytes.map_or(Value::None, |bytes| {
-            Value::Some(Box::new(Value::Bytes(bytes)))
+            Value::Some(Box::new(Value::Bytes(Arc::new(bytes))))
         })));
     }
     if name == builtins::BYTES_TO_I32 {
@@ -442,7 +443,7 @@ fn eval(
                     ));
                 };
                 return Ok(Flow::Value(match runtime.read.read_bytes(path) {
-                    Ok(bytes) => Value::Ok(Box::new(Value::Bytes(bytes))),
+                    Ok(bytes) => Value::Ok(Box::new(Value::Bytes(Arc::new(bytes)))),
                     Err(error) => Value::Err(Box::new(Value::Enum(
                         builtins::IO_ERROR.to_owned(),
                         error.variant().to_owned(),
@@ -665,7 +666,7 @@ fn eval(
                                 let byte = u8::try_from(value).map_err(|_| {
                                     Diagnostic::new("E207", *span, "byte value outside 0..255")
                                 })?;
-                                items.push(byte);
+                                Arc::make_mut(items).push(byte);
                             }
                             _ => {
                                 return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
@@ -682,8 +683,8 @@ fn eval(
                         let values = match iterable {
                             Value::Array(values) => values,
                             Value::Bytes(bytes) => bytes
-                                .into_iter()
-                                .map(|byte| Value::I32(i32::from(byte)))
+                                .iter()
+                                .map(|byte| Value::I32(i32::from(*byte)))
                                 .collect(),
                             _ => {
                                 return Err(Diagnostic::new(
