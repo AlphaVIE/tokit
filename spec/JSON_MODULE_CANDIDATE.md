@@ -41,7 +41,8 @@ This is a library experiment, not a packaged standard library. The
 module through a content-pinned `pkg:` import. The current implementation
 copies packed `Bytes` values between parser functions and
 uses packed mutable byte buffers for parsed numbers, strings, and rendered
-string escaping. Array and object output uses mutable string append;
-individual member text and escape pieces still use concatenation. Performance
-evaluation and a packaged interface remain part of [the JSON issue](https://github.com/AlphaVIE/tokit/issues/83);
+string escaping. Array, object, and escaped-string output use mutable string
+append; individual member text and escape pieces still use concatenation.
+Performance evaluation and a packaged interface remain part of
+[the JSON issue](https://github.com/AlphaVIE/tokit/issues/83);
 no linear-time or low-allocation claim is made.
