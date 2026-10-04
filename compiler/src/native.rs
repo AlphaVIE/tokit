@@ -212,7 +212,10 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             if name == builtins::LEN {
                 let (source_id, line, column) = location(source, expr.span);
                 let borrowed = if types.get(&args[0].span) == Some(&Type::Bytes) {
-                    format!("&({}).0", emit_expr(&args[0], source, types))
+                    match &args[0].kind {
+                        ExprKind::Var(name) => format!("&{}.0", user_name(name)),
+                        _ => format!("&({}).0", emit_expr(&args[0], source, types)),
+                    }
                 } else {
                     emit_array_borrow(&args[0], source, types)
                 };
