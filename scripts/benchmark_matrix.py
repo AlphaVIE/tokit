@@ -105,21 +105,46 @@ def collect_sources(folder: Path) -> list[BenchSource]:
     return sources
 
 
-def array_values_for_folder(folder: Path) -> list[int] | None:
+def contract_for_folder(folder: Path) -> dict[str, object] | None:
     contract_path = folder / "contract.json"
     if not contract_path.exists():
         return None
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    values = contract.get("array_values") if isinstance(contract, dict) else None
-    if (
-        not isinstance(contract, dict)
-        or set(contract) != {"array_values"}
-        or not isinstance(values, list)
-        or len(values) != 3
-        or any(type(value) is not int or not 0 <= value <= 255 for value in values)
-    ):
-        raise ValueError(f"{contract_path}: expected three byte-range array_values")
-    return values
+    if not isinstance(contract, dict):
+        raise ValueError(f"{contract_path}: expected an object")
+    if set(contract) == {"array_values"}:
+        values = contract["array_values"]
+        if (
+            not isinstance(values, list)
+            or len(values) != 3
+            or any(type(value) is not int or not 0 <= value <= 255 for value in values)
+        ):
+            raise ValueError(f"{contract_path}: expected three byte-range array_values")
+        return contract
+    if set(contract) == {"kind", "next_indices"} and contract["kind"] == "pointer_chase":
+        values = contract["next_indices"]
+        if (
+            not isinstance(values, list)
+            or not 2 <= len(values) <= 256
+            or any(type(value) is not int or not 0 <= value < len(values) for value in values)
+        ):
+            raise ValueError(f"{contract_path}: expected 2..256 in-range next_indices")
+        visited: set[int] = set()
+        index = 0
+        for _ in values:
+            if index in visited:
+                raise ValueError(f"{contract_path}: pointer chase must visit every index")
+            visited.add(index)
+            index = values[index]
+        if index != 0:
+            raise ValueError(f"{contract_path}: pointer chase must return to zero")
+        return contract
+    raise ValueError(f"{contract_path}: unknown benchmark contract")
+
+
+def array_values_for_folder(folder: Path) -> list[int] | None:
+    contract = contract_for_folder(folder)
+    return contract["array_values"] if contract and "array_values" in contract else None
 
 
 def run(
@@ -348,6 +373,33 @@ def expected_output(iterations: int, values: list[int] | None = None) -> str:
     return f"Ok({cycle_total(iterations, values)})"
 
 
+def pointer_total(iterations: int, values: list[int]) -> int:
+    route: list[int] = []
+    index = 0
+    for _ in values:
+        index = values[index]
+        route.append(index)
+    cycles, remainder = divmod(iterations, len(route))
+    return cycles * sum(route) + sum(route[:remainder])
+
+
+def total_for_contract(iterations: int, contract: dict[str, object] | None) -> int:
+    if contract and contract.get("kind") == "pointer_chase":
+        return pointer_total(iterations, contract["next_indices"])
+    return cycle_total(iterations, contract["array_values"] if contract else None)
+
+
+def expected_for_contract(iterations: int, contract: dict[str, object] | None) -> str:
+    return f"Ok({total_for_contract(iterations, contract)})"
+
+
+def arguments_for_contract(iterations: int, contract: dict[str, object] | None) -> list[str]:
+    if contract is None:
+        return [str(iterations)]
+    values = contract.get("next_indices", contract.get("array_values", []))
+    return [str(iterations), *map(str, values)]
+
+
 def measure_runtime(
     command: list[str], expected: str, warmups: int, samples: int, timeout: float
 ) -> tuple[list[int], str]:
@@ -442,16 +494,17 @@ def main() -> None:
         token_encoder = None
         print(f"token counts unavailable: {exc}", file=sys.stderr)
     results: list[Measurement] = []
-    contracts = {folder.name: array_values_for_folder(folder) for folder in folders}
+    contracts = {folder.name: contract_for_folder(folder) for folder in folders}
 
     with tempfile.TemporaryDirectory(prefix="tokit-benchmark-matrix-") as temp_root:
         temp_root_path = Path(temp_root)
         for folder in folders:
-            values = contracts[folder.name]
-            expected = expected_output(args.iterations, values)
-            if cycle_total(args.iterations, values) > 2_147_483_647:
+            contract = contracts[folder.name]
+            total = total_for_contract(args.iterations, contract)
+            expected = f"Ok({total})"
+            if total > 2_147_483_647:
                 raise SystemExit(f"{folder.name}: result exceeds i32")
-            arguments = [str(args.iterations), *map(str, values or [])]
+            arguments = arguments_for_contract(args.iterations, contract)
             for source in collect_sources(folder):
                 source_data = source.path.read_bytes()
                 source_text = source_data.decode("utf-8")
@@ -529,8 +582,8 @@ def main() -> None:
         "python": sys.version.split()[0],
         "tool_versions": installed_tool_versions(),
         "contracts": {
-            name: {"array_values": values} if values is not None else {"cycle": [1, 2, 3]}
-            for name, values in contracts.items()
+            name: contract if contract is not None else {"cycle": [1, 2, 3]}
+            for name, contract in contracts.items()
         },
         "complete": all(row.status == "ok" for row in results),
         "measurements": [dataclasses.asdict(row) for row in results],

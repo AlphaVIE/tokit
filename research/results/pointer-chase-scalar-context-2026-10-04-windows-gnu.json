@@ -1,0 +1,71 @@
+{
+  "workload": "cycle-sum",
+  "iterations": 39999999,
+  "expected_output": "Ok(79999998)",
+  "host": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+    "logical_cpus": 16,
+    "python": "3.11.9"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "tokit_bootstrap": "rustc -C opt-level=2"
+  },
+  "source_sha256": {
+    "Tokit": "b35219150973a915bab26db5798691ca1df925484b4a69a3b6d2b5270a89739d",
+    "Rust": "14da10bad7df95b9ec5e326c115361e5db60d2dc5fa082fab8420cd14c21e8a0"
+  },
+  "preparation_ns": 77715700,
+  "warmups": 1,
+  "results": {
+    "Tokit": {
+      "build": {
+        "samples_ns": [
+          469216500
+        ],
+        "median_ns": 469216500,
+        "min_ns": 469216500,
+        "max_ns": 469216500
+      },
+      "run": {
+        "samples_ns": [
+          23792500,
+          23825200,
+          26721800,
+          23600800,
+          23460300
+        ],
+        "median_ns": 23792500,
+        "min_ns": 23460300,
+        "max_ns": 26721800
+      },
+      "binary_bytes": 4979459
+    },
+    "Rust": {
+      "build": {
+        "samples_ns": [
+          290895300
+        ],
+        "median_ns": 290895300,
+        "min_ns": 290895300,
+        "max_ns": 290895300
+      },
+      "run": {
+        "samples_ns": [
+          23595800,
+          23510600,
+          23413000,
+          23403100,
+          23668900
+        ],
+        "median_ns": 23510600,
+        "min_ns": 23403100,
+        "max_ns": 23668900
+      },
+      "binary_bytes": 4962890
+    }
+  }
+}
