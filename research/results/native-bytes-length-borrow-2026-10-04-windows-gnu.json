@@ -1,0 +1,255 @@
+{
+  "order": [
+    "before",
+    "after"
+  ],
+  "reports": {
+    "before": {
+      "host": {
+        "platform": "Windows-10-10.0.26200-SP0",
+        "machine": "AMD64",
+        "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+        "logical_cpus": 16,
+        "python": "3.11.9"
+      },
+      "toolchain": {
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+      },
+      "sources_sha256": {
+        "examples/json/bench_main.tok": "a136bf07f57b759ee314328feddcae8b7403d8d418cf48e9dc14b863bd9a2afc",
+        "examples/json/json.tok": "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96"
+      },
+      "iterations": 10,
+      "warmups": 1,
+      "samples": 3,
+      "build": {
+        "samples_ns": [
+          1092274600,
+          1067826800
+        ],
+        "median_ns": 1080050700
+      },
+      "binary_bytes": 5045945,
+      "workloads": {
+        "record": {
+          "input_bytes": 81,
+          "normalized_bytes": 81,
+          "expected_output": "Some(810)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                29425500,
+                29588100,
+                29038500
+              ],
+              "median_ns": 29425500
+            },
+            "native": {
+              "samples_ns": [
+                6660700,
+                9050200,
+                6390000
+              ],
+              "median_ns": 6660700
+            }
+          }
+        },
+        "nested": {
+          "input_bytes": 608,
+          "normalized_bytes": 608,
+          "expected_output": "Some(6080)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                141118600,
+                142781300,
+                141545300
+              ],
+              "median_ns": 141545300
+            },
+            "native": {
+              "samples_ns": [
+                9353600,
+                8644900,
+                9229800
+              ],
+              "median_ns": 9229800
+            }
+          }
+        },
+        "wide": {
+          "input_bytes": 6494,
+          "normalized_bytes": 6494,
+          "expected_output": "Some(64940)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                1391501800,
+                1367815700,
+                1388687600
+              ],
+              "median_ns": 1388687600
+            },
+            "native": {
+              "samples_ns": [
+                33688200,
+                33704300,
+                34814600
+              ],
+              "median_ns": 33704300
+            }
+          }
+        },
+        "escapes": {
+          "input_bytes": 684,
+          "normalized_bytes": 588,
+          "expected_output": "Some(5880)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                107019800,
+                105586300,
+                107151400
+              ],
+              "median_ns": 107019800
+            },
+            "native": {
+              "samples_ns": [
+                6893700,
+                6438600,
+                9858700
+              ],
+              "median_ns": 6893700
+            }
+          }
+        }
+      },
+      "native_codegen_sha256": "da1279ead91f5f7624c8161baee14cceab8bc2179018593a4afe695eea1ff26a",
+      "variant": "before"
+    },
+    "after": {
+      "host": {
+        "platform": "Windows-10-10.0.26200-SP0",
+        "machine": "AMD64",
+        "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+        "logical_cpus": 16,
+        "python": "3.11.9"
+      },
+      "toolchain": {
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+      },
+      "sources_sha256": {
+        "examples/json/bench_main.tok": "a136bf07f57b759ee314328feddcae8b7403d8d418cf48e9dc14b863bd9a2afc",
+        "examples/json/json.tok": "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96"
+      },
+      "iterations": 10,
+      "warmups": 1,
+      "samples": 3,
+      "build": {
+        "samples_ns": [
+          1021120300,
+          1023884300
+        ],
+        "median_ns": 1022502300
+      },
+      "binary_bytes": 5041923,
+      "workloads": {
+        "record": {
+          "input_bytes": 81,
+          "normalized_bytes": 81,
+          "expected_output": "Some(810)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                29846500,
+                29598900,
+                29578100
+              ],
+              "median_ns": 29598900
+            },
+            "native": {
+              "samples_ns": [
+                6593000,
+                5967700,
+                6624500
+              ],
+              "median_ns": 6593000
+            }
+          }
+        },
+        "nested": {
+          "input_bytes": 608,
+          "normalized_bytes": 608,
+          "expected_output": "Some(6080)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                141330500,
+                142019900,
+                142113100
+              ],
+              "median_ns": 142019900
+            },
+            "native": {
+              "samples_ns": [
+                9040500,
+                8369700,
+                9216100
+              ],
+              "median_ns": 9040500
+            }
+          }
+        },
+        "wide": {
+          "input_bytes": 6494,
+          "normalized_bytes": 6494,
+          "expected_output": "Some(64940)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                1392600500,
+                1378029800,
+                1385416400
+              ],
+              "median_ns": 1385416400
+            },
+            "native": {
+              "samples_ns": [
+                33177400,
+                33678200,
+                33911900
+              ],
+              "median_ns": 33678200
+            }
+          }
+        },
+        "escapes": {
+          "input_bytes": 684,
+          "normalized_bytes": 588,
+          "expected_output": "Some(5880)",
+          "run": {
+            "interpreter": {
+              "samples_ns": [
+                106847500,
+                107319300,
+                107969400
+              ],
+              "median_ns": 107319300
+            },
+            "native": {
+              "samples_ns": [
+                7045300,
+                6386100,
+                7011600
+              ],
+              "median_ns": 7011600
+            }
+          }
+        }
+      },
+      "native_codegen_sha256": "c6b4c855eecabf67718f2d07963e8e9d8f47d9e2953fa724553cb183a5bc5a8c",
+      "variant": "after"
+    }
+  },
+  "note": "One before/after local run; source hashes pin both the JSON fixture and native backend source. Runtime includes parsing, rendering, and process startup."
+}

@@ -31,6 +31,14 @@ fn native_emits_only_used_runtime_sections() {
 }
 
 #[test]
+fn native_borrows_byte_length_without_cloning_the_binding() {
+    let source = "fn main()->i32{let data=utf8_encode(\"abc\");len(data)+len(data)}";
+    let generated = native::emit(&check(source).unwrap(), source).unwrap();
+    assert!(generated.contains("__tok_len(&u_64617461.0,"));
+    assert!(!generated.contains("__tok_len(&(u_64617461.clone()).0,"));
+}
+
+#[test]
 fn native_output_matches_reference_interpreter() {
     if Command::new("rustc").arg("--version").output().is_err() {
         assert_ne!(
@@ -165,6 +173,10 @@ fn native_output_matches_reference_interpreter() {
             "fn main()->String{var xs:[String]=[\"a\"];let first:String=xs[0];xs.push(\"b\");first+xs[len(xs)-1]}",
         ),
         ("nested_array_index", "fn main()->i32{[[1,2],[3,4]][1][0]}"),
+        (
+            "byte_length_after_push",
+            "fn main()->i32{var data=utf8_encode(\"abc\");let before=len(data);data.push(100);before+len(data)}",
+        ),
         (
             "utf8_strings",
             r#"fn greet(x:String)->String{"Grüß, "+x+"\n"} fn main()->[String]{[greet("世界"),"✓"]}"#,
