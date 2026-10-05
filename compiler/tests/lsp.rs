@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use serde_json::{Value, json};
@@ -28,6 +29,26 @@ fn decode(mut bytes: &[u8]) -> Vec<Value> {
         bytes = &bytes[length..];
     }
     messages
+}
+
+fn file_uri(path: &Path) -> String {
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| {
+        std::fs::canonicalize(path.parent().unwrap())
+            .unwrap()
+            .join(path.file_name().unwrap())
+    });
+    let raw = canonical.to_str().unwrap().replace('\\', "/");
+    #[cfg(windows)]
+    let raw = format!("/{}", raw.strip_prefix("//?/").unwrap_or(&raw));
+    let mut encoded = String::new();
+    for byte in raw.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b':' | b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    format!("file://{encoded}")
 }
 
 #[test]
@@ -124,4 +145,163 @@ fn imported_buffers_get_syntax_diagnostics_without_false_name_errors() {
     let output = decode(&output);
     assert_eq!(output[1]["params"]["diagnostics"], json!([]));
     assert_eq!(output[2]["params"]["diagnostics"][0]["severity"], 1);
+}
+
+#[test]
+fn lsp_rechecks_open_import_graph_and_clears_stale_diagnostics() {
+    let directory = std::env::temp_dir().join(format!(
+        "tokit lsp graph {} {}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let main_path = directory.join("main.tok");
+    let math_path = directory.join("math.tok");
+    let main_text = "import math=\"math.tok\";fn main()->i32{math::triple(7)}";
+    std::fs::write(&main_path, main_text).unwrap();
+    std::fs::write(&math_path, "pub fn triple(n:i32)->i32{n*3}").unwrap();
+    let main_uri = file_uri(&main_path);
+    let math_uri = file_uri(&math_path);
+    let invalid_math = "pub fn triple(n:i32)->i32{let note=\"😀\";missing}";
+    assert!(main_uri.contains("%20"));
+    let messages = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":main_uri,"version":1,"text":main_text}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":math_uri,"version":1,"text":invalid_math}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":math_uri,"version":2},"contentChanges":[{"text":"pub fn triple(n:i32)->String{\"x\"}"}]}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":math_uri,"version":3},"contentChanges":[{"text":"pub fn triple(n:i32)->i32{n*4}"}]}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":math_uri,"version":2},"contentChanges":[{"text":"pub fn triple(n:i32)->i32{missing}"}]}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":math_uri}}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"shutdown"}),
+        json!({"jsonrpc":"2.0","method":"exit"}),
+    ];
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut output = Vec::new();
+    assert!(tokit_compiler::lsp::serve(&mut input.as_slice(), &mut output).unwrap());
+    let output = decode(&output);
+    let publications = output
+        .iter()
+        .filter(|message| message["method"] == "textDocument/publishDiagnostics")
+        .collect::<Vec<_>>();
+    assert!(publications.iter().any(|message| {
+        message["params"]["uri"] == math_uri
+            && message["params"]["version"] == 1
+            && message["params"]["diagnostics"][0]["code"] == "E101"
+            && message["params"]["diagnostics"][0]["range"]["start"]["character"]
+                == invalid_math
+                    .split("missing")
+                    .next()
+                    .unwrap()
+                    .encode_utf16()
+                    .count()
+    }));
+    assert!(publications.iter().any(|message| {
+        message["params"]["uri"] == main_uri
+            && message["params"]["diagnostics"][0]["code"] == "E102"
+    }));
+    assert!(publications.iter().any(|message| {
+        message["params"]["uri"] == main_uri && message["params"]["diagnostics"] == json!([])
+    }));
+    let math_publications = publications
+        .iter()
+        .filter(|message| message["params"]["uri"] == math_uri)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        math_publications.last().unwrap()["params"]["diagnostics"],
+        json!([])
+    );
+    assert!(
+        math_publications.last().unwrap()["params"]
+            .get("version")
+            .is_none()
+    );
+    assert_eq!(math_publications.len(), 4);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn lsp_uses_unsaved_pinned_package_source() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples");
+    let entry = examples.join("package_json/main.tok");
+    let package = examples.join("json/json.tok");
+    let entry_uri = file_uri(&entry);
+    let package_uri = file_uri(&package);
+    let entry_text = std::fs::read_to_string(&entry).unwrap();
+    let package_text = std::fs::read_to_string(&package).unwrap();
+    let messages = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":entry_uri,"version":1,"text":entry_text}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":package_uri,"version":1,"text":"pub fn broken()->i32{@}"}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":package_uri,"version":2},"contentChanges":[{"text":package_text}]}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"shutdown"}),
+        json!({"jsonrpc":"2.0","method":"exit"}),
+    ];
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut output = Vec::new();
+    assert!(tokit_compiler::lsp::serve(&mut input.as_slice(), &mut output).unwrap());
+    let output = decode(&output);
+    let package_publications = output
+        .iter()
+        .filter(|message| {
+            message["method"] == "textDocument/publishDiagnostics"
+                && message["params"]["uri"] == package_uri
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(package_publications.len(), 2);
+    assert_eq!(package_publications[0]["params"]["version"], 1);
+    assert_eq!(
+        package_publications[0]["params"]["diagnostics"][0]["severity"],
+        1
+    );
+    assert_eq!(package_publications[1]["params"]["version"], 2);
+    assert_eq!(package_publications[1]["params"]["diagnostics"], json!([]));
+}
+
+#[test]
+fn lsp_resolves_new_unsaved_import_file() {
+    let directory = std::env::temp_dir().join(format!(
+        "tokit-lsp-new-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let main_path = directory.join("main.tok");
+    let new_path = directory.join("new.tok");
+    let main_text = "import next=\"new.tok\";fn main()->i32{next::value()}";
+    std::fs::write(&main_path, main_text).unwrap();
+    assert!(!new_path.exists());
+    let main_uri = file_uri(&main_path);
+    let new_uri = file_uri(&new_path);
+    let messages = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":main_uri,"version":1,"text":main_text}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":new_uri,"version":1,"text":"pub fn value()->i32{42}"}}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"shutdown"}),
+        json!({"jsonrpc":"2.0","method":"exit"}),
+    ];
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut output = Vec::new();
+    assert!(tokit_compiler::lsp::serve(&mut input.as_slice(), &mut output).unwrap());
+    let output = decode(&output);
+    let main_publications = output
+        .iter()
+        .filter(|message| {
+            message["method"] == "textDocument/publishDiagnostics"
+                && message["params"]["uri"] == main_uri
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(main_publications.len(), 2);
+    assert_eq!(
+        main_publications[0]["params"]["diagnostics"][0]["code"],
+        "E118"
+    );
+    assert_eq!(main_publications[1]["params"]["diagnostics"], json!([]));
+    assert!(!new_path.exists());
+    std::fs::remove_dir_all(directory).unwrap();
 }
