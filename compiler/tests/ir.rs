@@ -49,14 +49,55 @@ fn scalar_ir_has_typed_ordered_values_and_native_parity() {
 
 #[test]
 fn scalar_ir_preserves_checked_overflow_diagnostic() {
-    let source = "fn add(a:i64,b:i64)->i64{a+b} fn main()->i64{add(9223372036854775807i64,1i64)}";
-    assert_eq!(run(source).unwrap_err().code, "E201");
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    for source in [
+        "fn add(a:i64,b:i64)->i64{a+b} fn main()->i64{add(9223372036854775807i64,1i64)}",
+        "main()->I{2147483647+1;0}",
+    ] {
+        assert_eq!(run(source).unwrap_err().code, "E201");
+        let binary = std::env::temp_dir().join(format!(
+            "tokit-ir-overflow-{}-{}{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            std::env::consts::EXE_SUFFIX
+        ));
+        native::build(&tokit_compiler::check(source).unwrap(), source, &binary).unwrap();
+        let output = Command::new(&binary).output().unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8(output.stderr).unwrap().contains("E201"));
+        std::fs::remove_file(binary).unwrap();
+    }
+}
+
+#[test]
+fn scalar_ir_lowers_scoped_immutable_bindings() {
+    let source = "calc(a:I)->I{let x=a+1;{let x=x*2;x+3}} main()->I{calc(19)}";
+    let program = parse(source).unwrap();
+    let types = checker::check_with_types(&program).unwrap();
+    let lowered = ir::lower_function(&program.functions[0], &types).unwrap();
+    lowered.verify().unwrap();
+    assert_eq!(lowered.instructions.len(), 7);
+    assert_eq!(lowered.result, ValueId(6));
+    assert_eq!(
+        lowered.instructions[4].kind,
+        InstructionKind::Binary(BinaryOp::Mul, ValueId(2), ValueId(3))
+    );
+    assert!(ir::lower_function(&program.functions[1], &types).is_none());
+    assert_eq!(run(source).unwrap().to_string(), "43");
+    let generated = native::emit(&program, source).unwrap();
+    assert!(generated.contains("let __tok_v4: i32 = __tok_mul("));
     if Command::new("rustc").arg("--version").output().is_err() {
         assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
         return;
     }
     let binary = std::env::temp_dir().join(format!(
-        "tokit-ir-overflow-{}-{}{}",
+        "tokit-ir-locals-{}-{}{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -64,9 +105,13 @@ fn scalar_ir_preserves_checked_overflow_diagnostic() {
             .as_nanos(),
         std::env::consts::EXE_SUFFIX
     ));
-    native::build(&tokit_compiler::check(source).unwrap(), source, &binary).unwrap();
+    native::build(&program, source, &binary).unwrap();
     let output = Command::new(&binary).output().unwrap();
-    assert!(!output.status.success());
-    assert!(String::from_utf8(output.stderr).unwrap().contains("E201"));
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "43");
     std::fs::remove_file(binary).unwrap();
+
+    let mutable = parse("f(a:I)->I{var x=a;x=2;x}").unwrap();
+    let types = checker::check_with_types(&mutable).unwrap();
+    assert!(ir::lower_function(&mutable.functions[0], &types).is_none());
 }

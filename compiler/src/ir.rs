@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{self, Expr, ExprKind, Op, Span, Type};
+use crate::ast::{self, Expr, ExprKind, Op, Span, Stmt, Type};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValueId(pub usize);
@@ -146,6 +146,7 @@ struct Lowerer<'a> {
     params: &'a [(String, Type)],
     types: &'a HashMap<Span, Type>,
     instructions: Vec<Instruction>,
+    locals: Vec<HashMap<String, ValueId>>,
 }
 
 impl Lowerer<'_> {
@@ -157,10 +158,29 @@ impl Lowerer<'_> {
 
     fn expression(&mut self, expr: &Expr) -> Option<ValueId> {
         if let ExprKind::Block(statements, tail) = &expr.kind {
-            if !statements.is_empty() {
-                return None;
-            }
-            return self.expression(tail.as_ref()?.as_ref());
+            self.locals.push(HashMap::new());
+            let result = (|| {
+                for statement in statements {
+                    match statement {
+                        Stmt::Let {
+                            name,
+                            value,
+                            mutable: false,
+                            ..
+                        } => {
+                            let id = self.expression(value)?;
+                            self.locals.last_mut()?.insert(name.clone(), id);
+                        }
+                        Stmt::Expr(value) => {
+                            self.expression(value)?;
+                        }
+                        _ => return None,
+                    }
+                }
+                self.expression(tail.as_deref()?)
+            })();
+            self.locals.pop();
+            return result;
         }
         let ty = self.types.get(&expr.span)?.clone();
         if !scalar(&ty) {
@@ -171,6 +191,9 @@ impl Lowerer<'_> {
             ExprKind::I64(value) => InstructionKind::I64(*value),
             ExprKind::Bool(value) => InstructionKind::Bool(*value),
             ExprKind::Var(name) => {
+                if let Some(id) = self.locals.iter().rev().find_map(|scope| scope.get(name)) {
+                    return Some(*id);
+                }
                 InstructionKind::Parameter(self.params.iter().position(|(param, _)| param == name)?)
             }
             ExprKind::Neg(value) => InstructionKind::CheckedNeg(self.expression(value)?),
@@ -197,6 +220,7 @@ pub fn lower_function(function: &ast::Function, types: &HashMap<Span, Type>) -> 
         params: &function.params,
         types,
         instructions: Vec::new(),
+        locals: Vec::new(),
     };
     let result = lowerer.expression(&function.body)?;
     if lowerer.instructions[result.0].ty != function.ret {
