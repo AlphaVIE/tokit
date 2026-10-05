@@ -53,6 +53,25 @@ fn push_builds_arrays_with_value_semantics() {
 }
 
 #[test]
+fn indexed_reads_preserve_array_copy_and_element_semantics() {
+    let source = "fn make()->[String]{[\"made\"]} fn main()->[String]{var xs:[String]=[\"first\"];let copy=xs;xs.push(\"second\");[copy[0],xs[1],make()[0]]}";
+    let expected = "[\"first\",\"second\",\"made\"]";
+    assert_eq!(run(source).unwrap().to_string(), expected);
+
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let directory = temporary_directory();
+    let executable = directory.join(format!("indexed-read{}", std::env::consts::EXE_SUFFIX));
+    native::build(&check(source).unwrap(), source, &executable).unwrap();
+    let output = Command::new(&executable).output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), expected);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn parsed_arguments_can_fill_an_array() {
     let source = include_str!("../../examples/parse_numbers.tok");
     let directory = temporary_directory();

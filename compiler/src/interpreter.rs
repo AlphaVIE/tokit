@@ -351,13 +351,34 @@ fn eval(
             Value::Array(values)
         }
         ExprKind::Index(array, index) => {
-            let values = take_value!(eval(array, env, program, depth, runtime));
+            // A variable read normally copies its value. Indexing only needs
+            // the selected element, so keep the array borrowed while reading.
+            let borrowed = match &array.kind {
+                ExprKind::Var(name) => Some(
+                    env.get(name)
+                        .ok_or_else(|| {
+                            Diagnostic::new(
+                                "E204",
+                                array.span,
+                                format!("unresolved runtime name {name}"),
+                            )
+                        })?
+                        .borrow(),
+                ),
+                _ => None,
+            };
+            let owned = if borrowed.is_none() {
+                Some(take_value!(eval(array, env, program, depth, runtime)))
+            } else {
+                None
+            };
             let position = take_value!(eval(index, env, program, depth, runtime));
             let Value::I32(position) = position else {
                 return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
             };
             let position = usize::try_from(position).ok();
-            match values {
+            let values = borrowed.as_deref().or(owned.as_ref());
+            match values.expect("array expression has a value") {
                 Value::Array(values) => position.and_then(|at| values.get(at)).cloned(),
                 Value::Bytes(values) => position
                     .and_then(|at| values.get(at))
