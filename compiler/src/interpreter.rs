@@ -313,6 +313,17 @@ fn eval_utf8_builtin(
     None
 }
 
+fn array_length(value: &Value, span: Span) -> Result<Value, Diagnostic> {
+    let length = match value {
+        Value::Array(items) => items.len(),
+        Value::Bytes(items) => items.len(),
+        _ => return Err(Diagnostic::new("E204", span, "invalid len call")),
+    };
+    let length = i32::try_from(length)
+        .map_err(|_| Diagnostic::new("E206", span, "array length exceeds i32"))?;
+    Ok(Value::I32(length))
+}
+
 fn eval(
     expr: &Expr,
     env: &Env,
@@ -439,6 +450,19 @@ fn eval(
             binary(left, *op, right, expr.span)?
         }
         ExprKind::Call(name, args) => {
+            if name == builtins::LEN
+                && args.len() == 1
+                && let ExprKind::Var(variable) = &args[0].kind
+            {
+                let binding = env.get(variable).ok_or_else(|| {
+                    Diagnostic::new(
+                        "E204",
+                        args[0].span,
+                        format!("unresolved runtime name {variable}"),
+                    )
+                })?;
+                return Ok(Flow::Value(array_length(&binding.borrow(), expr.span)?));
+            }
             let mut values = Vec::new();
             for arg in args {
                 values.push(take_value!(eval(arg, env, program, depth, runtime)));
@@ -526,14 +550,10 @@ fn eval(
                 )));
             }
             if name == builtins::LEN {
-                let length = match values.as_slice() {
-                    [Value::Array(items)] => items.len(),
-                    [Value::Bytes(items)] => items.len(),
-                    _ => return Err(Diagnostic::new("E204", expr.span, "invalid len call")),
+                let [value] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid len call"));
                 };
-                let length = i32::try_from(length)
-                    .map_err(|_| Diagnostic::new("E206", expr.span, "array length exceeds i32"))?;
-                return Ok(Flow::Value(Value::I32(length)));
+                return Ok(Flow::Value(array_length(value, expr.span)?));
             }
             if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {
                 let [Value::String(text)] = values.as_slice() else {

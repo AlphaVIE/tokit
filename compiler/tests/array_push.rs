@@ -25,6 +25,10 @@ fn push_builds_arrays_with_value_semantics() {
             "[1]",
         ),
         (
+            "fn main()->i32{var xs:[i32]=[1,2];let copy=xs;xs.push(3);len(copy)+len(xs)+len([4])}",
+            "6",
+        ),
+        (
             "fn main()->[i32]{var xs:[i32]=[1,2];for x in xs{xs.push(x);}xs}",
             "[1,2,1,2]",
         ),

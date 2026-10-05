@@ -1,0 +1,2 @@
+fn sum_lengths(n:i32,size:i32)->i32{var xs:[i32]=[];var i=0;while i<size{xs.push(i);i=i+1;}var total=0;i=0;while i<n{total=total+len(xs);i=i+1;}total}
+fn main()->Result<i32,ParseError>{let a=args();if len(a)==2{Ok(sum_lengths(parse_i32(a[0])?,parse_i32(a[1])?))}else{Err(ParseError::Invalid)}}

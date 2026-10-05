@@ -6,6 +6,8 @@ const POINTER_CHASE: &str =
 const GENERATED_CHASE: &str =
     include_str!("../../benchmarks_version_04102026_220333/generated_chase.tok");
 const WIDE_SUM: &str = include_str!("../../benchmarks_version_05102026_022806/wide_sum.tok");
+const ARRAY_LENGTH: &str =
+    include_str!("../../benchmarks_version_05102026_025134/array_length.tok");
 
 #[test]
 fn array_cycle_uses_runtime_values_and_matches_the_matrix_oracle() {
@@ -71,6 +73,23 @@ fn wide_sum_uses_runtime_i64_values() {
         let arguments = arguments.into_iter().map(str::to_owned).collect::<Vec<_>>();
         assert_eq!(
             run_with_runtime_args(WIDE_SUM, None, &arguments)
+                .unwrap()
+                .to_string(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn array_length_benchmark_uses_runtime_iterations_and_size() {
+    for (iterations, size, expected) in [
+        ("0", "16", "Ok(0)"),
+        ("3", "4", "Ok(12)"),
+        ("2000", "4096", "Ok(8192000)"),
+    ] {
+        let arguments = vec![iterations.to_owned(), size.to_owned()];
+        assert_eq!(
+            run_with_runtime_args(ARRAY_LENGTH, None, &arguments)
                 .unwrap()
                 .to_string(),
             expected
