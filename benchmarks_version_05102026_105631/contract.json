@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "small",
+      "source": "small/source.tok",
+      "entry": "small/source.tok",
+      "function": "add",
+      "replacement": "small/replacement.tok",
+      "args": [],
+      "before": "42",
+      "after": "38",
+      "sha256": "4e403707d80fef17d903c28705fcb54385d05f5edfccd87d24c5a0d7a4741e8c"
+    },
+    {
+      "name": "wide_sum",
+      "source": "wide_sum/source.tok",
+      "entry": "wide_sum/source.tok",
+      "function": "sum",
+      "replacement": "wide_sum/replacement.tok",
+      "args": [
+        "7",
+        "3000000000",
+        "4000000000",
+        "5000000000"
+      ],
+      "before": "Ok(27000000000)",
+      "after": "Ok(27000000001)",
+      "sha256": "0aec7daada9b4a76c2004f6848ea3de4b8185a837a27f665075d78af0ae914be"
+    },
+    {
+      "name": "json",
+      "source": "json/source.tok",
+      "entry": "json/main.tok",
+      "function": "hex_digit",
+      "replacement": "json/replacement.tok",
+      "args": [],
+      "before": "\"\\\"\\\\u001f\\\"\"",
+      "after": "\"\\\"\\\\u001F\\\"\"",
+      "sha256": "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96"
+    }
+  ]
+}
