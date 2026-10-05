@@ -1,6 +1,6 @@
 //! Backend-independent, typed scalar SSA slice of Tokit IR.
 //!
-//! This first slice lowers pure scalar expression functions. Unsupported
+//! This slice lowers scalar functions with checked calls. Unsupported
 //! constructs stay on the existing checked-AST backend path.
 
 use std::collections::HashMap;
@@ -49,6 +49,7 @@ pub enum InstructionKind {
     Bool(bool),
     CheckedNeg(ValueId),
     Binary(BinaryOp, ValueId, ValueId),
+    Call(String, Vec<ValueId>),
     Conditional {
         condition: ValueId,
         yes: Region,
@@ -70,12 +71,19 @@ pub struct Instruction {
     pub span: Span,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Signature {
+    pub params: Vec<Type>,
+    pub ret: Type,
+}
+
 #[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
     pub params: Vec<(String, Type)>,
     pub ret: Type,
     pub span: Span,
+    pub callees: HashMap<String, Signature>,
     pub instructions: Vec<Instruction>,
     pub result: ValueId,
 }
@@ -83,10 +91,14 @@ pub struct Function {
 impl Function {
     /// Check SSA ordering and operand/result types before a backend consumes IR.
     pub fn verify(&self) -> Result<(), &'static str> {
+        if !scalar(&self.ret) || self.params.iter().any(|(_, ty)| !scalar(ty)) {
+            return Err("function signature is not scalar");
+        }
         let mut next_id = 0;
         let values = verify_instructions(
             &self.instructions,
             &self.params,
+            &self.callees,
             &HashMap::new(),
             &mut next_id,
         )?;
@@ -100,6 +112,7 @@ impl Function {
 fn verify_instructions(
     instructions: &[Instruction],
     params: &[(String, Type)],
+    callees: &HashMap<String, Signature>,
     outer: &HashMap<usize, Type>,
     next_id: &mut usize,
 ) -> Result<HashMap<usize, Type>, &'static str> {
@@ -154,6 +167,20 @@ fn verify_instructions(
                     }
                 }
             }
+            InstructionKind::Call(ref name, ref args) => {
+                let signature = callees.get(name).ok_or("call target is not defined")?;
+                if !scalar(&signature.ret) || signature.params.iter().any(|ty| !scalar(ty)) {
+                    return Err("call signature is not scalar");
+                }
+                if signature.params.len() != args.len() || signature.ret != instruction.ty {
+                    return Err("call signature mismatch");
+                }
+                for (arg, expected) in args.iter().zip(&signature.params) {
+                    if operand(*arg) != Some(expected) {
+                        return Err("call argument type mismatch");
+                    }
+                }
+            }
             InstructionKind::Conditional {
                 condition,
                 ref yes,
@@ -162,11 +189,13 @@ fn verify_instructions(
                 if operand(condition) != Some(&Type::Bool) {
                     return Err("condition must be a defined bool");
                 }
-                let yes_values = verify_instructions(&yes.instructions, params, &values, next_id)?;
+                let yes_values =
+                    verify_instructions(&yes.instructions, params, callees, &values, next_id)?;
                 if yes_values.get(&yes.result.0) != Some(&instruction.ty) {
                     return Err("yes branch result type mismatch");
                 }
-                let no_values = verify_instructions(&no.instructions, params, &values, next_id)?;
+                let no_values =
+                    verify_instructions(&no.instructions, params, callees, &values, next_id)?;
                 if no_values.get(&no.result.0) != Some(&instruction.ty) {
                     return Err("no branch result type mismatch");
                 }
@@ -184,8 +213,10 @@ fn scalar(ty: &Type) -> bool {
 struct Lowerer<'a> {
     params: &'a [(String, Type)],
     types: &'a HashMap<Span, Type>,
+    signatures: &'a HashMap<String, Signature>,
     instructions: Vec<Instruction>,
     locals: Vec<HashMap<String, ValueId>>,
+    callees: HashMap<String, Signature>,
     next_id: usize,
 }
 
@@ -267,36 +298,93 @@ impl Lowerer<'_> {
                 let right = self.expression(right)?;
                 InstructionKind::Binary((*op).into(), left, right)
             }
+            ExprKind::Call(name, args) => {
+                let signature = self.signatures.get(name)?.clone();
+                if signature.params.len() != args.len() || signature.ret != ty {
+                    return None;
+                }
+                let values = args
+                    .iter()
+                    .map(|arg| self.expression(arg))
+                    .collect::<Option<Vec<_>>>()?;
+                self.callees.insert(name.clone(), signature);
+                InstructionKind::Call(name.clone(), values)
+            }
             _ => return None,
         };
         Some(self.push(kind, ty, expr.span))
     }
 }
 
-/// Lower a checked function when every expression fits the scalar IR slice.
-pub fn lower_function(function: &ast::Function, types: &HashMap<Span, Type>) -> Option<Function> {
-    if !function.type_params.is_empty()
-        || !scalar(&function.ret)
-        || function.params.iter().any(|(_, ty)| !scalar(ty))
-    {
-        return None;
+/// Reuse checked scalar signatures while lowering every function in a program.
+pub struct LoweringContext {
+    signatures: HashMap<String, Signature>,
+}
+
+impl LoweringContext {
+    pub fn new(program: &ast::Program) -> Self {
+        let signatures = program
+            .functions
+            .iter()
+            .filter(|candidate| {
+                candidate.type_params.is_empty()
+                    && scalar(&candidate.ret)
+                    && candidate.params.iter().all(|(_, ty)| scalar(ty))
+            })
+            .map(|candidate| {
+                (
+                    candidate.name.clone(),
+                    Signature {
+                        params: candidate.params.iter().map(|(_, ty)| ty.clone()).collect(),
+                        ret: candidate.ret.clone(),
+                    },
+                )
+            })
+            .collect();
+        Self { signatures }
     }
-    let mut lowerer = Lowerer {
-        params: &function.params,
-        types,
-        instructions: Vec::new(),
-        locals: Vec::new(),
-        next_id: 0,
-    };
-    let result = lowerer.expression(&function.body)?;
-    let lowered = Function {
-        name: function.name.clone(),
-        params: function.params.clone(),
-        ret: function.ret.clone(),
-        span: function.span,
-        instructions: lowerer.instructions,
-        result,
-    };
-    lowered.verify().ok()?;
-    Some(lowered)
+
+    /// Lower a checked function when every expression fits the scalar IR slice.
+    pub fn lower_function(
+        &self,
+        function: &ast::Function,
+        types: &HashMap<Span, Type>,
+    ) -> Option<Function> {
+        if !function.type_params.is_empty()
+            || !scalar(&function.ret)
+            || function.params.iter().any(|(_, ty)| !scalar(ty))
+        {
+            return None;
+        }
+        let mut lowerer = Lowerer {
+            params: &function.params,
+            types,
+            signatures: &self.signatures,
+            instructions: Vec::new(),
+            locals: Vec::new(),
+            callees: HashMap::new(),
+            next_id: 0,
+        };
+        let result = lowerer.expression(&function.body)?;
+        let lowered = Function {
+            name: function.name.clone(),
+            params: function.params.clone(),
+            ret: function.ret.clone(),
+            span: function.span,
+            callees: lowerer.callees,
+            instructions: lowerer.instructions,
+            result,
+        };
+        lowered.verify().ok()?;
+        Some(lowered)
+    }
+}
+
+/// Convenience wrapper for lowering one function.
+pub fn lower_function(
+    function: &ast::Function,
+    program: &ast::Program,
+    types: &HashMap<Span, Type>,
+) -> Option<Function> {
+    LoweringContext::new(program).lower_function(function, types)
 }

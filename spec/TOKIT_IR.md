@@ -9,21 +9,24 @@ invariants before backend use.
 The current slice supports scalar functions over `i32`, `i64`, and `bool`:
 parameters, literals, checked negation and arithmetic, equality, integer
 comparisons, immutable local bindings, scalar expression statements, nested
-lexical blocks, and `if` expressions. A local name points to the SSA value of
-its initializer; nested scopes may shadow it without mutating that value.
+lexical blocks, `if` expressions, and calls to non-generic scalar functions.
+A local name points to the SSA value of its initializer; nested scopes may
+shadow it without mutating that value.
 An `if` instruction owns two nested regions. The verifier checks each region
 against the values available before the branch; values created in one branch
 cannot be used by the other or by later outer instructions. The native emitter
-evaluates only the selected region.
+evaluates only the selected region. Call instructions refer to checked scalar
+signatures and evaluate argument instructions in source order. Each emitted
+function retains the same call-depth guard as the AST backend.
 Instructions for discarded expressions still execute, preserving checked
 arithmetic failures. Checked arithmetic retains its source location for
-runtime diagnostics. Functions with mutable bindings, loops, calls,
-other types, or generics still use the checked AST emitter. This fallback
+runtime diagnostics. Functions with mutable bindings, loops, non-scalar types,
+or generics still use the checked AST emitter. This fallback
 lets the IR grow without changing the meaning of existing programs.
 
 The IR has nested conditional regions but no general control-flow graph,
 loops, effects, ownership representation, or optimization passes yet. It is an
 architectural starting point, not a stable serialized format or backend ABI.
-Next work should add calls and loop-capable control-flow blocks; each expansion
-needs interpreter and native parity tests before moving another construct off
-the AST path.
+Next work should add loop-capable control-flow blocks and effect metadata;
+each expansion needs interpreter and native parity tests before moving another
+construct off the AST path.

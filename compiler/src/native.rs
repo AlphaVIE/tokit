@@ -536,6 +536,14 @@ fn emit_ir_instructions(
                     }
                 }
             }
+            InstructionKind::Call(ref name, ref args) => format!(
+                "{}({})",
+                user_name(name),
+                args.iter()
+                    .map(|value| format!("__tok_v{}", value.0))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
             InstructionKind::Conditional {
                 condition,
                 ref yes,
@@ -724,8 +732,9 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         writeln!(out, "impl{render_generics} __TokRender for {name}{generics} {{ fn tok_render(&self) -> String {{ {render_expression} }} }}")
             .expect("writing to String cannot fail");
     }
+    let lowering = ir::LoweringContext::new(program);
     for function in &program.functions {
-        if let Some(lowered) = ir::lower_function(function, &types) {
+        if let Some(lowered) = lowering.lower_function(function, &types) {
             out.push_str(&emit_ir_function(&lowered, source));
             continue;
         }
