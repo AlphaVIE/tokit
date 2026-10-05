@@ -27,6 +27,8 @@ jobs:
         run: cargo +1.98.1 run --quiet -p tokit-compiler --bin tok -- test examples/tests.tok
       - name: Research script tests
         run: python3 -m unittest discover -s tests -v
+      - name: Verify function patch corpus
+        run: python3 scripts/benchmark_function_patches.py benchmarks_version_05102026_105631 --tok target/debug/tok --verify-only
 
   semantic-baselines:
     runs-on: ubuntu-latest

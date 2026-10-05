@@ -1,0 +1,1 @@
+import j="source.tok";fn main()->String{match j::render(j::Value::Text("")){Ok(text)=>text,Err(error)=>"error"}}
