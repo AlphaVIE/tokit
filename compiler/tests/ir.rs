@@ -115,3 +115,88 @@ fn scalar_ir_lowers_scoped_immutable_bindings() {
     let types = checker::check_with_types(&mutable).unwrap();
     assert!(ir::lower_function(&mutable.functions[0], &types).is_none());
 }
+
+#[test]
+fn scalar_ir_branches_are_lazy_scoped_and_match_native_execution() {
+    let source = "choose(flag:bool,a:I)->I{if flag{let x=a+1;x}else{let x=a+2;x}} main()->I{choose(false,40)}";
+    let program = parse(source).unwrap();
+    let types = checker::check_with_types(&program).unwrap();
+    let lowered = ir::lower_function(&program.functions[0], &types).unwrap();
+    lowered.verify().unwrap();
+    assert_eq!(lowered.instructions.len(), 2);
+    let InstructionKind::Conditional { yes, no, .. } = &lowered.instructions[1].kind else {
+        panic!("expected conditional instruction");
+    };
+    assert_eq!(yes.instructions.len(), 3);
+    assert_eq!(no.instructions.len(), 3);
+    let mut malformed = lowered.clone();
+    let InstructionKind::Conditional { yes, no, .. } = &mut malformed.instructions[1].kind else {
+        unreachable!();
+    };
+    no.result = yes.result;
+    assert_eq!(malformed.verify(), Err("no branch result type mismatch"));
+    assert_eq!(run(source).unwrap().to_string(), "42");
+    let generated = native::emit(&program, source).unwrap();
+    assert!(generated.contains("if __tok_v0"));
+    if Command::new("rustc").arg("--version").output().is_ok() {
+        let binary = std::env::temp_dir().join(format!(
+            "tokit-ir-branch-scope-{}-{}{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            std::env::consts::EXE_SUFFIX
+        ));
+        native::build(&program, source, &binary).unwrap();
+        let output = Command::new(&binary).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "42");
+        std::fs::remove_file(binary).unwrap();
+    }
+
+    for (branch, expected) in [
+        ("main()->I{if false{1/0}else{42}}", Some("42")),
+        ("main()->I{if true{42}else{1/0}}", Some("42")),
+        ("main()->I{(if false{1/0}else{41})+1}", Some("42")),
+        ("main()->I{if true{1/0}else{42}}", None),
+        ("main()->I{if true{if false{1/0}else{7}}else{0}}", Some("7")),
+    ] {
+        let program = parse(branch).unwrap();
+        let types = checker::check_with_types(&program).unwrap();
+        ir::lower_function(&program.functions[0], &types)
+            .unwrap()
+            .verify()
+            .unwrap();
+        match expected {
+            Some(value) => assert_eq!(run(branch).unwrap().to_string(), value),
+            None => assert_eq!(run(branch).unwrap_err().code, "E201"),
+        }
+        if Command::new("rustc").arg("--version").output().is_err() {
+            assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+            continue;
+        }
+        let binary = std::env::temp_dir().join(format!(
+            "tokit-ir-branch-{}-{}{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            std::env::consts::EXE_SUFFIX
+        ));
+        native::build(&program, branch, &binary).unwrap();
+        let output = Command::new(&binary).output().unwrap();
+        match expected {
+            Some(value) => {
+                assert!(output.status.success());
+                assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), value);
+            }
+            None => {
+                assert!(!output.status.success());
+                assert!(String::from_utf8(output.stderr).unwrap().contains("E201"));
+            }
+        }
+        std::fs::remove_file(binary).unwrap();
+    }
+}

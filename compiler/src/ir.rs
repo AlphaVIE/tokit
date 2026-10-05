@@ -49,6 +49,17 @@ pub enum InstructionKind {
     Bool(bool),
     CheckedNeg(ValueId),
     Binary(BinaryOp, ValueId, ValueId),
+    Conditional {
+        condition: ValueId,
+        yes: Region,
+        no: Region,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Region {
+    pub instructions: Vec<Instruction>,
+    pub result: ValueId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,70 +83,98 @@ pub struct Function {
 impl Function {
     /// Check SSA ordering and operand/result types before a backend consumes IR.
     pub fn verify(&self) -> Result<(), &'static str> {
-        for (index, instruction) in self.instructions.iter().enumerate() {
-            if instruction.id.0 != index {
-                return Err("instruction IDs must match their order");
-            }
-            let operand = |id: ValueId| {
-                self.instructions
-                    .get(id.0)
-                    .filter(|_| id.0 < index)
-                    .map(|instruction| &instruction.ty)
-            };
-            match instruction.kind {
-                InstructionKind::Parameter(param) => {
-                    if self.params.get(param).map(|(_, ty)| ty) != Some(&instruction.ty) {
-                        return Err("parameter type mismatch");
-                    }
-                }
-                InstructionKind::I32(_) if instruction.ty == Type::I32 => {}
-                InstructionKind::I64(_) if instruction.ty == Type::I64 => {}
-                InstructionKind::Bool(_) if instruction.ty == Type::Bool => {}
-                InstructionKind::I32(_) | InstructionKind::I64(_) | InstructionKind::Bool(_) => {
-                    return Err("literal type mismatch");
-                }
-                InstructionKind::CheckedNeg(value) => {
-                    if !matches!(instruction.ty, Type::I32 | Type::I64)
-                        || operand(value) != Some(&instruction.ty)
-                    {
-                        return Err("negation operand type mismatch");
-                    }
-                }
-                InstructionKind::Binary(op, left, right) => {
-                    let left_ty = operand(left).ok_or("binary operand is not defined")?;
-                    let right_ty = operand(right).ok_or("binary operand is not defined")?;
-                    if left_ty != right_ty {
-                        return Err("binary operand types differ");
-                    }
-                    match op {
-                        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
-                            if !matches!(left_ty, Type::I32 | Type::I64)
-                                || *left_ty != instruction.ty
-                            {
-                                return Err("arithmetic result type mismatch");
-                            }
-                        }
-                        BinaryOp::Eq | BinaryOp::Ne => {
-                            if !scalar(left_ty) || instruction.ty != Type::Bool {
-                                return Err("equality result type mismatch");
-                            }
-                        }
-                        BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                            if !matches!(left_ty, Type::I32 | Type::I64)
-                                || instruction.ty != Type::Bool
-                            {
-                                return Err("ordering result type mismatch");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if self.instructions.get(self.result.0).map(|value| &value.ty) != Some(&self.ret) {
+        let mut next_id = 0;
+        let values = verify_instructions(
+            &self.instructions,
+            &self.params,
+            &HashMap::new(),
+            &mut next_id,
+        )?;
+        if values.get(&self.result.0) != Some(&self.ret) {
             return Err("function result type mismatch");
         }
         Ok(())
     }
+}
+
+fn verify_instructions(
+    instructions: &[Instruction],
+    params: &[(String, Type)],
+    outer: &HashMap<usize, Type>,
+    next_id: &mut usize,
+) -> Result<HashMap<usize, Type>, &'static str> {
+    let mut values = outer.clone();
+    for instruction in instructions {
+        if instruction.id.0 != *next_id {
+            return Err("instruction IDs must match their order");
+        }
+        *next_id += 1;
+        let operand = |id: ValueId| values.get(&id.0).filter(|_| id.0 < instruction.id.0);
+        match instruction.kind {
+            InstructionKind::Parameter(param) => {
+                if params.get(param).map(|(_, ty)| ty) != Some(&instruction.ty) {
+                    return Err("parameter type mismatch");
+                }
+            }
+            InstructionKind::I32(_) if instruction.ty == Type::I32 => {}
+            InstructionKind::I64(_) if instruction.ty == Type::I64 => {}
+            InstructionKind::Bool(_) if instruction.ty == Type::Bool => {}
+            InstructionKind::I32(_) | InstructionKind::I64(_) | InstructionKind::Bool(_) => {
+                return Err("literal type mismatch");
+            }
+            InstructionKind::CheckedNeg(value) => {
+                if !matches!(instruction.ty, Type::I32 | Type::I64)
+                    || operand(value) != Some(&instruction.ty)
+                {
+                    return Err("negation operand type mismatch");
+                }
+            }
+            InstructionKind::Binary(op, left, right) => {
+                let left_ty = operand(left).ok_or("binary operand is not defined")?;
+                let right_ty = operand(right).ok_or("binary operand is not defined")?;
+                if left_ty != right_ty {
+                    return Err("binary operand types differ");
+                }
+                match op {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                        if !matches!(left_ty, Type::I32 | Type::I64) || *left_ty != instruction.ty {
+                            return Err("arithmetic result type mismatch");
+                        }
+                    }
+                    BinaryOp::Eq | BinaryOp::Ne => {
+                        if !scalar(left_ty) || instruction.ty != Type::Bool {
+                            return Err("equality result type mismatch");
+                        }
+                    }
+                    BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                        if !matches!(left_ty, Type::I32 | Type::I64) || instruction.ty != Type::Bool
+                        {
+                            return Err("ordering result type mismatch");
+                        }
+                    }
+                }
+            }
+            InstructionKind::Conditional {
+                condition,
+                ref yes,
+                ref no,
+            } => {
+                if operand(condition) != Some(&Type::Bool) {
+                    return Err("condition must be a defined bool");
+                }
+                let yes_values = verify_instructions(&yes.instructions, params, &values, next_id)?;
+                if yes_values.get(&yes.result.0) != Some(&instruction.ty) {
+                    return Err("yes branch result type mismatch");
+                }
+                let no_values = verify_instructions(&no.instructions, params, &values, next_id)?;
+                if no_values.get(&no.result.0) != Some(&instruction.ty) {
+                    return Err("no branch result type mismatch");
+                }
+            }
+        }
+        values.insert(instruction.id.0, instruction.ty.clone());
+    }
+    Ok(values)
 }
 
 fn scalar(ty: &Type) -> bool {
@@ -147,13 +186,25 @@ struct Lowerer<'a> {
     types: &'a HashMap<Span, Type>,
     instructions: Vec<Instruction>,
     locals: Vec<HashMap<String, ValueId>>,
+    next_id: usize,
 }
 
 impl Lowerer<'_> {
     fn push(&mut self, kind: InstructionKind, ty: Type, span: Span) -> ValueId {
-        let id = ValueId(self.instructions.len());
+        let id = ValueId(self.next_id);
+        self.next_id += 1;
         self.instructions.push(Instruction { id, kind, ty, span });
         id
+    }
+
+    fn region(&mut self, expr: &Expr) -> Option<Region> {
+        let outer = std::mem::take(&mut self.instructions);
+        let result = self.expression(expr);
+        let instructions = std::mem::replace(&mut self.instructions, outer);
+        Some(Region {
+            instructions,
+            result: result?,
+        })
     }
 
     fn expression(&mut self, expr: &Expr) -> Option<ValueId> {
@@ -185,6 +236,20 @@ impl Lowerer<'_> {
         let ty = self.types.get(&expr.span)?.clone();
         if !scalar(&ty) {
             return None;
+        }
+        if let ExprKind::If(condition, yes, no) = &expr.kind {
+            let condition = self.expression(condition)?;
+            let id = ValueId(self.next_id);
+            self.next_id += 1;
+            let yes = self.region(yes)?;
+            let no = self.region(no)?;
+            self.instructions.push(Instruction {
+                id,
+                kind: InstructionKind::Conditional { condition, yes, no },
+                ty,
+                span: expr.span,
+            });
+            return Some(id);
         }
         let kind = match &expr.kind {
             ExprKind::Int(value) => InstructionKind::I32(*value),
@@ -221,11 +286,9 @@ pub fn lower_function(function: &ast::Function, types: &HashMap<Span, Type>) -> 
         types,
         instructions: Vec::new(),
         locals: Vec::new(),
+        next_id: 0,
     };
     let result = lowerer.expression(&function.body)?;
-    if lowerer.instructions[result.0].ty != function.ret {
-        return None;
-    }
     let lowered = Function {
         name: function.name.clone(),
         params: function.params.clone(),

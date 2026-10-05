@@ -479,20 +479,13 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     }
 }
 
-fn emit_ir_function(function: &ir::Function, source: &SourceMap) -> String {
-    let params = function
-        .params
-        .iter()
-        .map(|(name, ty)| format!("{}: {}", user_name(name), rust_type(ty)))
-        .collect::<Vec<_>>()
-        .join(",");
-    let (source_id, line, column) = location(source, function.span);
-    let mut out = format!(
-        "fn {}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({source_id},{line},{column});\n",
-        user_name(&function.name),
-        rust_type(&function.ret)
-    );
-    for instruction in &function.instructions {
+fn emit_ir_instructions(
+    out: &mut String,
+    instructions: &[ir::Instruction],
+    function: &ir::Function,
+    source: &SourceMap,
+) {
+    for instruction in instructions {
         let value = match instruction.kind {
             InstructionKind::Parameter(index) => user_name(&function.params[index].0),
             InstructionKind::I32(value) => format!("{value}i32"),
@@ -543,6 +536,20 @@ fn emit_ir_function(function: &ir::Function, source: &SourceMap) -> String {
                     }
                 }
             }
+            InstructionKind::Conditional {
+                condition,
+                ref yes,
+                ref no,
+            } => {
+                let mut yes_code = String::new();
+                emit_ir_instructions(&mut yes_code, &yes.instructions, function, source);
+                let mut no_code = String::new();
+                emit_ir_instructions(&mut no_code, &no.instructions, function, source);
+                format!(
+                    "if __tok_v{} {{ {yes_code} __tok_v{} }} else {{ {no_code} __tok_v{} }}",
+                    condition.0, yes.result.0, no.result.0
+                )
+            }
         };
         writeln!(
             out,
@@ -552,6 +559,22 @@ fn emit_ir_function(function: &ir::Function, source: &SourceMap) -> String {
         )
         .expect("writing to String cannot fail");
     }
+}
+
+fn emit_ir_function(function: &ir::Function, source: &SourceMap) -> String {
+    let params = function
+        .params
+        .iter()
+        .map(|(name, ty)| format!("{}: {}", user_name(name), rust_type(ty)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let (source_id, line, column) = location(source, function.span);
+    let mut out = format!(
+        "fn {}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({source_id},{line},{column});\n",
+        user_name(&function.name),
+        rust_type(&function.ret)
+    );
+    emit_ir_instructions(&mut out, &function.instructions, function, source);
     writeln!(out, "__tok_v{} }}", function.result.0).expect("writing to String cannot fail");
     out
 }
