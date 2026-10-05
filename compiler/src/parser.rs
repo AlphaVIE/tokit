@@ -533,16 +533,18 @@ impl Parser {
                 continue;
             }
             let (op, prec) = match self.current().kind {
-                Kind::EqEq => (Op::Eq, 1),
-                Kind::BangEq => (Op::Ne, 1),
-                Kind::Lt => (Op::Lt, 2),
-                Kind::Le => (Op::Le, 2),
-                Kind::Gt => (Op::Gt, 2),
-                Kind::Ge => (Op::Ge, 2),
-                Kind::Plus => (Op::Add, 3),
-                Kind::Minus => (Op::Sub, 3),
-                Kind::Star => (Op::Mul, 4),
-                Kind::Slash => (Op::Div, 4),
+                Kind::OrOr => (Op::Or, 0),
+                Kind::AndAnd => (Op::And, 1),
+                Kind::EqEq => (Op::Eq, 2),
+                Kind::BangEq => (Op::Ne, 2),
+                Kind::Lt => (Op::Lt, 3),
+                Kind::Le => (Op::Le, 3),
+                Kind::Gt => (Op::Gt, 3),
+                Kind::Ge => (Op::Ge, 3),
+                Kind::Plus => (Op::Add, 4),
+                Kind::Minus => (Op::Sub, 4),
+                Kind::Star => (Op::Mul, 5),
+                Kind::Slash => (Op::Div, 5),
                 _ => break,
             };
             if prec < min_prec {
@@ -578,6 +580,13 @@ impl Parser {
     fn atom(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
         match token.kind {
+            Kind::Bang => {
+                let value = self.expr(6)?;
+                Ok(Expr {
+                    span: token.span.join(value.span),
+                    kind: ExprKind::Not(Box::new(value)),
+                })
+            }
             Kind::Minus => {
                 if self.at(&Kind::Int(String::new())) {
                     let (number, span) = self.negative_literal(token.span)?;
@@ -592,7 +601,7 @@ impl Parser {
                         span,
                     })
                 } else {
-                    let value = self.expr(5)?;
+                    let value = self.expr(6)?;
                     Ok(Expr {
                         span: token.span.join(value.span),
                         kind: ExprKind::Neg(Box::new(value)),

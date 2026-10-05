@@ -1,0 +1,2 @@
+valid(n:I)->bool{n>0&&n<100}
+main()->bool{valid(42)&&!(false||false)}

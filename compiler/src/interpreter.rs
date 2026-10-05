@@ -334,6 +334,16 @@ fn eval(
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::I64(number) => Value::I64(*number),
+        ExprKind::Not(inner) => match take_value!(eval(inner, env, program, depth, runtime)) {
+            Value::Bool(value) => Value::Bool(!value),
+            _ => {
+                return Err(Diagnostic::new(
+                    "E204",
+                    expr.span,
+                    "invalid logical negation",
+                ));
+            }
+        },
         ExprKind::Neg(inner) => match take_value!(eval(inner, env, program, depth, runtime)) {
             Value::I32(value) => Value::I32(value.checked_neg().ok_or_else(|| {
                 Diagnostic::new("E201", expr.span, "integer overflow or division by zero")
@@ -470,8 +480,32 @@ fn eval(
         }
         ExprKind::Binary(left, op, right) => {
             let left = take_value!(eval(left, env, program, depth, runtime));
-            let right = take_value!(eval(right, env, program, depth, runtime));
-            binary(left, *op, right, expr.span)?
+            if matches!(op, Op::And | Op::Or) {
+                let Value::Bool(left) = left else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid logical operand",
+                    ));
+                };
+                if (*op == Op::And && !left) || (*op == Op::Or && left) {
+                    Value::Bool(left)
+                } else {
+                    match take_value!(eval(right, env, program, depth, runtime)) {
+                        Value::Bool(right) => Value::Bool(right),
+                        _ => {
+                            return Err(Diagnostic::new(
+                                "E204",
+                                expr.span,
+                                "invalid logical operand",
+                            ));
+                        }
+                    }
+                }
+            } else {
+                let right = take_value!(eval(right, env, program, depth, runtime));
+                binary(left, *op, right, expr.span)?
+            }
         }
         ExprKind::Call(name, args) => {
             if name == builtins::LEN
@@ -869,6 +903,9 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
                 Op::Eq | Op::Ne => {
                     return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
                 }
+                Op::And | Op::Or => {
+                    return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
+                }
             };
             value.map(Value::I32)
         }
@@ -883,6 +920,9 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
                 Op::Gt => return Ok(Value::Bool(a > b)),
                 Op::Ge => return Ok(Value::Bool(a >= b)),
                 Op::Eq | Op::Ne => {
+                    return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
+                }
+                Op::And | Op::Or => {
                     return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
                 }
             };

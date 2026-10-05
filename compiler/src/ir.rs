@@ -24,9 +24,12 @@ pub enum BinaryOp {
     Ge,
 }
 
-impl From<Op> for BinaryOp {
-    fn from(value: Op) -> Self {
-        match value {
+impl TryFrom<Op> for BinaryOp {
+    type Error = ();
+
+    fn try_from(value: Op) -> Result<Self, Self::Error> {
+        Ok(match value {
+            Op::And | Op::Or => return Err(()),
             Op::Add => Self::Add,
             Op::Sub => Self::Sub,
             Op::Mul => Self::Mul,
@@ -37,7 +40,7 @@ impl From<Op> for BinaryOp {
             Op::Le => Self::Le,
             Op::Gt => Self::Gt,
             Op::Ge => Self::Ge,
-        }
+        })
     }
 }
 
@@ -47,6 +50,7 @@ pub enum InstructionKind {
     I32(i32),
     I64(i64),
     Bool(bool),
+    Not(ValueId),
     CheckedNeg(ValueId),
     Binary(BinaryOp, ValueId, ValueId),
     Call(String, Vec<ValueId>),
@@ -134,6 +138,11 @@ fn verify_instructions(
             InstructionKind::Bool(_) if instruction.ty == Type::Bool => {}
             InstructionKind::I32(_) | InstructionKind::I64(_) | InstructionKind::Bool(_) => {
                 return Err("literal type mismatch");
+            }
+            InstructionKind::Not(value) => {
+                if instruction.ty != Type::Bool || operand(value) != Some(&Type::Bool) {
+                    return Err("logical negation operand type mismatch");
+                }
             }
             InstructionKind::CheckedNeg(value) => {
                 if !matches!(instruction.ty, Type::I32 | Type::I64)
@@ -282,10 +291,34 @@ impl Lowerer<'_> {
             });
             return Some(id);
         }
+        if let ExprKind::Binary(left, op, right) = &expr.kind
+            && matches!(op, Op::And | Op::Or)
+        {
+            let condition = self.expression(left)?;
+            let id = ValueId(self.next_id);
+            self.next_id += 1;
+            let shortcut = Region {
+                instructions: Vec::new(),
+                result: condition,
+            };
+            let (yes, no) = if *op == Op::And {
+                (self.region(right)?, shortcut)
+            } else {
+                (shortcut, self.region(right)?)
+            };
+            self.instructions.push(Instruction {
+                id,
+                kind: InstructionKind::Conditional { condition, yes, no },
+                ty,
+                span: expr.span,
+            });
+            return Some(id);
+        }
         let kind = match &expr.kind {
             ExprKind::Int(value) => InstructionKind::I32(*value),
             ExprKind::I64(value) => InstructionKind::I64(*value),
             ExprKind::Bool(value) => InstructionKind::Bool(*value),
+            ExprKind::Not(value) => InstructionKind::Not(self.expression(value)?),
             ExprKind::Var(name) => {
                 if let Some(id) = self.locals.iter().rev().find_map(|scope| scope.get(name)) {
                     return Some(*id);
@@ -296,7 +329,7 @@ impl Lowerer<'_> {
             ExprKind::Binary(left, op, right) => {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;
-                InstructionKind::Binary((*op).into(), left, right)
+                InstructionKind::Binary(BinaryOp::try_from(*op).ok()?, left, right)
             }
             ExprKind::Call(name, args) => {
                 let signature = self.signatures.get(name)?.clone();

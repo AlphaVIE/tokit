@@ -150,6 +150,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::I64(value) => format!("{value}i64"),
+        ExprKind::Not(value) => format!("!({})", emit_expr(value, source, types)),
         ExprKind::Neg(value) => {
             let (source_id, line, column) = location(source, expr.span);
             let helper = if types.get(&value.span) == Some(&Type::I64) {
@@ -278,6 +279,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             let left = emit_expr(left, source, types);
             let right = emit_expr(right, source, types);
             match op {
+                Op::And => format!("({left} && {right})"),
+                Op::Or => format!("({left} || {right})"),
                 Op::Add if left_type == Some(&Type::String) => {
                     format!("({left} + &{right})")
                 }
@@ -491,6 +494,7 @@ fn emit_ir_instructions(
             InstructionKind::I32(value) => format!("{value}i32"),
             InstructionKind::I64(value) => format!("{value}i64"),
             InstructionKind::Bool(value) => value.to_string(),
+            InstructionKind::Not(value) => format!("!__tok_v{}", value.0),
             InstructionKind::CheckedNeg(value) => {
                 let helper = if instruction.ty == Type::I64 {
                     "__tok_neg_i64"
