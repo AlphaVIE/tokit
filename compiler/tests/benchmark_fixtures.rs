@@ -5,6 +5,7 @@ const POINTER_CHASE: &str =
     include_str!("../../benchmarks_version_04102026_213748/pointer_chase.tok");
 const GENERATED_CHASE: &str =
     include_str!("../../benchmarks_version_04102026_220333/generated_chase.tok");
+const WIDE_SUM: &str = include_str!("../../benchmarks_version_05102026_022806/wide_sum.tok");
 
 #[test]
 fn array_cycle_uses_runtime_values_and_matches_the_matrix_oracle() {
@@ -50,6 +51,26 @@ fn generated_chase_uses_runtime_size_and_stride() {
         let arguments = arguments.into_iter().map(str::to_owned).collect::<Vec<_>>();
         assert_eq!(
             run_with_runtime_args(GENERATED_CHASE, None, &arguments)
+                .unwrap()
+                .to_string(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn wide_sum_uses_runtime_i64_values() {
+    for (arguments, expected) in [
+        (vec!["0", "3000000000", "4000000000"], "Ok(0)"),
+        (
+            vec!["7", "3000000000", "4000000000", "5000000000"],
+            "Ok(27000000000)",
+        ),
+        (vec!["3", "5000000001", "6000000003"], "Ok(16000000005)"),
+    ] {
+        let arguments = arguments.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(
+            run_with_runtime_args(WIDE_SUM, None, &arguments)
                 .unwrap()
                 .to_string(),
             expected

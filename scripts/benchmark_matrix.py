@@ -149,6 +149,19 @@ def contract_from_path(contract_path: Path) -> dict[str, object]:
         ):
             raise ValueError(f"{contract_path}: expected coprime size and stride in range")
         return contract
+    if set(contract) == {"kind", "values"} and contract["kind"] == "wide_sum":
+        values = contract["values"]
+        if (
+            not isinstance(values, list)
+            or not 2 <= len(values) <= 256
+            or any(
+                type(value) is not int
+                or not 2_147_483_647 < value <= 9_223_372_036_854_775_807
+                for value in values
+            )
+        ):
+            raise ValueError(f"{contract_path}: expected 2..256 positive i64 values above i32")
+        return contract
     raise ValueError(f"{contract_path}: unknown benchmark contract")
 
 
@@ -408,11 +421,18 @@ def generated_total(iterations: int, size: int, stride: int) -> int:
     return total
 
 
+def wide_sum_total(iterations: int, values: list[int]) -> int:
+    cycles, remainder = divmod(iterations, len(values))
+    return cycles * sum(values) + sum(values[:remainder])
+
+
 def total_for_contract(iterations: int, contract: dict[str, object] | None) -> int:
     if contract and contract.get("kind") == "pointer_chase":
         return pointer_total(iterations, contract["next_indices"])
     if contract and contract.get("kind") == "generated_chase":
         return generated_total(iterations, contract["size"], contract["stride"])
+    if contract and contract.get("kind") == "wide_sum":
+        return wide_sum_total(iterations, contract["values"])
     return cycle_total(iterations, contract["array_values"] if contract else None)
 
 
@@ -425,6 +445,8 @@ def arguments_for_contract(iterations: int, contract: dict[str, object] | None) 
         return [str(iterations)]
     if contract.get("kind") == "generated_chase":
         return [str(iterations), str(contract["size"]), str(contract["stride"])]
+    if contract.get("kind") == "wide_sum":
+        return [str(iterations), *map(str, contract["values"])]
     values = contract.get("next_indices", contract.get("array_values", []))
     return [str(iterations), *map(str, values)]
 
@@ -520,7 +542,7 @@ def main() -> None:
     if args.contract and not args.contract.is_file():
         parser.error(f"contract does not exist: {args.contract}")
     if not 0 <= args.iterations <= 1_073_741_823:
-        raise SystemExit("iterations must be 0..1073741823 for the i32 result contract")
+        raise SystemExit("iterations must be 0..1073741823")
     if args.warmups < 0 or args.samples < 1 or args.timeout <= 0:
         raise SystemExit("warmups must be nonnegative; samples and timeout must be positive")
 
@@ -543,8 +565,10 @@ def main() -> None:
             contract = contracts[folder.name]
             total = total_for_contract(args.iterations, contract)
             expected = f"Ok({total})"
-            if total > 2_147_483_647:
-                raise SystemExit(f"{folder.name}: result exceeds i32")
+            result_type = "i64" if contract and contract.get("kind") == "wide_sum" else "i32"
+            result_limit = 9_223_372_036_854_775_807 if result_type == "i64" else 2_147_483_647
+            if total > result_limit:
+                raise SystemExit(f"{folder.name}: result exceeds {result_type}")
             arguments = arguments_for_contract(args.iterations, contract)
             for source in collect_sources(folder):
                 source_data = source.path.read_bytes()
