@@ -1,4 +1,5 @@
 pub mod ai_index;
+pub mod ai_patch;
 pub mod ast;
 pub mod builtins;
 pub mod checker;
