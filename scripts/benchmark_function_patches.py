@@ -23,7 +23,7 @@ def compact(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def validate_case(tok: Path, root: Path, case: dict) -> dict[str, str]:
+def validate_case(tok: Path, root: Path, case: dict, targeted_index: bool = False) -> dict[str, str]:
     source_path = root / case["source"]
     before = source_path.read_bytes().decode("utf-8")
     if hashlib.sha256(before.encode()).hexdigest() != case["sha256"]:
@@ -35,6 +35,12 @@ def validate_case(tok: Path, root: Path, case: dict) -> dict[str, str]:
     index = run(tok, "ai-patch-index", str(source_path)).strip()
     records = json.loads(index)["functions"]
     selected, = [item for item in records if item["name"] == case["function"]]
+    targeted = {}
+    if targeted_index:
+        response = run(tok, "ai-patch-index", str(source_path), case["function"]).strip()
+        if json.loads(response) != {"version": 1, "functions": [selected]}:
+            raise ValueError("targeted index differs from full index")
+        targeted["targeted_index_response"] = response
     start, end = selected["span"]
     data = before.encode("utf-8")
     if hashlib.sha256(data[start:end]).hexdigest() != selected["sha256"]:
@@ -60,7 +66,7 @@ def validate_case(tok: Path, root: Path, case: dict) -> dict[str, str]:
             raise ValueError("written patch differs from independent byte splice")
         if run(tok, "run", str(scratch_entry), "--", *args).strip() != case["after"]:
             raise ValueError(f"{case['name']}: patched output mismatch")
-    return {"full_source": after, "patch_request": request, "full_index": index,
+    return {**targeted, "full_source": after, "patch_request": request, "full_index": index,
             "selected_index_entry": compact(selected),
             "unified_diff": "".join(difflib.unified_diff(
                 before.splitlines(keepends=True), after.splitlines(keepends=True),
@@ -74,11 +80,12 @@ def main() -> None:
     parser.add_argument("--qwen-tokenizer", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--targeted-index", action="store_true")
     args = parser.parse_args()
     contract = json.loads((args.dataset / "contract.json").read_text(encoding="utf-8"))
     if contract["version"] != 1:
         parser.error("unsupported contract")
-    validated = [(case, validate_case(args.tok.resolve(), args.dataset.resolve(), case))
+    validated = [(case, validate_case(args.tok.resolve(), args.dataset.resolve(), case, args.targeted_index))
                  for case in contract["cases"]]
     if args.verify_only:
         print(f"Verified {len(validated)} function patch cases")

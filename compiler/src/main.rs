@@ -280,13 +280,19 @@ fn main() {
         test_command(&args[2..]);
         return;
     }
-    if let [_, command, path] = args.as_slice()
-        && command == "ai-patch-index"
-    {
+    let patch_index = match args.as_slice() {
+        [_, command, path] if command == "ai-patch-index" => Some((path, None)),
+        [_, command, path, name] if command == "ai-patch-index" => {
+            Some((path, Some(name.as_str())))
+        }
+        _ => None,
+    };
+    if let Some((path, name)) = patch_index {
         let result = fs::read_to_string(path)
             .map_err(|error| error.to_string())
             .and_then(|source| {
-                tokit_compiler::ai_patch::index(&source).map_err(|error| error.json())
+                tokit_compiler::ai_patch::index_function(&source, name)
+                    .map_err(|error| error.json())
             });
         match result {
             Ok(index) => println!("{index}"),

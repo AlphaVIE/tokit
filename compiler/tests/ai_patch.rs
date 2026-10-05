@@ -12,6 +12,30 @@ fn edit(function: &str, original: &str, replacement: &str) -> FunctionEdit {
 }
 
 #[test]
+fn targeted_index_matches_full_index_and_rejects_missing_or_ambiguous_names() {
+    let source = "fn first()->i32{1}fn second()->i32{2}";
+    let full: serde_json::Value = serde_json::from_str(&ai_patch::index(source).unwrap()).unwrap();
+    let selected: serde_json::Value =
+        serde_json::from_str(&ai_patch::index_function(source, Some("second")).unwrap()).unwrap();
+    assert_eq!(
+        selected["functions"],
+        serde_json::json!([full["functions"][1]])
+    );
+    assert_eq!(
+        ai_patch::index_function(source, Some("missing"))
+            .unwrap_err()
+            .code,
+        "P003"
+    );
+    assert_eq!(
+        ai_patch::index_function("fn f()->i32{1}fn f()->i32{2}", Some("f"))
+            .unwrap_err()
+            .code,
+        "P003"
+    );
+}
+
+#[test]
 fn name_and_hash_patch_multiple_functions_without_rewriting_neighbors() {
     let source = "// header\nfn first()->i32{1}\nfn second()->i32{2}\n";
     let edits = [
