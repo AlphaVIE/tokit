@@ -3,7 +3,7 @@
 The emitter now lowers eligible scalar functions through the
 [typed IR](TOKIT_IR.md). Other checked functions continue through the AST
 path. The IR covers `i32`, `i64`, and `bool` expressions, immutable locals,
-and lazy conditional regions; the pipeline diagram and broader backend
+lazy conditional regions, and checked non-generic scalar calls; the pipeline diagram and broader backend
 limits below describe the remaining AST path.
 
 `tok build input.tok -o output` checks a Tokit program, emits Rust source from its AST and checked expression types, then calls `rustc` to produce a native executable. The generated source is created in a unique temporary file and removed after compilation. `TOKIT_RUSTC` can select the `rustc` executable. The selected rustup toolchain is inherited from the environment. This is a **bootstrap backend**, not a language specification or permanent Rust backend decision.

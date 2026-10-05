@@ -19,7 +19,7 @@ denominator and revise this inventory when evidence changes.
 | 5 Parser | [Lexer](compiler/src/lexer.rs), [parser](compiler/src/parser.rs), [tests](compiler/tests/front_end.rs) | Runnable partial implementation |
 | 6 Semantic model | [Checker](compiler/src/checker.rs), [tests](compiler/tests/front_end.rs) | Runnable partial implementation |
 | 7 Interpreter | [Reference interpreter](compiler/src/interpreter.rs), [tests](compiler/tests/i64.rs) | Runnable partial implementation |
-| 8 Tokit IR | [Typed scalar IR](compiler/src/ir.rs), [contract](spec/TOKIT_IR.md), [tests](compiler/tests/ir.rs) | Runnable partial implementation; scalar expressions, immutable bindings, and lazy conditional regions |
+| 8 Tokit IR | [Typed scalar IR](compiler/src/ir.rs), [contract](spec/TOKIT_IR.md), [tests](compiler/tests/ir.rs) | Runnable partial implementation; scalar expressions, immutable bindings, lazy conditional regions, and checked non-generic calls |
 | 9 Native backend | [Rust bootstrap backend](compiler/src/native.rs), [contract](spec/NATIVE_BOOTSTRAP.md) | Runnable partial implementation; no independent optimizer/backend |
 | 10 Runtime | [Native runtime helpers](compiler/src/native_runtime/core.rs.txt), [bytes](compiler/src/native_runtime/bytes.rs.txt) | Runnable partial implementation; GC and memory model remain open |
 | 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md) | Runnable partial implementation; networking and broad APIs absent |

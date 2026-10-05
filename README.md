@@ -10,7 +10,7 @@ An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and p
 
 An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agents submit hash-guarded, checked changes to named functions without resending their surrounding source file.
 
-The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, and `bool` functions with immutable local bindings and conditional expressions. Other checked functions still use the AST emitter while the IR grows.
+The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, and `bool` functions with immutable local bindings, conditional expressions, and non-generic scalar calls. Other checked functions still use the AST emitter while the IR grows.
 
 Direct [record field reads](research/RECORD_FIELD_PROJECTION.md) now copy only the selected field in both execution paths; a versioned fixture records the focused runtime measurements.
 
