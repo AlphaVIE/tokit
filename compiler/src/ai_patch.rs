@@ -56,11 +56,17 @@ fn declaration(source: &str, span: Span) -> &str {
 
 /// List name-based identities, byte spans, and precondition hashes.
 pub fn index(source: &str) -> Result<String, PatchError> {
+    index_function(source, None)
+}
+
+/// Return the same schema restricted to a unique named function, when supplied.
+pub fn index_function(source: &str, name: Option<&str>) -> Result<String, PatchError> {
     let program =
         crate::parse(source).map_err(|error| PatchError::new(error.code, error.display(source)))?;
     let functions = program
         .functions
         .iter()
+        .filter(|function| name.is_none_or(|name| function.name == name))
         .map(|function| {
             json!({
                 "name": function.name,
@@ -69,6 +75,12 @@ pub fn index(source: &str) -> Result<String, PatchError> {
             })
         })
         .collect::<Vec<Value>>();
+    if name.is_some() && functions.len() != 1 {
+        return Err(PatchError::new(
+            "P003",
+            "function target is missing or ambiguous",
+        ));
+    }
     Ok(json!({"version":1,"functions":functions}).to_string())
 }
 

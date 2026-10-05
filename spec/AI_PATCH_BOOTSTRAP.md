@@ -6,6 +6,12 @@ source is inserted before a function; the hash detects changes to the target.
 For a public function, the preceding `pub` is outside the hashed span and is
 preserved by replacement.
 
+Pass a function name as the last argument, for example
+`tok ai-patch-index file.tok answer`, to receive only that function in the
+same versioned schema. Missing or ambiguous names fail with `P003`. This
+avoids returning every declaration hash when the caller already knows its
+target.
+
 `tok ai-patch entry.tok request.json` prints the proposed target file without
 writing it. Add `--write` to save it. A version 1 request has this shape:
 

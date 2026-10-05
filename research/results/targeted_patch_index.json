@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "tool": "scripts/benchmark_function_patches.py",
+  "compiler_sha256": "6a6429c747771a016d32cbaa8d564ed9c95f5899e98b7fa9dc8cfaf2b3f14f8e",
+  "versions": {
+    "tiktoken": "0.14.0",
+    "tokenizers": "0.23.2"
+  },
+  "qwen_revision": "ea3f2471cf1b1f0db85067f1ef93848e38e88c25",
+  "qwen_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+  "cases": [
+    {
+      "case": "small",
+      "source_sha256": "4e403707d80fef17d903c28705fcb54385d05f5edfccd87d24c5a0d7a4741e8c",
+      "payloads": {
+        "targeted_index_response": {
+          "sha256": "d24329620300aca36445243e23619a4946b6eb6dfc5db73fb65ccb6442535533",
+          "bytes": 132,
+          "tokens": {
+            "cl100k_base": 52,
+            "o200k_base": 53,
+            "Qwen2.5-Coder": 84
+          }
+        },
+        "full_source": {
+          "sha256": "59fcac1f0ff607fc257fbe868e1eded895bf32bd62da9322d55902ce45f3fe24",
+          "bytes": 99,
+          "tokens": {
+            "cl100k_base": 45,
+            "o200k_base": 45,
+            "Qwen2.5-Coder": 51
+          }
+        },
+        "patch_request": {
+          "sha256": "57ed4c1dd0e59e2939b2c9fbadfa2d114138bfeea2da54074e23d2430cf22ae8",
+          "bytes": 195,
+          "tokens": {
+            "cl100k_base": 72,
+            "o200k_base": 73,
+            "Qwen2.5-Coder": 106
+          }
+        },
+        "full_index": {
+          "sha256": "3e675be22b42c2895c41684cecfe1fff8f44c57bf989c5c3dfbb9a775302e8d1",
+          "bytes": 239,
+          "tokens": {
+            "cl100k_base": 103,
+            "o200k_base": 104,
+            "Qwen2.5-Coder": 164
+          }
+        },
+        "selected_index_entry": {
+          "sha256": "94a0aba6eaa5a5b727792c34a03fa244308674855facfc62a1eccd3f1ccab164",
+          "bytes": 104,
+          "tokens": {
+            "cl100k_base": 45,
+            "o200k_base": 45,
+            "Qwen2.5-Coder": 77
+          }
+        },
+        "unified_diff": {
+          "sha256": "5715fa71ca3457aa836562afa11cdf7dc9f4f01b5f0922843c9297d37789c6c8",
+          "bytes": 182,
+          "tokens": {
+            "cl100k_base": 83,
+            "o200k_base": 84,
+            "Qwen2.5-Coder": 92
+          }
+        }
+      }
+    },
+    {
+      "case": "wide_sum",
+      "source_sha256": "0aec7daada9b4a76c2004f6848ea3de4b8185a837a27f665075d78af0ae914be",
+      "payloads": {
+        "targeted_index_response": {
+          "sha256": "1a9480092852192aba85fd8503bd4dba5b40088d5fe9acb811b7f1ab46dcd626",
+          "bytes": 133,
+          "tokens": {
+            "cl100k_base": 61,
+            "o200k_base": 62,
+            "Qwen2.5-Coder": 85
+          }
+        },
+        "full_source": {
+          "sha256": "0baa3a4dcf166825ca8f7cd344c07225dd299bcb00aeb3e9c189dbf779da06d9",
+          "bytes": 335,
+          "tokens": {
+            "cl100k_base": 151,
+            "o200k_base": 150,
+            "Qwen2.5-Coder": 160
+          }
+        },
+        "patch_request": {
+          "sha256": "89e27b224c65a816aa6c5400a173c481afd66048a98c1d8c815cf1ee740a0d9f",
+          "bytes": 302,
+          "tokens": {
+            "cl100k_base": 137,
+            "o200k_base": 138,
+            "Qwen2.5-Coder": 164
+          }
+        },
+        "full_index": {
+          "sha256": "9e15c98c0050a55a8bf4f8d6a19c511ee22e467ceabce2ed9d8415d09f330fb2",
+          "bytes": 242,
+          "tokens": {
+            "cl100k_base": 112,
+            "o200k_base": 113,
+            "Qwen2.5-Coder": 164
+          }
+        },
+        "selected_index_entry": {
+          "sha256": "d9228163d764eadcd0b95ff05473bfff16ba7f904b2a8eacebe8ea341a75ceb2",
+          "bytes": 105,
+          "tokens": {
+            "cl100k_base": 54,
+            "o200k_base": 54,
+            "Qwen2.5-Coder": 78
+          }
+        },
+        "unified_diff": {
+          "sha256": "aa9e1d952ab08d7bd59522b4d7a00212e6fce520f14852ca733a3cb3f4292a85",
+          "bytes": 520,
+          "tokens": {
+            "cl100k_base": 242,
+            "o200k_base": 242,
+            "Qwen2.5-Coder": 255
+          }
+        }
+      }
+    },
+    {
+      "case": "json",
+      "source_sha256": "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96",
+      "payloads": {
+        "targeted_index_response": {
+          "sha256": "d0e6b8f167b564749646d1c5414d49ad565a309dc74d4177543124f4986b2c27",
+          "bytes": 141,
+          "tokens": {
+            "cl100k_base": 60,
+            "o200k_base": 61,
+            "Qwen2.5-Coder": 85
+          }
+        },
+        "full_source": {
+          "sha256": "b058882f9e93f4b282b7550610e1088884c30e9d850bd49ad4ea0f9dda84b6da",
+          "bytes": 8819,
+          "tokens": {
+            "cl100k_base": 2744,
+            "o200k_base": 2776,
+            "Qwen2.5-Coder": 2983
+          }
+        },
+        "patch_request": {
+          "sha256": "199aeca3b9a39c167b9551bcd8cba08f2de82645ad64855aa1720baa2d7f38fe",
+          "bytes": 376,
+          "tokens": {
+            "cl100k_base": 163,
+            "o200k_base": 164,
+            "Qwen2.5-Coder": 191
+          }
+        },
+        "full_index": {
+          "sha256": "4748523e64755073534958dc0200ab7eae3d65c66b7578cff93a4ee2d423c5cd",
+          "bytes": 2935,
+          "tokens": {
+            "cl100k_base": 1372,
+            "o200k_base": 1380,
+            "Qwen2.5-Coder": 1982
+          }
+        },
+        "selected_index_entry": {
+          "sha256": "602b152617bde2078d8e31e275e20db42508016e202ec8a24329b9b4580b5dc2",
+          "bytes": 113,
+          "tokens": {
+            "cl100k_base": 53,
+            "o200k_base": 53,
+            "Qwen2.5-Coder": 78
+          }
+        },
+        "unified_diff": {
+          "sha256": "cfeba7cde2104c48e676990b83ebaae0ac1857a97efa9f5728b3079dd80ed52f",
+          "bytes": 1144,
+          "tokens": {
+            "cl100k_base": 398,
+            "o200k_base": 399,
+            "Qwen2.5-Coder": 423
+          }
+        }
+      }
+    }
+  ]
+}

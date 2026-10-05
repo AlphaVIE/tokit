@@ -28,7 +28,7 @@ jobs:
       - name: Research script tests
         run: python3 -m unittest discover -s tests -v
       - name: Verify function patch corpus
-        run: python3 scripts/benchmark_function_patches.py benchmarks_version_05102026_105631 --tok target/debug/tok --verify-only
+        run: python3 scripts/benchmark_function_patches.py benchmarks_version_05102026_105631 --tok target/debug/tok --verify-only --targeted-index
 
   semantic-baselines:
     runs-on: ubuntu-latest
