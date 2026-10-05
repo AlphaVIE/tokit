@@ -1,4 +1,6 @@
-use tokit_compiler::run_with_runtime_args;
+use std::process::Command;
+
+use tokit_compiler::{check, native, run_with_runtime_args};
 
 const ARRAY_CYCLE: &str = include_str!("../../benchmarks_version_04102026_005141/array_cycle.tok");
 const POINTER_CHASE: &str =
@@ -8,6 +10,8 @@ const GENERATED_CHASE: &str =
 const WIDE_SUM: &str = include_str!("../../benchmarks_version_05102026_022806/wide_sum.tok");
 const ARRAY_LENGTH: &str =
     include_str!("../../benchmarks_version_05102026_025134/array_length.tok");
+const RECORD_FIELD: &str =
+    include_str!("../../benchmarks_version_05102026_165005/record_field.tok");
 
 #[test]
 fn array_cycle_uses_runtime_values_and_matches_the_matrix_oracle() {
@@ -95,4 +99,44 @@ fn array_length_benchmark_uses_runtime_iterations_and_size() {
             expected
         );
     }
+}
+
+#[test]
+fn record_field_benchmark_uses_runtime_iterations_and_size() {
+    for (iterations, size, expected) in [
+        ("0", "16", "Ok(0)"),
+        ("3", "4", "Ok(21)"),
+        ("2000", "4096", "Ok(14000)"),
+    ] {
+        let arguments = vec![iterations.to_owned(), size.to_owned()];
+        assert_eq!(
+            run_with_runtime_args(RECORD_FIELD, None, &arguments)
+                .unwrap()
+                .to_string(),
+            expected
+        );
+    }
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let binary = std::env::temp_dir().join(format!(
+        "tokit-record-field-bench-{}-{}{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+        std::env::consts::EXE_SUFFIX
+    ));
+    native::build(&check(RECORD_FIELD).unwrap(), RECORD_FIELD, &binary).unwrap();
+    for (iterations, size, expected) in [("0", "16", "Ok(0)"), ("3", "4", "Ok(21)")] {
+        let output = Command::new(&binary)
+            .args([iterations, size])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), expected);
+    }
+    std::fs::remove_file(binary).unwrap();
 }

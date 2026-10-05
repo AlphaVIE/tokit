@@ -197,11 +197,11 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             )
         }
         ExprKind::Field(value, field) => {
-            format!(
-                "({}).{}.clone()",
-                emit_expr(value, source, types),
-                user_name(field)
-            )
+            let base = match &value.kind {
+                ExprKind::Var(name) => user_name(name),
+                _ => emit_expr(value, source, types),
+            };
+            format!("({}).{}.clone()", base, user_name(field))
         }
         ExprKind::Ok(inner) => format!("Ok({})", emit_expr(inner, source, types)),
         ExprKind::Err(inner) => format!("Err({})", emit_expr(inner, source, types)),

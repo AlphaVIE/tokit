@@ -400,6 +400,29 @@ fn eval(
             .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
         }
         ExprKind::Field(value, field) => {
+            if let ExprKind::Var(name) = &value.kind {
+                let binding = env.get(name).ok_or_else(|| {
+                    Diagnostic::new(
+                        "E204",
+                        value.span,
+                        format!("unresolved runtime name {name}"),
+                    )
+                })?;
+                let borrowed = binding.borrow();
+                let Value::Record(_, fields) = &*borrowed else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid runtime field access",
+                    ));
+                };
+                let selected = fields
+                    .iter()
+                    .find(|(name, _)| name == field)
+                    .map(|(_, value)| value.clone())
+                    .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?;
+                return Ok(Flow::Value(selected));
+            }
             let value = take_value!(eval(value, env, program, depth, runtime));
             let Value::Record(_, fields) = value else {
                 return Err(Diagnostic::new(

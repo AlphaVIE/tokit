@@ -90,6 +90,8 @@ fn records_construct_and_project_typed_fields() {
         run(source).unwrap().to_string(),
         "Node(children:[Node(children:[])])"
     );
+    let source = "struct Payload{data:[I],tag:I} main()->I{var p=Payload([1,2],7);let q=p;p=Payload([3],9);q.tag+p.tag+Payload([4],2).tag}";
+    assert_eq!(run(source).unwrap(), Value::I32(18));
 }
 
 #[test]

@@ -1,0 +1,3 @@
+struct Payload{data:[I],tag:I}
+score(n:I,size:I)->I{var xs:[I]=[];var i=0;while i<size{xs.push(i);i=i+1;}let p=Payload(xs,7);var total=0;i=0;while i<n{total=total+p.tag;i=i+1;}total}
+main()->Result<I,ParseError>{let a=args();if len(a)==2{Ok(score(parse_i32(a[0])?,parse_i32(a[1])?))}else{Err(ParseError::Invalid)}}
