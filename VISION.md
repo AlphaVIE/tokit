@@ -15,7 +15,12 @@ This is a research hypothesis, not a claim that dense syntax is better. Source t
 
 ## Current status
 
-This repository is in phases 0–3: problem definition, tokenizer research, syntax experiments, and comparison design. The examples under `research/candidates/` are **experimental notation**, not accepted `.tok` files. There is no compiler, runtime, or performance claim yet.
+The repository now has an experimental Rust compiler, reference interpreter,
+and Rust-based native bootstrap for a checked `.tok` subset. Its syntax and
+runtime contracts remain provisional. The candidate notation under
+`research/candidates/` is separate from accepted `.tok` examples. See the
+[phase-by-phase implementation status](IMPLEMENTATION_STATUS.md) for current
+coverage and missing work.
 
 ## Decision boundary
 
