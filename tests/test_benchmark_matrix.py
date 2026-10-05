@@ -13,6 +13,7 @@ from scripts.benchmark_matrix import (
     expected_output,
     generated_total,
     measure_runtime,
+    wide_sum_total,
 )
 
 
@@ -85,6 +86,24 @@ class BenchmarkMatrixTests(unittest.TestCase):
                     index = (index + stride) % size
                     direct += index < size // 2
                 self.assertEqual(generated_total(iterations, size, stride), direct)
+
+    def test_wide_sum_contract_and_oracle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            contract_path = folder / "contract.json"
+            contract_path.write_text(
+                '{"kind":"wide_sum","values":[3000000000,4000000000,5000000000]}',
+                encoding="utf-8",
+            )
+            contract = contract_for_folder(folder)
+            self.assertEqual(expected_for_contract(7, contract), "Ok(27000000000)")
+            self.assertEqual(arguments_for_contract(7, contract), ["7", "3000000000", "4000000000", "5000000000"])
+            self.assertEqual(wide_sum_total(0, contract["values"]), 0)
+            contract_path.write_text(
+                '{"kind":"wide_sum","values":[3000000000,true]}', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "positive i64"):
+                contract_for_folder(folder)
 
     def test_runtime_measurement_keeps_all_verified_samples(self) -> None:
         command = [sys.executable, "-c", "print('Ok(6)')"]
