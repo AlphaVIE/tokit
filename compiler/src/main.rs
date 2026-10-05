@@ -178,12 +178,12 @@ fn write_patch(target: &Path, original: &str, updated: &str) -> Result<(), Strin
         .map_err(|error| error.to_string())?
         .as_nanos();
     let temporary = target.with_extension(format!("tok.patch-{}-{nonce}", process::id()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("cannot stage patch: {error}"))?;
     let result = (|| {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-            .map_err(|error| format!("cannot stage patch: {error}"))?;
         let permissions = fs::metadata(target)
             .map_err(|error| format!("cannot inspect patch target: {error}"))?
             .permissions();
