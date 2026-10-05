@@ -363,9 +363,10 @@ fn eval(
         }
         ExprKind::Index(array, index) => {
             // A variable read normally copies its value. Indexing only needs
-            // the selected element, so keep the array borrowed while reading.
+            // the selected element. Borrow only when evaluating the index cannot
+            // mutate the binding; otherwise preserve the pre-index value snapshot.
             let borrowed = match &array.kind {
-                ExprKind::Var(name) => Some(
+                ExprKind::Var(name) if index.is_simple_read() => Some(
                     env.get(name)
                         .ok_or_else(|| {
                             Diagnostic::new(
