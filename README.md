@@ -8,6 +8,8 @@ An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can pa
 
 An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and provides live diagnostics and document symbols for `.tok` buffers, including unsaved relative imports and pinned package sources.
 
+The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for pure `i32`, `i64`, and `bool` expression functions. Other checked functions still use the AST emitter while the IR grows.
+
 Local `let` and `var` bindings can infer complete initializer types. A [versioned benchmark experiment](research/INFERRED_BINDINGS.md) measures the source-token savings and records its limits.
 
 Experimental [filesystem capabilities](spec/FILESYSTEM_CAPABILITY.md) let Tokit read and write UTF-8 files through separate path grants. See [file_copy.tok](examples/file_copy.tok) for a two-grant example.

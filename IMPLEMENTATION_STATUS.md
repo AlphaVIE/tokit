@@ -1,10 +1,10 @@
 # Implementation status
 
 Status on 2026-10-05. The project brief defines phases 0–15.
-**Nine of sixteen phases have a runnable partial implementation**
-(5, 6, 7, 9, 10, 11, 12, 13, 14). Five earlier phases have research or provisional
-specification artifacts (0–4). Two implementation phases have no working
-artifact yet (8, 15). This is a count of covered phases, not a percentage
+**Ten of sixteen phases have a runnable partial implementation**
+(5, 6, 7, 8, 9, 10, 11, 12, 13, 14). Five earlier phases have research or provisional
+specification artifacts (0–4). One implementation phase has no working
+artifact yet (15). This is a count of covered phases, not a percentage
 of the language completed. None of the experimental contracts is a frozen
 1.0 guarantee. Future progress updates should use the same sixteen-phase
 denominator and revise this inventory when evidence changes.
@@ -19,7 +19,7 @@ denominator and revise this inventory when evidence changes.
 | 5 Parser | [Lexer](compiler/src/lexer.rs), [parser](compiler/src/parser.rs), [tests](compiler/tests/front_end.rs) | Runnable partial implementation |
 | 6 Semantic model | [Checker](compiler/src/checker.rs), [tests](compiler/tests/front_end.rs) | Runnable partial implementation |
 | 7 Interpreter | [Reference interpreter](compiler/src/interpreter.rs), [tests](compiler/tests/i64.rs) | Runnable partial implementation |
-| 8 Tokit IR | No backend-independent typed IR in the compiler | No working artifact |
+| 8 Tokit IR | [Typed scalar IR](compiler/src/ir.rs), [contract](spec/TOKIT_IR.md), [tests](compiler/tests/ir.rs) | Runnable partial implementation; pure scalar expressions only |
 | 9 Native backend | [Rust bootstrap backend](compiler/src/native.rs), [contract](spec/NATIVE_BOOTSTRAP.md) | Runnable partial implementation; no independent optimizer/backend |
 | 10 Runtime | [Native runtime helpers](compiler/src/native_runtime/core.rs.txt), [bytes](compiler/src/native_runtime/bytes.rs.txt) | Runnable partial implementation; GC and memory model remain open |
 | 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md) | Runnable partial implementation; networking and broad APIs absent |
