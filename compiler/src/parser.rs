@@ -323,7 +323,11 @@ impl Parser {
     }
 
     fn function(&mut self) -> Result<Function, Diagnostic> {
-        let start = self.expect(Kind::Fn)?.span;
+        let start = if self.at(&Kind::Fn) {
+            self.bump().span
+        } else {
+            self.current().span
+        };
         let (name, _) = self.ident()?;
         let type_params = self.generic_params()?;
         self.type_params = type_params.clone();

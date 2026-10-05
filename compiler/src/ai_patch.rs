@@ -142,7 +142,7 @@ pub fn apply(source: &str, edits: &[FunctionEdit]) -> Result<String, PatchError>
             return Err(PatchError::new(
                 "P005",
                 format!(
-                    "replacement must contain only fn {} without pub",
+                    "replacement must contain only function {} without pub",
                     edit.function
                 ),
             ));

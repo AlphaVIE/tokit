@@ -9,6 +9,30 @@ fn executes_functions_bindings_and_branches() {
 }
 
 #[test]
+fn keyword_free_functions_keep_named_generic_and_public_semantics() {
+    let compact = "pub pair<T>(x:T)->T{x}main()->i32{pair(42)}";
+    let verbose = "pub fn pair<T>(x:T)->T{x}fn main()->i32{pair(42)}";
+    assert_eq!(run(compact).unwrap(), run(verbose).unwrap());
+    assert_eq!(run(compact).unwrap(), Value::I32(42));
+    let parsed = check(compact).unwrap();
+    assert!(parsed.functions[0].public);
+    assert_eq!(parsed.functions[0].name, "pair");
+    assert_eq!(parsed.functions[0].type_params, ["T"]);
+    if Command::new("rustc").arg("--version").output().is_ok() {
+        let output = std::env::temp_dir().join(format!(
+            "tokit-compact-{}{}",
+            std::process::id(),
+            std::env::consts::EXE_SUFFIX
+        ));
+        tokit_compiler::native::build(&parsed, compact, &output).unwrap();
+        let result = Command::new(&output).output().unwrap();
+        assert!(result.status.success());
+        assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "42");
+        std::fs::remove_file(output).unwrap();
+    }
+}
+
+#[test]
 fn utf8_strings_escape_concatenate_and_compare() {
     let source = r#"fn greet(x:String)->String{"Grüß, " + x + "\n"} fn main()->[String]{[greet("世界"),if "é"=="e"{"wrong"}else{"✓"}]}"#;
     assert_eq!(
