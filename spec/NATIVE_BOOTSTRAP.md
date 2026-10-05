@@ -1,5 +1,11 @@
 # Experimental native bootstrap
 
+The emitter now lowers eligible pure scalar functions through the
+[typed IR](TOKIT_IR.md). Other checked functions continue through the AST
+path. The IR currently covers only expression functions over `i32`, `i64`,
+and `bool`; the pipeline diagram and broader backend limits below describe
+the remaining AST path.
+
 `tok build input.tok -o output` checks a Tokit program, emits Rust source from its AST and checked expression types, then calls `rustc` to produce a native executable. The generated source is created in a unique temporary file and removed after compilation. `TOKIT_RUSTC` can select the `rustc` executable. The selected rustup toolchain is inherited from the environment. This is a **bootstrap backend**, not a language specification or permanent Rust backend decision.
 
 The CLI also accepts relative `.tok` imports and compiles their checked declarations together. Native runtime diagnostics include the entry-relative imported source path, line, and column when multiple files are loaded; single-file diagnostics retain their previous form. Generated source embeds these relative paths, not absolute build paths.
@@ -26,4 +32,4 @@ On the present Windows machine, select the installed GNU Rust toolchain and put 
 
 ## Limits and next backend work
 
-This backend invokes an installed Rust compiler and inherits its target and optimization behavior. It does not yet define a stable ABI, a target-independent Tokit IR, a GC, native standard-library integration, or reproducible binaries. Initial local measurements of compile latency, runtime, and binary size are in [the native benchmark](../benchmarks/native/README.md); broader workloads, memory and allocation measurements, and cross-platform runs remain necessary. Some well-typed programs may still reveal a Rust emission gap and report `E302`; such gaps need dedicated tests and fixes. A future backend interface should consume verified typed IR, permitting LLVM, Cranelift, WebAssembly, or another selected backend without altering source semantics. Backend selection requires measurements of compile latency, runtime, binary size, cross-platform behavior, and implementation cost.
+This backend invokes an installed Rust compiler and inherits its target and optimization behavior. It does not yet define a stable ABI, a complete control-flow Tokit IR, a GC, native standard-library integration, or reproducible binaries. Initial local measurements of compile latency, runtime, and binary size are in [the native benchmark](../benchmarks/native/README.md); broader workloads, memory and allocation measurements, and cross-platform runs remain necessary. Some well-typed programs may still reveal a Rust emission gap and report `E302`; such gaps need dedicated tests and fixes. A future backend interface should consume verified typed IR, permitting LLVM, Cranelift, WebAssembly, or another selected backend without altering source semantics. Backend selection requires measurements of compile latency, runtime, binary size, cross-platform behavior, and implementation cost.
