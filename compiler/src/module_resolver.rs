@@ -306,6 +306,7 @@ impl Resolver<'_> {
                 self.expr(right)?;
             }
             ExprKind::Field(value, _)
+            | ExprKind::Not(value)
             | ExprKind::Neg(value)
             | ExprKind::Ok(value)
             | ExprKind::Err(value)

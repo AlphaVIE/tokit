@@ -86,6 +86,7 @@ fn native_output_matches_reference_interpreter() {
         "match_result",
         "integer_match",
         "signed_literals",
+        "boolean_logic",
         "payload_enum",
         "record",
         "option_lookup",

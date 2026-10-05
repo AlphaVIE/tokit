@@ -49,6 +49,9 @@ pub enum Kind {
     Eq,
     EqEq,
     BangEq,
+    Bang,
+    AndAnd,
+    OrOr,
     Lt,
     Le,
     Gt,
@@ -211,6 +214,15 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
                 b'!' if bytes.get(i) == Some(&b'=') => {
                     i += 1;
                     Kind::BangEq
+                }
+                b'!' => Kind::Bang,
+                b'&' if bytes.get(i) == Some(&b'&') => {
+                    i += 1;
+                    Kind::AndAnd
+                }
+                b'|' if bytes.get(i) == Some(&b'|') => {
+                    i += 1;
+                    Kind::OrOr
                 }
                 b'<' if bytes.get(i) == Some(&b'=') => {
                     i += 1;

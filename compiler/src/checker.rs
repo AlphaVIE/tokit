@@ -458,6 +458,7 @@ fn expression_is_spawn_safe(
                 && expression_is_spawn_safe(right, program, visiting)
         }
         ExprKind::Field(value, _)
+        | ExprKind::Not(value)
         | ExprKind::Neg(value)
         | ExprKind::Ok(value)
         | ExprKind::Err(value)
@@ -1023,10 +1024,32 @@ fn infer(
             .get(name)
             .map(|binding| binding.ty.clone())
             .ok_or_else(|| Diagnostic::new("E101", expr.span, format!("unknown name {name}"))),
+        ExprKind::Not(inner) => {
+            let actual = type_of(inner, env, signatures, return_type, types)?;
+            if actual == Type::Never {
+                return Ok(Type::Never);
+            }
+            require(&Type::Bool, &actual, inner.span, "logical negation")?;
+            Ok(Type::Bool)
+        }
         ExprKind::Binary(left, op, right) => {
             let lhs = type_of(left, env, signatures, return_type, types)?;
             let rhs = type_of(right, env, signatures, return_type, types)?;
-            if lhs == Type::Never || rhs == Type::Never {
+            if lhs == Type::Never {
+                return Ok(Type::Never);
+            }
+            if matches!(op, Op::And | Op::Or) {
+                return if lhs == Type::Bool && matches!(rhs, Type::Bool | Type::Never) {
+                    Ok(Type::Bool)
+                } else {
+                    Err(Diagnostic::new(
+                        "E104",
+                        expr.span,
+                        format!("invalid operands {lhs} and {rhs} for {op:?}"),
+                    ))
+                };
+            }
+            if rhs == Type::Never {
                 return Ok(Type::Never);
             }
             match op {

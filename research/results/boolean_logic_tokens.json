@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "tool": "scripts/measure_boolean_logic_tokens.py",
+  "versions": {
+    "tiktoken": "0.14.0",
+    "tokenizers": "0.23.2"
+  },
+  "qwen_revision": "ea3f2471cf1b1f0db85067f1ef93848e38e88c25",
+  "qwen_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+  "cases": [
+    {
+      "name": "and",
+      "branch": "f(a:bool,b:bool)->bool{if a{b}else{false}}",
+      "compact": "f(a:bool,b:bool)->bool{a&&b}",
+      "bytes": {
+        "branch": 42,
+        "compact": 28
+      },
+      "tokens": {
+        "cl100k_base": {
+          "branch": 18,
+          "compact": 14
+        },
+        "o200k_base": {
+          "branch": 18,
+          "compact": 14
+        },
+        "Qwen2.5-Coder": {
+          "branch": 18,
+          "compact": 14
+        }
+      }
+    },
+    {
+      "name": "or",
+      "branch": "f(a:bool,b:bool)->bool{if a{true}else{b}}",
+      "compact": "f(a:bool,b:bool)->bool{a||b}",
+      "bytes": {
+        "branch": 41,
+        "compact": 28
+      },
+      "tokens": {
+        "cl100k_base": {
+          "branch": 18,
+          "compact": 14
+        },
+        "o200k_base": {
+          "branch": 18,
+          "compact": 14
+        },
+        "Qwen2.5-Coder": {
+          "branch": 18,
+          "compact": 14
+        }
+      }
+    },
+    {
+      "name": "not",
+      "branch": "f(a:bool)->bool{if a{false}else{true}}",
+      "compact": "f(a:bool)->bool{!a}",
+      "bytes": {
+        "branch": 38,
+        "compact": 19
+      },
+      "tokens": {
+        "cl100k_base": {
+          "branch": 15,
+          "compact": 10
+        },
+        "o200k_base": {
+          "branch": 15,
+          "compact": 10
+        },
+        "Qwen2.5-Coder": {
+          "branch": 15,
+          "compact": 10
+        }
+      }
+    }
+  ]
+}

@@ -9,13 +9,15 @@ invariants before backend use.
 The current slice supports scalar functions over `i32`, `i64`, and `bool`:
 parameters, literals, checked negation and arithmetic, equality, integer
 comparisons, immutable local bindings, scalar expression statements, nested
-lexical blocks, `if` expressions, and calls to non-generic scalar functions.
+lexical blocks, `if` expressions, short-circuit boolean operators, and calls
+to non-generic scalar functions.
 A local name points to the SSA value of its initializer; nested scopes may
 shadow it without mutating that value.
 An `if` instruction owns two nested regions. The verifier checks each region
 against the values available before the branch; values created in one branch
 cannot be used by the other or by later outer instructions. The native emitter
-evaluates only the selected region. Call instructions refer to checked scalar
+evaluates only the selected region. `&&` and `||` use the same lazy regions;
+the verifier accepts the left operand as the skipped branch's result. Call instructions refer to checked scalar
 signatures and evaluate argument instructions in source order. Each emitted
 function retains the same call-depth guard as the AST backend.
 Instructions for discarded expressions still execute, preserving checked

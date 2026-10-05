@@ -87,6 +87,8 @@ impl std::fmt::Display for Type {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
+    And,
+    Or,
     Add,
     Sub,
     Mul,
@@ -115,7 +117,9 @@ impl Expr {
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(_) => true,
-            ExprKind::Neg(value) | ExprKind::Field(value, _) => value.is_simple_read(),
+            ExprKind::Not(value) | ExprKind::Neg(value) | ExprKind::Field(value, _) => {
+                value.is_simple_read()
+            }
             ExprKind::Binary(left, _, right) | ExprKind::Index(left, right) => {
                 left.is_simple_read() && right.is_simple_read()
             }
@@ -159,6 +163,7 @@ pub enum ExprKind {
     None,
     Try(Box<Expr>),
     Var(String),
+    Not(Box<Expr>),
     Neg(Box<Expr>),
     Binary(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),

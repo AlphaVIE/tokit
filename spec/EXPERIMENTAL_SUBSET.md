@@ -31,7 +31,7 @@ statement = ("let" | "var") identifier (":" type)? "=" expression ";"
           | "break" ";" | "continue" ";"
           | "return" expression ";"
           | expression ";" ;
-expression = integer | integer "i64" | "-" integer | "-" integer "i64" | "-" expression | string | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | integer "i64" | "-" integer | "-" integer "i64" | "-" expression | "!" expression | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" arguments? ")")?
            | identifier "::" identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
@@ -48,8 +48,14 @@ pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
         | identifier "::" identifier ("(" identifier ")")?
         | identifier "::" identifier "::" identifier ("(" identifier ")")? | "true" | "false"
         | integer | integer "i64" | "-" integer | "-" integer "i64" | "_" ;
-binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+binary-op = "||" | "&&" | "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
+
+`!` requires `bool` and binds more tightly than arithmetic. `&&` binds more
+tightly than `||`; both bind below equality and comparisons. Their operands
+must be `bool`. The right operand is evaluated only when it can change the
+result, from left to right. The checker still checks both operands even when
+the left is a literal. Single `&` and `|` are not operators in this subset.
 
 At least one import or declaration is required, and imports must precede declarations. The CLI loads imported files before checking the combined program. Ordinary imports use relative `.tok` paths contained by the entry file's directory, including after symlink resolution. Experimental `pkg:` imports resolve content-pinned source files or module trees from `tok.toml` and require a matching `tok.lock`; see the [package candidate](LOCAL_PACKAGE_CANDIDATE.md). Each file has its own declaration scope. Imports require a unique alias and expose only `pub` declarations via `alias::name`; transitive imports do not become visible. See the [experimental module contract](MODULE_SYSTEM_CANDIDATE.md). Cycles, duplicate imports or aliases within one file, missing files, and path escapes report `E118`; access to a private declaration reports `E119`.
 
