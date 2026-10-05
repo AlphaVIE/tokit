@@ -167,6 +167,18 @@ fn test_command(args: &[String]) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() == 2 && args[1] == "lsp" {
+        let stdin = std::io::stdin();
+        let stdout = std::io::stdout();
+        match tokit_compiler::lsp::serve(&mut stdin.lock(), &mut stdout.lock()) {
+            Ok(true) => return,
+            Ok(false) => process::exit(1),
+            Err(error) => {
+                eprintln!("language server I/O error: {error}");
+                process::exit(1);
+            }
+        }
+    }
     if args.get(1).is_some_and(|command| command == "run") {
         run_command(&args[2..]);
         return;
@@ -331,7 +343,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
             );
             process::exit(2);
         }
