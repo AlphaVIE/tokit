@@ -1,4 +1,11 @@
-use std::{env, fs, path::Path, process};
+use std::{
+    collections::HashMap,
+    env, fs,
+    io::Write,
+    path::{Component, Path, PathBuf},
+    process,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use tokit_compiler::diagnostic::Diagnostic;
 use tokit_compiler::sources::SourceMap;
@@ -165,6 +172,92 @@ fn test_command(args: &[String]) {
     }
 }
 
+fn write_patch(target: &Path, original: &str, updated: &str) -> Result<(), String> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let temporary = target.with_extension(format!("tok.patch-{}-{nonce}", process::id()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("cannot stage patch: {error}"))?;
+    let result = (|| {
+        let permissions = fs::metadata(target)
+            .map_err(|error| format!("cannot inspect patch target: {error}"))?
+            .permissions();
+        file.write_all(updated.as_bytes())
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("cannot stage patch: {error}"))?;
+        drop(file);
+        fs::set_permissions(&temporary, permissions)
+            .map_err(|error| format!("cannot stage patch: {error}"))?;
+        if fs::read_to_string(target).map_err(|error| error.to_string())? != original {
+            return Err("patch target changed during validation".to_owned());
+        }
+        fs::rename(&temporary, target).map_err(|error| format!("cannot commit patch: {error}"))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn patch_command(entry: &Path, request_path: &Path, write: bool) -> Result<String, String> {
+    let request_text = fs::read_to_string(request_path)
+        .map_err(|error| format!("cannot read patch request: {error}"))?;
+    let request: tokit_compiler::ai_patch::Request = serde_json::from_str(&request_text)
+        .map_err(|error| format!("invalid patch request: {error}"))?;
+    if request.version != 1 {
+        return Err("unsupported patch version".to_owned());
+    }
+    let entry = fs::canonicalize(entry).map_err(|error| format!("cannot open entry: {error}"))?;
+    let root = entry.parent().expect("entry has parent");
+    let target_relative = Path::new(&request.target);
+    if target_relative.as_os_str().is_empty()
+        || !target_relative
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+    {
+        return Err("patch target must be a plain relative path".to_owned());
+    }
+    let target = fs::canonicalize(root.join(target_relative))
+        .map_err(|error| format!("cannot open patch target: {error}"))?;
+    if !target.starts_with(root)
+        || target
+            .extension()
+            .is_none_or(|extension| extension != "tok")
+    {
+        return Err("patch target must be a .tok source inside the entry directory".to_owned());
+    }
+    let original = fs::read_to_string(&target)
+        .map_err(|error| format!("cannot read patch target: {error}"))?;
+    let updated =
+        tokit_compiler::ai_patch::apply(&original, &request.edits).map_err(|error| error.json())?;
+    let mut overrides = HashMap::<PathBuf, String>::new();
+    overrides.insert(target.clone(), updated.clone());
+    let loaded = tokit_compiler::modules::load_with_overrides(&entry, &overrides)
+        .map_err(|error| error.json())?;
+    if !(0..loaded.sources.len()).any(|id| {
+        loaded
+            .sources
+            .get(tokit_compiler::ast::SourceId(id))
+            .is_some_and(|source| source.path == target && source.display_override.is_none())
+    }) {
+        return Err("patch target must be a local, unpinned module in the loaded graph".to_owned());
+    }
+    if write {
+        write_patch(&target, &original, &updated)?;
+        Ok(
+            serde_json::json!({"ok":true,"target":request.target,"edits":request.edits.len()})
+                .to_string(),
+        )
+    } else {
+        Ok(updated)
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && args[1] == "lsp" {
@@ -185,6 +278,44 @@ fn main() {
     }
     if args.get(1).is_some_and(|command| command == "test") {
         test_command(&args[2..]);
+        return;
+    }
+    if let [_, command, path] = args.as_slice()
+        && command == "ai-patch-index"
+    {
+        let result = fs::read_to_string(path)
+            .map_err(|error| error.to_string())
+            .and_then(|source| {
+                tokit_compiler::ai_patch::index(&source).map_err(|error| error.json())
+            });
+        match result {
+            Ok(index) => println!("{index}"),
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+        return;
+    }
+    let patch = match args.as_slice() {
+        [_, command, entry, request] if command == "ai-patch" => Some((entry, request, false)),
+        [_, command, entry, request, flag] if command == "ai-patch" && flag == "--write" => {
+            Some((entry, request, true))
+        }
+        _ => None,
+    };
+    if let Some((entry, request, write)) = patch {
+        match patch_command(Path::new(entry), Path::new(request), write) {
+            Ok(output) => println!("{output}"),
+            Err(error) => {
+                if serde_json::from_str::<serde_json::Value>(&error).is_ok() {
+                    eprintln!("{error}");
+                } else {
+                    eprintln!("{}", serde_json::json!({"ok":false,"message":error}));
+                }
+                process::exit(1);
+            }
+        }
         return;
     }
     if let [_, command, path] = args.as_slice()
