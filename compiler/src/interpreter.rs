@@ -11,6 +11,7 @@ use crate::filesystem::{ReadPolicy, WritePolicy};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     I32(i32),
+    I64(i64),
     Bool(bool),
     String(String),
     Bytes(Arc<Vec<u8>>),
@@ -29,6 +30,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::I32(n) => write!(f, "{n}"),
+            Self::I64(n) => write!(f, "{n}"),
             Self::Bool(value) => write!(f, "{value}"),
             Self::String(value) => write!(f, "{value:?}"),
             Self::Bytes(values) => write!(f, "Bytes({values:?})"),
@@ -320,14 +322,16 @@ fn eval(
 ) -> Result<Flow, Diagnostic> {
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
-        ExprKind::Neg(inner) => {
-            let Value::I32(value) = take_value!(eval(inner, env, program, depth, runtime)) else {
-                return Err(Diagnostic::new("E204", expr.span, "invalid negation value"));
-            };
-            Value::I32(value.checked_neg().ok_or_else(|| {
+        ExprKind::I64(number) => Value::I64(*number),
+        ExprKind::Neg(inner) => match take_value!(eval(inner, env, program, depth, runtime)) {
+            Value::I32(value) => Value::I32(value.checked_neg().ok_or_else(|| {
                 Diagnostic::new("E201", expr.span, "integer overflow or division by zero")
-            })?)
-        }
+            })?),
+            Value::I64(value) => Value::I64(value.checked_neg().ok_or_else(|| {
+                Diagnostic::new("E201", expr.span, "integer overflow or division by zero")
+            })?),
+            _ => return Err(Diagnostic::new("E204", expr.span, "invalid negation value")),
+        },
         ExprKind::Bool(value) => Value::Bool(*value),
         ExprKind::String(value) => Value::String(value.clone()),
         ExprKind::Variant(name, variant, payload) => {
@@ -510,9 +514,13 @@ fn eval(
                     .map_err(|_| Diagnostic::new("E206", expr.span, "array length exceeds i32"))?;
                 return Ok(Flow::Value(Value::I32(length)));
             }
-            if name == builtins::PARSE_I32 {
+            if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {
                 let [Value::String(text)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid parse_i32 call"));
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid integer parse call",
+                    ));
                 };
                 let digits = text
                     .strip_prefix('+')
@@ -525,8 +533,13 @@ fn eval(
                         None,
                     )))));
                 }
-                return Ok(Flow::Value(match text.parse::<i32>() {
-                    Ok(number) => Value::Ok(Box::new(Value::I32(number))),
+                let parsed = if name == builtins::PARSE_I32 {
+                    text.parse::<i32>().map(Value::I32)
+                } else {
+                    text.parse::<i64>().map(Value::I64)
+                };
+                return Ok(Flow::Value(match parsed {
+                    Ok(number) => Value::Ok(Box::new(number)),
                     Err(error) => {
                         let variant = match error.kind() {
                             std::num::IntErrorKind::PosOverflow
@@ -539,6 +552,21 @@ fn eval(
                             None,
                         )))
                     }
+                }));
+            }
+            if name == builtins::WIDEN_I64 {
+                let [Value::I32(number)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid i64 conversion"));
+                };
+                return Ok(Flow::Value(Value::I64(i64::from(*number))));
+            }
+            if name == builtins::NARROW_I32 {
+                let [Value::I64(number)] = values.as_slice() else {
+                    return Err(Diagnostic::new("E204", expr.span, "invalid i32 conversion"));
+                };
+                return Ok(Flow::Value(match i32::try_from(*number) {
+                    Ok(value) => Value::Some(Box::new(Value::I32(value))),
+                    Err(_) => Value::None,
                 }));
             }
             if name == builtins::JOIN {
@@ -589,6 +617,9 @@ fn eval(
             for (pattern, body) in arms {
                 let binding = match (&pattern.kind, &scrutinee) {
                     (PatternKind::Int(pattern), Value::I32(value)) if pattern == value => {
+                        Some(None)
+                    }
+                    (PatternKind::I64(pattern), Value::I64(value)) if pattern == value => {
                         Some(None)
                     }
                     (PatternKind::Wildcard, _) => Some(None),
@@ -759,21 +790,40 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
             left != right
         }));
     }
-    let (Value::I32(a), Value::I32(b)) = (left, right) else {
-        return Err(Diagnostic::new("E204", span, "invalid runtime operands"));
+    let number = match (left, right) {
+        (Value::I32(a), Value::I32(b)) => {
+            let value = match op {
+                Op::Add => a.checked_add(b),
+                Op::Sub => a.checked_sub(b),
+                Op::Mul => a.checked_mul(b),
+                Op::Div => a.checked_div(b),
+                Op::Lt => return Ok(Value::Bool(a < b)),
+                Op::Le => return Ok(Value::Bool(a <= b)),
+                Op::Gt => return Ok(Value::Bool(a > b)),
+                Op::Ge => return Ok(Value::Bool(a >= b)),
+                Op::Eq | Op::Ne => {
+                    return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
+                }
+            };
+            value.map(Value::I32)
+        }
+        (Value::I64(a), Value::I64(b)) => {
+            let value = match op {
+                Op::Add => a.checked_add(b),
+                Op::Sub => a.checked_sub(b),
+                Op::Mul => a.checked_mul(b),
+                Op::Div => a.checked_div(b),
+                Op::Lt => return Ok(Value::Bool(a < b)),
+                Op::Le => return Ok(Value::Bool(a <= b)),
+                Op::Gt => return Ok(Value::Bool(a > b)),
+                Op::Ge => return Ok(Value::Bool(a >= b)),
+                Op::Eq | Op::Ne => {
+                    return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
+                }
+            };
+            value.map(Value::I64)
+        }
+        _ => return Err(Diagnostic::new("E204", span, "invalid runtime operands")),
     };
-    let number = match op {
-        Op::Add => a.checked_add(b),
-        Op::Sub => a.checked_sub(b),
-        Op::Mul => a.checked_mul(b),
-        Op::Div => a.checked_div(b),
-        Op::Lt => return Ok(Value::Bool(a < b)),
-        Op::Le => return Ok(Value::Bool(a <= b)),
-        Op::Gt => return Ok(Value::Bool(a > b)),
-        Op::Ge => return Ok(Value::Bool(a >= b)),
-        Op::Eq | Op::Ne => return Err(Diagnostic::new("E204", span, "invalid runtime operator")),
-    };
-    number
-        .map(Value::I32)
-        .ok_or_else(|| Diagnostic::new("E201", span, "integer overflow or division by zero"))
+    number.ok_or_else(|| Diagnostic::new("E201", span, "integer overflow or division by zero"))
 }

@@ -93,6 +93,17 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             builtins::parse_i32_result(),
         ),
         (
+            builtins::PARSE_I64,
+            vec![Type::String],
+            builtins::parse_i64_result(),
+        ),
+        (builtins::WIDEN_I64, vec![Type::I32], Type::I64),
+        (
+            builtins::NARROW_I32,
+            vec![Type::I64],
+            Type::Option(Box::new(Type::I32)),
+        ),
+        (
             builtins::UTF8_BYTES,
             vec![Type::String],
             Type::Array(Box::new(Type::I32)),
@@ -160,6 +171,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         if matches!(
             record.name.as_str(),
             "i32"
+                | "i64"
                 | "bool"
                 | "String"
                 | "Bytes"
@@ -175,6 +187,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "args"
                 | "len"
                 | "parse_i32"
+                | "parse_i64"
                 | "utf8_bytes"
                 | "utf8_decode"
                 | "utf8_encode"
@@ -196,6 +209,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         if matches!(
             enum_decl.name.as_str(),
             "i32"
+                | "i64"
                 | "bool"
                 | "String"
                 | "Bytes"
@@ -211,6 +225,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "args"
                 | "len"
                 | "parse_i32"
+                | "parse_i64"
                 | "utf8_bytes"
                 | "utf8_decode"
                 | "utf8_encode"
@@ -427,6 +442,7 @@ fn expression_is_spawn_safe(
 ) -> bool {
     match &expr.kind {
         ExprKind::Int(_)
+        | ExprKind::I64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)
@@ -459,6 +475,9 @@ fn expression_is_spawn_safe(
                     builtins::LINES
                         | builtins::LEN
                         | builtins::PARSE_I32
+                        | builtins::PARSE_I64
+                        | builtins::WIDEN_I64
+                        | builtins::NARROW_I32
                         | builtins::UTF8_BYTES
                         | builtins::UTF8_DECODE
                         | builtins::UTF8_ENCODE
@@ -781,6 +800,7 @@ fn match_pattern(
     };
     match (&pattern.kind, matched) {
         (PatternKind::Int(value), Type::I32) => Ok((value.to_string(), None)),
+        (PatternKind::I64(value), Type::I64) => Ok((value.to_string(), None)),
         (PatternKind::Wildcard, _) => Ok(("_".to_owned(), None)),
         (PatternKind::Ok(name), Type::Result(ok, _)) => {
             Ok(("Ok".to_owned(), Some((name.clone(), *ok.clone()))))
@@ -829,12 +849,17 @@ fn infer(
 ) -> Result<Type, Diagnostic> {
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
+        ExprKind::I64(_) => Ok(Type::I64),
         ExprKind::Neg(value) => {
             let actual = type_of(value, env, signatures, return_type, types)?;
-            if actual == Type::I32 || actual == Type::Never {
+            if matches!(actual, Type::I32 | Type::I64 | Type::Never) {
                 Ok(actual)
             } else {
-                Err(Diagnostic::new("E104", expr.span, "negation requires i32"))
+                Err(Diagnostic::new(
+                    "E104",
+                    expr.span,
+                    "negation requires i32 or i64",
+                ))
             }
         }
         ExprKind::Bool(_) => Ok(Type::Bool),
@@ -1006,10 +1031,10 @@ fn infer(
             }
             match op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Lt | Op::Le | Op::Gt | Op::Ge
-                    if lhs == Type::I32 && rhs == Type::I32 =>
+                    if lhs == rhs && matches!(lhs, Type::I32 | Type::I64) =>
                 {
                     if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
-                        Ok(Type::I32)
+                        Ok(lhs)
                     } else {
                         Ok(Type::Bool)
                     }
@@ -1017,7 +1042,10 @@ fn infer(
                 Op::Add if lhs == Type::String && rhs == Type::String => Ok(Type::String),
                 Op::Eq | Op::Ne
                     if lhs == rhs
-                        && matches!(lhs, Type::I32 | Type::Bool | Type::String | Type::Bytes) =>
+                        && matches!(
+                            lhs,
+                            Type::I32 | Type::I64 | Type::Bool | Type::String | Type::Bytes
+                        ) =>
                 {
                     Ok(Type::Bool)
                 }
@@ -1128,9 +1156,9 @@ fn infer(
                     "cannot infer Option element type for match",
                 ));
             }
-            let integer_match = matched == Type::I32;
+            let integer_match = matches!(matched, Type::I32 | Type::I64);
             let expected: HashSet<String> = match &matched {
-                Type::I32 => HashSet::new(),
+                Type::I32 | Type::I64 => HashSet::new(),
                 Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
                 Type::Option(_) => ["Some".to_owned(), "None".to_owned()].into_iter().collect(),
                 Type::Bool => ["true".to_owned(), "false".to_owned()]
@@ -1143,7 +1171,7 @@ fn infer(
                         Diagnostic::new(
                             "E116",
                             value.span,
-                            "match requires i32, result, enum, or bool",
+                            "match requires integer, result, enum, or bool",
                         )
                     })?
                     .iter()
@@ -1153,7 +1181,7 @@ fn infer(
                     return Err(Diagnostic::new(
                         "E116",
                         value.span,
-                        "match requires i32, result, enum, or bool",
+                        "match requires integer, result, enum, or bool",
                     ));
                 }
             };

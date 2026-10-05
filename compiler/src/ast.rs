@@ -37,6 +37,7 @@ impl Span {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     I32,
+    I64,
     Bool,
     String,
     Bytes,
@@ -56,6 +57,7 @@ impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
             Self::I32 => "i32",
+            Self::I64 => "i64",
             Self::Bool => "bool",
             Self::String => "String",
             Self::Bytes => "Bytes",
@@ -106,6 +108,7 @@ pub struct Expr {
 #[derive(Clone, Debug)]
 pub enum PatternKind {
     Int(i32),
+    I64(i64),
     Wildcard,
     Ok(String),
     Err(String),
@@ -124,6 +127,7 @@ pub struct Pattern {
 #[derive(Clone, Debug)]
 pub enum ExprKind {
     Int(i32),
+    I64(i64),
     Bool(bool),
     String(String),
     Array(Vec<Expr>),

@@ -1,0 +1,1 @@
+fn main()->Result<i64,ParseError>{let input=args();if len(input)==1{Ok(parse_i64(input[0])?+1i64)}else{Err(ParseError::Invalid)}}

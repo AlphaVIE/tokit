@@ -92,6 +92,24 @@ impl Parser {
             .map_err(|_| Diagnostic::new("E003", span, "i32 literal out of range"))?;
         Ok((value, span))
     }
+    fn negative_i64_literal(&mut self, minus: Span) -> Result<(i64, Span), Diagnostic> {
+        let number = self.expect(Kind::Int64(String::new()))?;
+        let span = minus.join(number.span);
+        if minus.end != number.span.start {
+            return Err(Diagnostic::new(
+                "E002",
+                span,
+                "negative literal requires adjacent digits",
+            ));
+        }
+        let Kind::Int64(digits) = number.kind else {
+            unreachable!()
+        };
+        let value = format!("-{digits}")
+            .parse::<i64>()
+            .map_err(|_| Diagnostic::new("E003", span, "i64 literal out of range"))?;
+        Ok((value, span))
+    }
     fn ty(&mut self) -> Result<Type, Diagnostic> {
         if self.at(&Kind::LBracket) {
             self.bump();
@@ -106,6 +124,7 @@ impl Parser {
         }
         match name.as_str() {
             "i32" => Ok(Type::I32),
+            "i64" => Ok(Type::I64),
             "bool" => Ok(Type::Bool),
             "String" => Ok(Type::String),
             "Bytes" => Ok(Type::Bytes),
@@ -552,6 +571,12 @@ impl Parser {
                         kind: ExprKind::Int(number),
                         span,
                     })
+                } else if self.at(&Kind::Int64(String::new())) {
+                    let (number, span) = self.negative_i64_literal(token.span)?;
+                    Ok(Expr {
+                        kind: ExprKind::I64(number),
+                        span,
+                    })
                 } else {
                     let value = self.expr(5)?;
                     Ok(Expr {
@@ -566,6 +591,15 @@ impl Parser {
                     .map_err(|_| Diagnostic::new("E003", token.span, "i32 literal out of range"))?;
                 Ok(Expr {
                     kind: ExprKind::Int(number),
+                    span: token.span,
+                })
+            }
+            Kind::Int64(value) => {
+                let number = value
+                    .parse::<i64>()
+                    .map_err(|_| Diagnostic::new("E003", token.span, "i64 literal out of range"))?;
+                Ok(Expr {
+                    kind: ExprKind::I64(number),
                     span: token.span,
                 })
             }
@@ -724,12 +758,23 @@ impl Parser {
         let token = self.bump();
         let (kind, span) = match token.kind {
             Kind::Minus => {
-                let (value, span) = self.negative_literal(token.span)?;
-                (PatternKind::Int(value), span)
+                if self.at(&Kind::Int64(String::new())) {
+                    let (value, span) = self.negative_i64_literal(token.span)?;
+                    (PatternKind::I64(value), span)
+                } else {
+                    let (value, span) = self.negative_literal(token.span)?;
+                    (PatternKind::Int(value), span)
+                }
             }
             Kind::Int(value) => (
                 PatternKind::Int(value.parse::<i32>().map_err(|_| {
                     Diagnostic::new("E003", token.span, "integer literal outside i32 range")
+                })?),
+                token.span,
+            ),
+            Kind::Int64(value) => (
+                PatternKind::I64(value.parse::<i64>().map_err(|_| {
+                    Diagnostic::new("E003", token.span, "integer literal outside i64 range")
                 })?),
                 token.span,
             ),

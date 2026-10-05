@@ -13,6 +13,7 @@ use crate::diagnostic::Diagnostic;
 use crate::sources::SourceMap;
 
 const PRELUDE_CORE: &str = include_str!("native_runtime/core.rs.txt");
+const PRELUDE_I64: &str = include_str!("native_runtime/i64.rs.txt");
 const PRELUDE_BYTES: &str = include_str!("native_runtime/bytes.rs.txt");
 const PRELUDE_IO_ERROR: &str = include_str!("native_runtime/io_error.rs.txt");
 const PRELUDE_PARSE: &str = include_str!("native_runtime/parse.rs.txt");
@@ -29,13 +30,19 @@ fn runtime_prelude(body: &str) -> String {
         || body.contains("__tok_byte_")
         || body.contains("__tok_into_bytes");
     let mut prelude = String::from(PRELUDE_CORE);
+    if body.contains("i64") {
+        prelude.push_str(PRELUDE_I64);
+    }
     if uses_bytes {
         prelude.push_str(PRELUDE_BYTES);
     }
     if uses_io || body.contains("__TokIoError") {
         prelude.push_str(PRELUDE_IO_ERROR);
     }
-    if body.contains("__TokParseError") || body.contains("__tok_parse_i32") {
+    if body.contains("__TokParseError")
+        || body.contains("__tok_parse_i32")
+        || body.contains("__tok_parse_i64")
+    {
         prelude.push_str(PRELUDE_PARSE);
     }
     if uses_utf8 {
@@ -53,6 +60,7 @@ fn runtime_prelude(body: &str) -> String {
 fn rust_type(ty: &Type) -> String {
     match ty {
         Type::I32 => "i32".to_owned(),
+        Type::I64 => "i64".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         Type::Bytes => "__TokBytes".to_owned(),
@@ -140,10 +148,16 @@ fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type
 fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
+        ExprKind::I64(value) => format!("{value}i64"),
         ExprKind::Neg(value) => {
             let (source_id, line, column) = location(source, expr.span);
+            let helper = if types.get(&value.span) == Some(&Type::I64) {
+                "__tok_neg_i64"
+            } else {
+                "__tok_neg"
+            };
             format!(
-                "__tok_neg({},{source_id},{line},{column})",
+                "{helper}({},{source_id},{line},{column})",
                 emit_expr(value, source, types)
             )
         }
@@ -199,6 +213,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
+                builtins::PARSE_I64 => "__tok_parse_i64".to_owned(),
+                builtins::WIDEN_I64 => "__tok_i64_from_i32".to_owned(),
+                builtins::NARROW_I32 => "__tok_i32_from_i64".to_owned(),
                 builtins::UTF8_BYTES => "__tok_utf8_bytes".to_owned(),
                 builtins::UTF8_DECODE => "__tok_utf8_decode".to_owned(),
                 builtins::UTF8_ENCODE => "__tok_utf8_encode".to_owned(),
@@ -252,6 +269,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
         }
         ExprKind::Binary(left, op, right) => {
             let left_type = types.get(&left.span);
+            let right_type = types.get(&right.span);
             let left = emit_expr(left, source, types);
             let right = emit_expr(right, source, types);
             match op {
@@ -259,7 +277,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                     format!("({left} + &{right})")
                 }
                 Op::Add | Op::Sub | Op::Mul | Op::Div => {
-                    let helper = match op {
+                    let operation = match op {
                         Op::Add => "add",
                         Op::Sub => "sub",
                         Op::Mul => "mul",
@@ -267,7 +285,13 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                         _ => unreachable!(),
                     };
                     let (source_id, line, column) = location(source, expr.span);
-                    format!("__tok_{helper}({left},{right},{source_id},{line},{column})")
+                    let suffix = if left_type == Some(&Type::I64) || right_type == Some(&Type::I64)
+                    {
+                        "_i64"
+                    } else {
+                        ""
+                    };
+                    format!("__tok_{operation}{suffix}({left},{right},{source_id},{line},{column})")
                 }
                 _ => {
                     let symbol = match op {
@@ -295,6 +319,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 .map(|(pattern, body)| {
                     let pattern = match &pattern.kind {
                         PatternKind::Int(value) => value.to_string(),
+                        PatternKind::I64(value) => format!("{value}i64"),
                         PatternKind::Wildcard => "_".to_owned(),
                         PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
                         PatternKind::Err(name) => format!("Err({})", user_name(name)),
