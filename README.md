@@ -10,7 +10,7 @@ An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and p
 
 An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agents submit hash-guarded, checked changes to named functions without resending their surrounding source file.
 
-The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for pure `i32`, `i64`, and `bool` expression functions. Other checked functions still use the AST emitter while the IR grows.
+The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for straight-line `i32`, `i64`, and `bool` functions, including immutable local bindings. Other checked functions still use the AST emitter while the IR grows.
 
 Function declarations may omit `fn`, and `I`/`L` abbreviate `i32`/`i64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the changes across 43 examples.
 
