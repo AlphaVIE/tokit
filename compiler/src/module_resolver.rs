@@ -67,6 +67,9 @@ impl UseKind {
                     | "args"
                     | "len"
                     | "parse_i32"
+                    | "parse_i64"
+                    | "i32"
+                    | "i64"
                     | "utf8_bytes"
                     | "utf8_decode"
                     | "utf8_encode"
@@ -84,6 +87,7 @@ fn reserved(name: &str) -> bool {
     matches!(
         name,
         "i32"
+            | "i64"
             | "bool"
             | "String"
             | "Bytes"
@@ -102,6 +106,7 @@ fn reserved(name: &str) -> bool {
             | "args"
             | "len"
             | "parse_i32"
+            | "parse_i64"
             | "utf8_bytes"
             | "utf8_decode"
             | "utf8_encode"
@@ -265,6 +270,7 @@ impl Resolver<'_> {
                 self.ty(err, span)?;
             }
             Type::I32
+            | Type::I64
             | Type::Bool
             | Type::String
             | Type::Bytes
@@ -279,6 +285,7 @@ impl Resolver<'_> {
     fn expr(&self, expr: &mut Expr) -> Result<(), Diagnostic> {
         match &mut expr.kind {
             ExprKind::Int(_)
+            | ExprKind::I64(_)
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(_)

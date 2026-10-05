@@ -13,7 +13,7 @@ enum     = "enum" identifier "{" (enum-variant ("," enum-variant)*)? "}" ;
 enum-variant = identifier ("(" type ")")? ;
 generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
-type     = "i32" | "bool" | "String" | "Unit" | "[" type "]"
+type     = "i32" | "i64" | "bool" | "String" | "Unit" | "[" type "]"
          | "Result" "<" type "," type ">" | "Option" "<" type ">"
          | "Task" "<" type ">" | identifier | identifier "::" identifier
          | (identifier | identifier "::" identifier) "<" type ("," type)* ">" ;
@@ -26,7 +26,7 @@ statement = ("let" | "var") identifier (":" type)? "=" expression ";"
           | "break" ";" | "continue" ";"
           | "return" expression ";"
           | expression ";" ;
-expression = integer | "-" integer | "-" expression | string | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | integer "i64" | "-" integer | "-" integer "i64" | "-" expression | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" arguments? ")")?
            | identifier "::" identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
@@ -42,7 +42,7 @@ pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
         | "Some" "(" identifier ")" | "None"
         | identifier "::" identifier ("(" identifier ")")?
         | identifier "::" identifier "::" identifier ("(" identifier ")")? | "true" | "false"
-        | integer | "-" integer | "_" ;
+        | integer | integer "i64" | "-" integer | "-" integer "i64" | "_" ;
 binary-op = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 ```
 
@@ -56,7 +56,7 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 
 `Option<T>` represents a present value with `Some(value)` or an absent value with `None`; there is no unrestricted null value. `None` gets its element type from a declared return, binding, field, or another expression. Matching an untyped bare `None` reports `E115`. A match on `Option<T>` must cover both `Some(binding)` and `None`, either explicitly or with a final `_` arm. `Option<T>` has an inline value layout, so directly recursive records or enums through `Option` report `E112`; arrays and tasks provide indirection. `?` currently applies only to `Result`, not `Option`.
 
-`i32` arithmetic is checked in the interpreter: overflow and division by zero produce `E201`. Integer literals must fit `i32`, including `-2147483648`; the minus sign and digits of a negative literal must be adjacent. Unary `-` also negates a computed `i32` expression with higher precedence than multiplication and reports `E201` for `i32::MIN`. These are prototype choices, not final numeric semantics.
+`i32` and `i64` arithmetic are checked in both backends: overflow and division by zero produce `E201`. Unsuffixed integer literals have type `i32` and must fit that range, including `-2147483648`. A literal with the adjacent `i64` suffix has type `i64`, for example `3000000000i64` or `-9223372036854775808i64`; it must fit that range. The minus sign must be adjacent to the digits. Unary `-` negates computed values of either integer type with higher precedence than multiplication and reports `E201` for the minimum value. The types do not mix implicitly. `i64(i32)->i64` widens without loss; `i32(i64)->Option<i32>` returns `None` outside the narrow range. Array and `Bytes` indices and `len` results remain `i32`. These are prototype choices, not final numeric semantics.
 
 Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
 
@@ -72,11 +72,11 @@ Records and functions can declare type parameters, as in `struct Pair<T>{left:T,
 
 Enums declare named variants, including an optional empty variant set. A variant may carry one typed value, for example `enum Event{Stop,Number(i32)}`. `Event::Stop` and `Event::Number(7)` construct values, which may also serve as typed `Result` errors. Missing, extra, or incorrectly typed payloads are rejected. Unknown variants or using an enum name as a function report `E114`. Direct recursive value layouts across records and enums report `E112`; recursion through an array is permitted because its storage is indirect. Generic enums and variants with multiple payload fields are not yet supported.
 
-`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, `Option` with `Some(name)` and `None`, enums with qualified `Enum::Variant` and `Enum::Variant(name)` patterns, `bool` with `true` and `false`, and `i32` with signed literal patterns. A final `_` arm covers remaining cases of any supported match type; it is required for `i32`, whose domain cannot be enumerated in source. For closed types, explicit patterns may instead cover every case. Missing, duplicate, inapplicable, or unreachable patterns report `E116`. Out-of-range integer patterns report `E003`. A payload binding is scoped to its arm and has the declared payload type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
+`match` evaluates its scrutinee once and chooses an arm by pattern. It supports `Result` with `Ok(name)` and `Err(name)` payload bindings, `Option` with `Some(name)` and `None`, enums with qualified `Enum::Variant` and `Enum::Variant(name)` patterns, `bool` with `true` and `false`, and `i32`/`i64` with signed literal patterns of the matching type. A final `_` arm covers remaining cases of any supported match type; it is required for integers, whose domains cannot be enumerated in source. For closed types, explicit patterns may instead cover every case. Missing, duplicate, inapplicable, or unreachable patterns report `E116`. Out-of-range integer patterns report `E003`. A payload binding is scoped to its arm and has the declared payload type. Arms must have compatible result types; `return` may exit the enclosing function from an arm. This syntax and exhaustiveness policy are experimental.
 
 The provisional library includes `read_text(String)->Result<String,IoError>`, `write_text(String,String)->Result<Unit,IoError>`, and `lines(String)->[String]`. `IoError` is a reserved enum with `Denied`, `NotFound`, `InvalidUtf8`, and `Other` variants. Reads and writes require separate `--allow-read <path>` and `--allow-write <path>` grants on the interpreter or generated binary. See the [filesystem capability contract](FILESYSTEM_CAPABILITY.md); this is not an OS sandbox.
 
-`len<T>([T])->i32` returns an array length and reports `E206` if it exceeds `i32` (a theoretical limit for this prototype). An untyped empty literal cannot infer `T`; give it a declared array type first. `parse_i32(String)->Result<i32,ParseError>` accepts an optional ASCII `+` or `-` followed by decimal digits; whitespace, empty strings, and other characters yield `ParseError::Invalid`, while a syntactically valid number outside the `i32` range yields `ParseError::OutOfRange`. `ParseError` is a reserved enum with those two variants. Both functions are pure and can be used inside a spawned pure function. See [parse_argument.tok](../examples/parse_argument.tok) for a CLI input example.
+`len<T>([T])->i32` returns an array length and reports `E206` if it exceeds `i32` (a theoretical limit for this prototype). An untyped empty literal cannot infer `T`; give it a declared array type first. `parse_i32(String)->Result<i32,ParseError>` and `parse_i64(String)->Result<i64,ParseError>` accept an optional ASCII `+` or `-` followed by decimal digits; whitespace, empty strings, and other characters yield `ParseError::Invalid`, while a syntactically valid number outside the target range yields `ParseError::OutOfRange`. `ParseError` is a reserved enum with those two variants. These functions are pure and can be used inside a spawned pure function. See [parse_argument.tok](../examples/parse_argument.tok) and [i64_counter.tok](../examples/i64_counter.tok) for CLI input examples.
 
 [parse_numbers.tok](../examples/parse_numbers.tok) builds an array from arbitrarily many CLI arguments with `push`, returning a typed parse error on the first invalid input.
 

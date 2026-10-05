@@ -5,6 +5,7 @@ use crate::diagnostic::Diagnostic;
 pub enum Kind {
     Ident(String),
     Int(String),
+    Int64(String),
     String(String),
     Fn,
     Struct,
@@ -163,7 +164,17 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
             while i < bytes.len() && bytes[i].is_ascii_digit() {
                 i += 1;
             }
-            Kind::Int(source[start..i].to_owned())
+            let digits_end = i;
+            if bytes.get(i..i + 3) == Some(b"i64")
+                && !bytes
+                    .get(i + 3)
+                    .is_some_and(|next| next.is_ascii_alphanumeric() || *next == b'_')
+            {
+                i += 3;
+                Kind::Int64(source[start..digits_end].to_owned())
+            } else {
+                Kind::Int(source[start..i].to_owned())
+            }
         } else {
             i += 1;
             match bytes[start] {

@@ -25,6 +25,7 @@ fn native_emits_only_used_runtime_sections() {
         "fn __tok_utf8_bytes",
         "enum __TokTaskError",
         "fn __tok_read_bytes",
+        "fn __tok_add_i64",
     ] {
         assert!(!generated.contains(unused), "unexpected {unused}");
     }

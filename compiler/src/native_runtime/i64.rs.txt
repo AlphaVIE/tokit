@@ -1,0 +1,18 @@
+impl __TokRender for i64 { fn tok_render(&self) -> String { self.to_string() } }
+fn __tok_add_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    a.checked_add(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_sub_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    a.checked_sub(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_neg_i64(a: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    a.checked_neg().unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_mul_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    a.checked_mul(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_div_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
+}
+fn __tok_i64_from_i32(value: i32) -> i64 { i64::from(value) }
+fn __tok_i32_from_i64(value: i64) -> Option<i32> { i32::try_from(value).ok() }

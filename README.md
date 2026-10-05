@@ -30,6 +30,8 @@ Programs can read their own arguments with `args()->[String]`. For example, `tok
 
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
 
+Experimental `i64` values use explicit literals such as `3000000000i64`, checked arithmetic, and `parse_i64(String)->Result<i64,ParseError>`. `i64(value)` widens an `i32`; `i32(value)` narrows an `i64` with an `Option` result. [i64_counter.tok](examples/i64_counter.tok) reads a wide CLI integer. The types do not mix implicitly.
+
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
 
 Mutable strings support `text.push(piece);` with a `String` piece. [string_builder.tok](examples/string_builder.tok) demonstrates append without rebuilding the accumulated text on each step.

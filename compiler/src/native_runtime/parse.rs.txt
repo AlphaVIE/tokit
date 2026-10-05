@@ -17,3 +17,13 @@ fn __tok_parse_i32(text: String) -> Result<i32, __TokParseError> {
         _ => __TokParseError::Invalid,
     })
 }
+fn __tok_parse_i64(text: String) -> Result<i64, __TokParseError> {
+    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(&text);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(__TokParseError::Invalid);
+    }
+    text.parse::<i64>().map_err(|error| match error.kind() {
+        std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => __TokParseError::OutOfRange,
+        _ => __TokParseError::Invalid,
+    })
+}

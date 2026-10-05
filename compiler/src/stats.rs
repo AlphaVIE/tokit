@@ -52,6 +52,7 @@ fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
     *nodes += 1;
     match &expr.kind {
         ExprKind::Int(_)
+        | ExprKind::I64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)
