@@ -50,6 +50,10 @@ fn wide_literals_arithmetic_match_and_parse_agree_in_both_backends() {
             "Box(value:9)",
         ),
         (
+            "struct Box<T>{value:T} widen(x:I)->L{i64(x)} main()->Box<L>{Box(widen(9))}",
+            "Box(value:9)",
+        ),
+        (
             "fn answer()->i64{42i64} fn main()->Result<i64,TaskError>{join(spawn answer())}",
             "Ok(42)",
         ),

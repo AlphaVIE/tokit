@@ -1,4 +1,4 @@
-"""Measure optional fn omission on executable Tokit example sources."""
+"""Measure source token savings from experimental Tokit syntax variants."""
 from __future__ import annotations
 
 import argparse
@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--tok", type=Path, required=True)
     parser.add_argument("--qwen-tokenizer", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mode", choices=("all", "functions-only", "types-only"), default="functions-only")
     args = parser.parse_args()
     import tiktoken
     from tokenizers import Tokenizer
@@ -37,9 +38,10 @@ def main() -> None:
         with tempfile.TemporaryDirectory(prefix="tokit-compact-") as temporary:
             test_path = Path(temporary) / "test.tok"
             test_path.write_bytes(source.encode())
-            compact = command(args.tok.resolve(), "compact", str(test_path))
+            option = [] if args.mode == "all" else ["--" + args.mode]
+            compact = command(args.tok.resolve(), "compact", *option, str(test_path))
             test_path.write_bytes(compact.encode())
-            if command(args.tok.resolve(), "compact", str(test_path)) != compact:
+            if command(args.tok.resolve(), "compact", *option, str(test_path)) != compact:
                 raise ValueError(f"{path}: compact output not idempotent")
             command(args.tok.resolve(), "fmt", str(test_path))
             test_path.write_bytes(source.encode())
@@ -50,7 +52,7 @@ def main() -> None:
                      "bytes": {"source": len(source.encode()), "compact": len(compact.encode())},
                      "tokens": {name: {"source": len(encode(source)), "compact": len(encode(compact))}
                                 for name, encode in encoders.items()}})
-    result = {"schema": 1, "tool": "scripts/measure_compact_functions.py",
+    result = {"schema": 1, "tool": "scripts/measure_compact_functions.py", "mode": args.mode,
               "compiler_sha256": hashlib.sha256(args.tok.read_bytes()).hexdigest(),
               "versions": {name: importlib.metadata.version(name) for name in ("tiktoken", "tokenizers")},
               "qwen_revision": QWEN_REVISION, "qwen_sha256": QWEN_SHA256,

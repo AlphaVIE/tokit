@@ -12,7 +12,7 @@ An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agent
 
 The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for pure `i32`, `i64`, and `bool` expression functions. Other checked functions still use the AST emitter while the IR grows.
 
-Function declarations may omit `fn`: `add(a:i32,b:i32)->i32{a+b}`. `tok compact file.tok` prints this shorter form, and `tok compact --write file.tok` applies it. The [token experiment](research/COMPACT_FUNCTIONS.md) measures the change across 43 executable examples.
+Function declarations may omit `fn`, and `I`/`L` abbreviate `i32`/`i64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the changes across 43 examples.
 
 Local `let` and `var` bindings can infer complete initializer types. A [versioned benchmark experiment](research/INFERRED_BINDINGS.md) measures the source-token savings and records its limits.
 

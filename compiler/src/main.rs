@@ -408,16 +408,37 @@ fn main() {
         return;
     }
     let compact = match args.as_slice() {
-        [_, command, path] if command == "compact" => Some((path, false)),
-        [_, command, flag, path] if command == "compact" && flag == "--write" => Some((path, true)),
+        [_, command, path] if command == "compact" => Some((path, false, "all")),
+        [_, command, flag, path] if command == "compact" && flag == "--write" => {
+            Some((path, true, "all"))
+        }
+        [_, command, mode, path]
+            if command == "compact"
+                && matches!(mode.as_str(), "--functions-only" | "--types-only") =>
+        {
+            Some((path, false, mode.as_str()))
+        }
+        [_, command, mode, flag, path]
+            if command == "compact"
+                && matches!(mode.as_str(), "--functions-only" | "--types-only")
+                && flag == "--write" =>
+        {
+            Some((path, true, mode.as_str()))
+        }
         _ => None,
     };
-    if let Some((path, write)) = compact {
+    if let Some((path, write, mode)) = compact {
         let source = fs::read_to_string(path).unwrap_or_else(|error| {
             eprintln!("could not read {path}: {error}");
             process::exit(2);
         });
-        let result = tokit_compiler::format::compact_functions(&source).unwrap_or_else(|error| {
+        let result = match mode {
+            "--functions-only" => tokit_compiler::format::compact_functions(&source),
+            "--types-only" => tokit_compiler::format::compact_integer_types(&source),
+            _ => tokit_compiler::format::compact_functions(&source)
+                .and_then(|text| tokit_compiler::format::compact_integer_types(&text)),
+        }
+        .unwrap_or_else(|error| {
             eprintln!("{}", error.display(&source));
             process::exit(1);
         });

@@ -21,6 +21,15 @@ fn canonical_format_is_idempotent_and_keeps_tokens() {
                 tokit_compiler::parse(&source).unwrap().functions.len(),
                 tokit_compiler::parse(&compacted).unwrap().functions.len()
             );
+            let typed = format::compact_integer_types(&source).unwrap();
+            assert_eq!(format::compact_integer_types(&typed).unwrap(), typed);
+            let combined = format::compact_integer_types(&compacted).unwrap();
+            assert_eq!(format::compact_functions(&combined).unwrap(), combined);
+            assert_eq!(format::compact_integer_types(&combined).unwrap(), combined);
+            assert_eq!(
+                tokit_compiler::parse(&source).unwrap().functions.len(),
+                tokit_compiler::parse(&combined).unwrap().functions.len()
+            );
             let formatted = format::format(&source).unwrap();
             assert_eq!(
                 format::format(&formatted).unwrap(),
@@ -97,6 +106,24 @@ fn comments_and_ambiguous_token_boundaries_are_preserved() {
 }
 
 #[test]
+fn integer_type_compaction_preserves_names_literals_and_comments() {
+    let source = "// i32 and i64\nfn main()->i32{let i32=5;let wide:i64=3000000000i64;match i32(wide){Some(v)=>v+i32,None=>i32}}";
+    let compacted = format::compact_integer_types(source).unwrap();
+    assert_eq!(
+        compacted,
+        "// i32 and i64\nfn main()->I{let i32=5;let wide:L=3000000000i64;match i32(wide){Some(v)=>v+i32,None=>i32}}"
+    );
+    assert_eq!(
+        tokit_compiler::run(source).unwrap(),
+        tokit_compiler::run(&compacted).unwrap()
+    );
+    assert_eq!(
+        format::compact_integer_types(&compacted).unwrap(),
+        compacted
+    );
+}
+
+#[test]
 fn cli_check_and_write_use_the_same_canonical_form() {
     let path = std::env::temp_dir().join(format!(
         "tokit-fmt-{}-{}.tok",
@@ -153,11 +180,22 @@ fn compact_cli_writes_keyword_free_declarations() {
             .as_nanos()
     ));
     std::fs::write(&path, "fn main()->i32{42}").unwrap();
+    for (mode, expected) in [
+        ("--functions-only", "main()->i32{42}"),
+        ("--types-only", "fn main()->I{42}"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_tok"))
+            .args(["compact", mode, path.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+    }
     let result = Command::new(env!("CARGO_BIN_EXE_tok"))
         .args(["compact", "--write", path.to_str().unwrap()])
         .output()
         .unwrap();
     assert!(result.status.success());
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "main()->i32{42}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "main()->I{42}");
     std::fs::remove_file(path).unwrap();
 }
