@@ -188,7 +188,11 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
             };
             format!(
                 "{helper}({},{},{source_id},{line},{column})",
-                emit_array_borrow(array, source, types),
+                if index.is_simple_read() {
+                    emit_array_borrow(array, source, types)
+                } else {
+                    format!("&({})", emit_expr(array, source, types))
+                },
                 emit_expr(index, source, types)
             )
         }

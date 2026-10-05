@@ -105,6 +105,25 @@ pub struct Expr {
     pub span: Span,
 }
 
+impl Expr {
+    /// Conservative subset that cannot mutate a caller binding while evaluated.
+    /// Unknown forms must use normal value snapshots when an operand is borrowed.
+    pub fn is_simple_read(&self) -> bool {
+        match &self.kind {
+            ExprKind::Int(_)
+            | ExprKind::I64(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Var(_) => true,
+            ExprKind::Neg(value) | ExprKind::Field(value, _) => value.is_simple_read(),
+            ExprKind::Binary(left, _, right) | ExprKind::Index(left, right) => {
+                left.is_simple_read() && right.is_simple_read()
+            }
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum PatternKind {
     Int(i32),
