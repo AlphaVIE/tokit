@@ -24,7 +24,7 @@ denominator and revise this inventory when evidence changes.
 | 10 Runtime | [Native runtime helpers](compiler/src/native_runtime/core.rs.txt), [bytes](compiler/src/native_runtime/bytes.rs.txt) | Runnable partial implementation; GC and memory model remain open |
 | 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md) | Runnable partial implementation; networking and broad APIs absent |
 | 12 Toolchain | [CLI](compiler/src/main.rs), [formatter](compiler/src/format.rs), [local packages](spec/LOCAL_PACKAGE_CANDIDATE.md) | Runnable partial implementation; registry/build ecosystem incomplete |
-| 13 AI interfaces | [Program index](compiler/src/ai_index.rs), [structured diagnostics](spec/AI_INDEX.md) | Runnable partial implementation; transactional AST edits absent |
+| 13 AI interfaces | [Program index](compiler/src/ai_index.rs), [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md), [structured diagnostics](spec/AI_INDEX.md) | Runnable partial implementation; expression-level and multi-file AST edits absent |
 | 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; editor integration and navigation absent |
 | 15 Self-hosting | Compiler remains written in Rust | No working artifact |
 
