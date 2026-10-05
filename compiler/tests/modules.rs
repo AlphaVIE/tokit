@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -17,6 +18,47 @@ fn write(directory: &Path, name: &str, source: &str) -> PathBuf {
     let path = directory.join(name);
     std::fs::write(&path, source).unwrap();
     path
+}
+
+#[test]
+fn module_loader_uses_unsaved_entry_and_imported_sources() {
+    let directory = temporary_directory("module-overlays");
+    let root = write(
+        &directory,
+        "main.tok",
+        "import math=\"math.tok\";fn main()->i32{math::triple(7)}",
+    );
+    let math = write(&directory, "math.tok", "pub fn triple(n:i32)->i32{n*3}");
+    let mut overrides = HashMap::new();
+    overrides.insert(
+        std::fs::canonicalize(&math).unwrap(),
+        "pub fn triple(n:i32)->i32{missing}".to_owned(),
+    );
+    let error = modules::load_with_overrides(&root, &overrides)
+        .err()
+        .unwrap();
+    assert_eq!(error.diagnostic.code, "E101");
+    assert_eq!(
+        error
+            .sources
+            .get(error.diagnostic.span.source_id)
+            .unwrap()
+            .path,
+        std::fs::canonicalize(&math).unwrap()
+    );
+
+    overrides.insert(
+        std::fs::canonicalize(&math).unwrap(),
+        "pub fn triple(n:i32)->i32{n*4}".to_owned(),
+    );
+    overrides.insert(
+        std::fs::canonicalize(&root).unwrap(),
+        "import math=\"math.tok\";fn main()->i32{math::triple(8)}".to_owned(),
+    );
+    let loaded = modules::load_with_overrides(&root, &overrides)
+        .unwrap_or_else(|error| panic!("{}", error.display()));
+    assert_eq!(interpreter::run(&loaded.program).unwrap().to_string(), "32");
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
