@@ -1,0 +1,64 @@
+{
+  "host": "Windows-10-10.0.26200-SP0",
+  "base_commit": "1c71a6136e0b1ebf6fbebfa610c477d235ef6428",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "source_sha256": "1700a9c83aa6f0a375275b0f2849f13ee4bbfc12b04879d70776b68fe2369bc9",
+  "interpreter_sha256_before": "4efc92bb51e014c105d399e5e89f5848d28665a869ef28c5c2439bdf39a71067",
+  "interpreter_sha256_after": "e5d8633cfc9c3420acc9f74ccc7b0ae38754e9c5aa4203341219bc08460c1118",
+  "variants": {
+    "before": {
+      "binary_sha256": "e17a9b552cc99393b9ffe0406b8f0127bda3b542005b53fb20054be8d68f4d3c"
+    },
+    "after": {
+      "binary_sha256": "39785cc68e6b89098b12ad29a5ca5888cad33f60d534b4b390bae5658d31d807"
+    }
+  },
+  "cases": {
+    "4096": {
+      "iterations": 2000,
+      "size": 4096,
+      "expected": "Ok(8192000)",
+      "samples_ns": {
+        "before": [
+          273991500,
+          274267700,
+          273005200,
+          272925500
+        ],
+        "after": [
+          23268100,
+          23012400,
+          23391600,
+          23165300
+        ]
+      },
+      "median_ns": {
+        "before": 273498350,
+        "after": 23216700
+      }
+    },
+    "16384": {
+      "iterations": 2000,
+      "size": 16384,
+      "expected": "Ok(32768000)",
+      "samples_ns": {
+        "before": [
+          1065027200,
+          1044093500,
+          1064985800,
+          1041339400
+        ],
+        "after": [
+          49334900,
+          49073900,
+          50259900,
+          48999400
+        ]
+      },
+      "median_ns": {
+        "before": 1054539650,
+        "after": 49204400
+      }
+    }
+  }
+}
