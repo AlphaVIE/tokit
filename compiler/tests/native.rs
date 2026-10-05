@@ -40,6 +40,31 @@ fn native_borrows_byte_length_without_cloning_the_binding() {
 }
 
 #[test]
+fn native_projects_record_field_without_cloning_the_record() {
+    let source = "struct Payload{data:[I],tag:I} main()->I{let p=Payload([1,2],7);p.tag}";
+    let generated = native::emit(&check(source).unwrap(), source).unwrap();
+    assert!(generated.contains("(u_70).u_746167.clone()"));
+    assert!(!generated.contains("(u_70.clone()).u_746167.clone()"));
+}
+
+#[test]
+fn record_field_projection_preserves_copied_values_in_native() {
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let source = "struct Payload{data:[I],tag:I} main()->I{var p=Payload([1,2],7);let q=p;p=Payload([3],9);q.tag+p.tag+Payload([4],2).tag}";
+    assert_eq!(run(source).unwrap().to_string(), "18");
+    let directory = temporary_directory("record-field");
+    let output = directory.join(format!("record-field{}", std::env::consts::EXE_SUFFIX));
+    native::build(&check(source).unwrap(), source, &output).unwrap();
+    let result = Command::new(&output).output().unwrap();
+    assert!(result.status.success());
+    assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "18");
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn native_output_matches_reference_interpreter() {
     if Command::new("rustc").arg("--version").output().is_err() {
         assert_ne!(
