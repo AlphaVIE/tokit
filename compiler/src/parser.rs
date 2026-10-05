@@ -12,6 +12,7 @@ pub struct Parser {
     type_params: Vec<String>,
     loop_depth: usize,
     import_aliases: HashSet<String>,
+    compactible_types: Vec<(Span, &'static str)>,
 }
 
 impl Parser {
@@ -22,11 +23,15 @@ impl Parser {
             type_params: Vec::new(),
             loop_depth: 0,
             import_aliases: HashSet::new(),
+            compactible_types: Vec::new(),
         }
     }
 
     fn current(&self) -> &Token {
         &self.tokens[self.pos]
+    }
+    pub fn compactible_types(&self) -> &[(Span, &'static str)] {
+        &self.compactible_types
     }
     fn next_is(&self, kind: &Kind) -> bool {
         self.tokens.get(self.pos + 1).is_some_and(|token| {
@@ -117,14 +122,19 @@ impl Parser {
             self.expect(Kind::RBracket)?;
             return Ok(Type::Array(Box::new(element)));
         }
-        let (mut name, _) = self.ident()?;
+        let (mut name, span) = self.ident()?;
         if self.import_aliases.contains(&name) && self.at(&Kind::ColonColon) {
             self.bump();
             name = format!("{name}::{}", self.ident()?.0);
         }
         match name.as_str() {
-            "i32" => Ok(Type::I32),
-            "i64" => Ok(Type::I64),
+            "i32" => self.compactible_types.push((span, "I")),
+            "i64" => self.compactible_types.push((span, "L")),
+            _ => {}
+        }
+        match name.as_str() {
+            "i32" | "I" => Ok(Type::I32),
+            "i64" | "L" => Ok(Type::I64),
             "bool" => Ok(Type::Bool),
             "String" => Ok(Type::String),
             "Bytes" => Ok(Type::Bytes),

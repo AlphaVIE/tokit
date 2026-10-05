@@ -105,3 +105,15 @@ pub fn compact_functions(source: &str) -> Result<String, Diagnostic> {
     crate::parse(&result)?;
     Ok(result)
 }
+
+/// Replace only parsed primitive type spellings, leaving names and literals intact.
+pub fn compact_integer_types(source: &str) -> Result<String, Diagnostic> {
+    let mut parser = crate::parser::Parser::new(lexer::lex(source)?);
+    parser.program()?;
+    let mut result = source.to_owned();
+    for (span, replacement) in parser.compactible_types().iter().rev() {
+        result.replace_range(span.start..span.end, replacement);
+    }
+    crate::parse(&result)?;
+    Ok(result)
+}

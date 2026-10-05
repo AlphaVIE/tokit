@@ -4,6 +4,11 @@ This document describes exactly what the current Rust prototype accepts. It is a
 
 ## Accepted constructs
 
+`I` and `L` are short spellings of `i32` and `i64` in type positions,
+including generic arguments. These identifiers are reserved in type positions.
+Integer literal suffixes, conversion functions, and library names retain their
+existing spellings. The longer type names remain accepted.
+
 ```text
 program  = import* (("pub"? function) | ("pub"? record) | ("pub"? enum))* ;
 import   = "import" identifier "=" string ";" ;
@@ -13,7 +18,7 @@ enum     = "enum" identifier "{" (enum-variant ("," enum-variant)*)? "}" ;
 enum-variant = identifier ("(" type ")")? ;
 generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
-type     = "i32" | "i64" | "bool" | "String" | "Unit" | "[" type "]"
+type     = "i32" | "I" | "i64" | "L" | "bool" | "String" | "Unit" | "[" type "]"
          | "Result" "<" type "," type ">" | "Option" "<" type ">"
          | "Task" "<" type ">" | identifier | identifier "::" identifier
          | (identifier | identifier "::" identifier) "<" type ("," type)* ">" ;

@@ -1,0 +1,1068 @@
+{
+  "schema": 1,
+  "tool": "scripts/measure_compact_functions.py",
+  "mode": "all",
+  "compiler_sha256": "fb7ea0922c4c0f9fdddbaf09cc6e41e8f566176b62309aca6230db33340fe27f",
+  "versions": {
+    "tiktoken": "0.14.0",
+    "tokenizers": "0.23.2"
+  },
+  "qwen_revision": "ea3f2471cf1b1f0db85067f1ef93848e38e88c25",
+  "qwen_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+  "summary": {
+    "files": 43,
+    "functions": 101,
+    "bytes": {
+      "source": 20270,
+      "compact": 19693
+    },
+    "tokens": {
+      "cl100k_base": {
+        "source": 6304,
+        "compact": 6068
+      },
+      "o200k_base": {
+        "source": 6374,
+        "compact": 6141
+      },
+      "Qwen2.5-Coder": {
+        "source": 6731,
+        "compact": 6358
+      }
+    }
+  },
+  "files": [
+    {
+      "path": "examples/answer.tok",
+      "source_sha256": "4e403707d80fef17d903c28705fcb54385d05f5edfccd87d24c5a0d7a4741e8c",
+      "compact_sha256": "b406936f74c6f47332b3c0c7e1ba87d3fd5b97427aff26f5e25ffaec96875169",
+      "functions": 2,
+      "bytes": {
+        "source": 99,
+        "compact": 83
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 45,
+          "compact": 38
+        },
+        "o200k_base": {
+          "source": 45,
+          "compact": 38
+        },
+        "Qwen2.5-Coder": {
+          "source": 51,
+          "compact": 39
+        }
+      }
+    },
+    {
+      "path": "examples/arguments.tok",
+      "source_sha256": "be2eab4727d574989ba078798177bf2c7ec8889a8f7264a22ee95d9a8747e9ba",
+      "compact_sha256": "32811c70b4e52140b9f7daed595cbfe1281fa86be3a69ab31efea9de09bc71f8",
+      "functions": 1,
+      "bytes": {
+        "source": 28,
+        "compact": 25
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 8,
+          "compact": 7
+        },
+        "o200k_base": {
+          "source": 8,
+          "compact": 7
+        },
+        "Qwen2.5-Coder": {
+          "source": 8,
+          "compact": 7
+        }
+      }
+    },
+    {
+      "path": "examples/binary_copy.tok",
+      "source_sha256": "96f6d02e92763cb985413ba4324448acda6e3c35e6426a8eac3f1ee784c2f9b5",
+      "compact_sha256": "c17896fa731d9c1b81df4ebd4872b79475568d5a362752869dea3e9374873c82",
+      "functions": 1,
+      "bytes": {
+        "source": 214,
+        "compact": 211
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 60,
+          "compact": 59
+        },
+        "o200k_base": {
+          "source": 61,
+          "compact": 60
+        },
+        "Qwen2.5-Coder": {
+          "source": 60,
+          "compact": 59
+        }
+      }
+    },
+    {
+      "path": "examples/byte_values.tok",
+      "source_sha256": "d6fe85bca98b3639be7e9200994e298a03df825056544552f028eee5e1f92487",
+      "compact_sha256": "59f4d2b0f22974962f420a5d53af59626609e1a475ff77108d018bd5b2247e79",
+      "functions": 1,
+      "bytes": {
+        "source": 161,
+        "compact": 158
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 46,
+          "compact": 45
+        },
+        "o200k_base": {
+          "source": 46,
+          "compact": 45
+        },
+        "Qwen2.5-Coder": {
+          "source": 46,
+          "compact": 45
+        }
+      }
+    },
+    {
+      "path": "examples/checked_division.tok",
+      "source_sha256": "0f38703e8738aab669a64066a279c4def93499b0a75b72bcf34fdf633a106d03",
+      "compact_sha256": "bc0e352a1449e61173a0096025680b62c3d9d015ed929ffa5c31d1263ba98662",
+      "functions": 3,
+      "bytes": {
+        "source": 249,
+        "compact": 212
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 104,
+          "compact": 87
+        },
+        "o200k_base": {
+          "source": 104,
+          "compact": 87
+        },
+        "Qwen2.5-Coder": {
+          "source": 118,
+          "compact": 87
+        }
+      }
+    },
+    {
+      "path": "examples/checked_division_enum.tok",
+      "source_sha256": "49f64f26e8b4827d0d0a4efb231448fe36125cb538f546cdc5e54e4e4138e6aa",
+      "compact_sha256": "d96a880127fe30a6118928a32472bc4cedb8df949ea1f8443933c1faa14fbb61",
+      "functions": 2,
+      "bytes": {
+        "source": 167,
+        "compact": 153
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 60,
+          "compact": 54
+        },
+        "o200k_base": {
+          "source": 60,
+          "compact": 54
+        },
+        "Qwen2.5-Coder": {
+          "source": 64,
+          "compact": 54
+        }
+      }
+    },
+    {
+      "path": "examples/factorial.tok",
+      "source_sha256": "7bf24bb0fa1d6de18d7dbbf1ff542a2643404a9e5e64abe61f8d929b2c2a1a9c",
+      "compact_sha256": "d033da9494f49b1b63d649f06e58e35e5dfd639367149878a9a686f0b9a0acc1",
+      "functions": 2,
+      "bytes": {
+        "source": 92,
+        "compact": 80
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 37,
+          "compact": 33
+        },
+        "o200k_base": {
+          "source": 38,
+          "compact": 34
+        },
+        "Qwen2.5-Coder": {
+          "source": 40,
+          "compact": 33
+        }
+      }
+    },
+    {
+      "path": "examples/file_copy.tok",
+      "source_sha256": "2b6241e4355d051898fbef37d1f98dd65feb221651787f110685b2e4c6881780",
+      "compact_sha256": "c38a3b456bc319762b7cbb7a39e31381ad77493f6b6c5399ddc5e07b12752b83",
+      "functions": 1,
+      "bytes": {
+        "source": 165,
+        "compact": 162
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 51,
+          "compact": 50
+        },
+        "o200k_base": {
+          "source": 52,
+          "compact": 51
+        },
+        "Qwen2.5-Coder": {
+          "source": 51,
+          "compact": 50
+        }
+      }
+    },
+    {
+      "path": "examples/generic_pair.tok",
+      "source_sha256": "14389504829e014d0b15660a56d33db6fa5f7311e77160895b2e92659375b4b6",
+      "compact_sha256": "6375d672a1c79859f15ff02941c98631e84ae6113263b24237cc965713dbe85f",
+      "functions": 2,
+      "bytes": {
+        "source": 147,
+        "compact": 141
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 44,
+          "compact": 42
+        },
+        "o200k_base": {
+          "source": 44,
+          "compact": 42
+        },
+        "Qwen2.5-Coder": {
+          "source": 44,
+          "compact": 42
+        }
+      }
+    },
+    {
+      "path": "examples/i64_counter.tok",
+      "source_sha256": "eb2011663d9bc25a7d9c901627daaa97a9cfa392ca24f78acfba73e8b5febc32",
+      "compact_sha256": "0f5d2742f80810094490e143a3901d36f08f8eab4e61f09b6a23a44863c1ca12",
+      "functions": 1,
+      "bytes": {
+        "source": 130,
+        "compact": 125
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 43,
+          "compact": 41
+        },
+        "o200k_base": {
+          "source": 43,
+          "compact": 41
+        },
+        "Qwen2.5-Coder": {
+          "source": 46,
+          "compact": 43
+        }
+      }
+    },
+    {
+      "path": "examples/integer_match.tok",
+      "source_sha256": "be79e4deddc06ed8ef32456017b54026eed8adf90528a4786ad418829c62379e",
+      "compact_sha256": "5d6284632bd1b9f19181f598588e7d919ff3e8e22172b5ba7443500f4d5104b2",
+      "functions": 2,
+      "bytes": {
+        "source": 98,
+        "compact": 90
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 32,
+          "compact": 29
+        },
+        "o200k_base": {
+          "source": 34,
+          "compact": 32
+        },
+        "Qwen2.5-Coder": {
+          "source": 33,
+          "compact": 29
+        }
+      }
+    },
+    {
+      "path": "examples/iterative_factorial.tok",
+      "source_sha256": "b5147bc32849f70819cd6d0b9825072723ce06ff279d095bc106567a8efb821f",
+      "compact_sha256": "d337fb53c0fe44f88b2a556c341bd5fe3ce458e87a600885fb801b18ea1e7f9a",
+      "functions": 2,
+      "bytes": {
+        "source": 161,
+        "compact": 145
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 57,
+          "compact": 51
+        },
+        "o200k_base": {
+          "source": 57,
+          "compact": 51
+        },
+        "Qwen2.5-Coder": {
+          "source": 62,
+          "compact": 51
+        }
+      }
+    },
+    {
+      "path": "examples/json/bench_main.tok",
+      "source_sha256": "a136bf07f57b759ee314328feddcae8b7403d8d418cf48e9dc14b863bd9a2afc",
+      "compact_sha256": "d8b1872685289823fd6b58e1b78aea9dc87626c194f6ade495a3def1609a8b32",
+      "functions": 1,
+      "bytes": {
+        "source": 517,
+        "compact": 508
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 160,
+          "compact": 156
+        },
+        "o200k_base": {
+          "source": 164,
+          "compact": 160
+        },
+        "Qwen2.5-Coder": {
+          "source": 164,
+          "compact": 157
+        }
+      }
+    },
+    {
+      "path": "examples/json/invalid.tok",
+      "source_sha256": "eac2c8eb7566e82771d79972c4a03906accebc2227448409d037bbbcc8499498",
+      "compact_sha256": "00d6195bcdf6fcfa6e51fd18b5ca5142b5bad680f30a315b14e7d79f2985f49c",
+      "functions": 1,
+      "bytes": {
+        "source": 108,
+        "compact": 105
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 29,
+          "compact": 28
+        },
+        "o200k_base": {
+          "source": 29,
+          "compact": 28
+        },
+        "Qwen2.5-Coder": {
+          "source": 30,
+          "compact": 29
+        }
+      }
+    },
+    {
+      "path": "examples/json/json.tok",
+      "source_sha256": "25568ec8996f950f18155575a72caf58329b8dd94f0ded3064cec6a31bd58e96",
+      "compact_sha256": "8dc1d393d20478ad51b0372f9a268745145d61a02a4684bd930ddbe087f1b29e",
+      "functions": 25,
+      "bytes": {
+        "source": 8819,
+        "compact": 8638
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 2744,
+          "compact": 2666
+        },
+        "o200k_base": {
+          "source": 2776,
+          "compact": 2699
+        },
+        "Qwen2.5-Coder": {
+          "source": 2983,
+          "compact": 2852
+        }
+      }
+    },
+    {
+      "path": "examples/json/main.tok",
+      "source_sha256": "fa249f9310991227ab08aff316ccc1333d5e25ee6448872117503081449e0fa7",
+      "compact_sha256": "504dcf35a03fe8eb60614796dee1a02bc1a308da4f8179942a7474adec24b635",
+      "functions": 1,
+      "bytes": {
+        "source": 340,
+        "compact": 337
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 100,
+          "compact": 99
+        },
+        "o200k_base": {
+          "source": 101,
+          "compact": 100
+        },
+        "Qwen2.5-Coder": {
+          "source": 101,
+          "compact": 100
+        }
+      }
+    },
+    {
+      "path": "examples/json/parse_cli.tok",
+      "source_sha256": "b23e98e01d8852fe84a95039440c9096765009904db998b4cb02ef6c7d808c0d",
+      "compact_sha256": "6e79a2249f9872972fb6577281a641fc0f5ab396487ab2702d544312e40ecf49",
+      "functions": 1,
+      "bytes": {
+        "source": 229,
+        "compact": 226
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 63,
+          "compact": 62
+        },
+        "o200k_base": {
+          "source": 64,
+          "compact": 63
+        },
+        "Qwen2.5-Coder": {
+          "source": 63,
+          "compact": 62
+        }
+      }
+    },
+    {
+      "path": "examples/json/parse_invalid.tok",
+      "source_sha256": "0ab55c6bda77b8bb857f6910c9ccfc30d49a196a4ea5abd0c9841feedfd86e2a",
+      "compact_sha256": "ff6e5036cfaf62c9a4f6954b34707477ddc105143b2d1886ce5296e5702a606c",
+      "functions": 1,
+      "bytes": {
+        "source": 96,
+        "compact": 93
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 29,
+          "compact": 28
+        },
+        "o200k_base": {
+          "source": 29,
+          "compact": 28
+        },
+        "Qwen2.5-Coder": {
+          "source": 29,
+          "compact": 28
+        }
+      }
+    },
+    {
+      "path": "examples/json/parse_main.tok",
+      "source_sha256": "bd99bbde85742ece44cf30a238652e43e992f740479ca4daec482f2e329922ac",
+      "compact_sha256": "f1491b461ad54ad58ef11f653c8e7b104715535addd9bc7deebf927bd0ae6488",
+      "functions": 1,
+      "bytes": {
+        "source": 234,
+        "compact": 231
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 70,
+          "compact": 69
+        },
+        "o200k_base": {
+          "source": 73,
+          "compact": 72
+        },
+        "Qwen2.5-Coder": {
+          "source": 73,
+          "compact": 72
+        }
+      }
+    },
+    {
+      "path": "examples/json/parse_tests.tok",
+      "source_sha256": "f77cca0c7d052a2968c84b1892c6f14751983df8a04e6b07e6736d8b6eafe666",
+      "compact_sha256": "ca1d444360e13664ee4863db46385a876bc3474f5f096533a6f7376379972120",
+      "functions": 9,
+      "bytes": {
+        "source": 2346,
+        "compact": 2313
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 715,
+          "compact": 703
+        },
+        "o200k_base": {
+          "source": 721,
+          "compact": 709
+        },
+        "Qwen2.5-Coder": {
+          "source": 735,
+          "compact": 720
+        }
+      }
+    },
+    {
+      "path": "examples/json/render_bench_main.tok",
+      "source_sha256": "6371818b4b9422d7af4699f5dd3d1130c0de79c35be543a44da239f7e09a9e85",
+      "compact_sha256": "08d6f28a6da3447b618b83945f753bd016d71f375be95ea029d48c7dec865959",
+      "functions": 1,
+      "bytes": {
+        "source": 501,
+        "compact": 496
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 153,
+          "compact": 151
+        },
+        "o200k_base": {
+          "source": 157,
+          "compact": 155
+        },
+        "Qwen2.5-Coder": {
+          "source": 155,
+          "compact": 152
+        }
+      }
+    },
+    {
+      "path": "examples/json/tests.tok",
+      "source_sha256": "922c23736077aa4498933d61c00ad5d496e22997f6a3dcd38b71c41739fc8ff9",
+      "compact_sha256": "5b2f43e3113196db478cfb9b3ef218c593f3c21df825b39cefc289ac3fd9d307",
+      "functions": 8,
+      "bytes": {
+        "source": 2460,
+        "compact": 2434
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 740,
+          "compact": 731
+        },
+        "o200k_base": {
+          "source": 745,
+          "compact": 736
+        },
+        "Qwen2.5-Coder": {
+          "source": 804,
+          "compact": 794
+        }
+      }
+    },
+    {
+      "path": "examples/line_count.tok",
+      "source_sha256": "b0c9feb5fc8a70fd2f894a1ab7a6dda412a34ebab629ee750a74cf97d5088e2c",
+      "compact_sha256": "0d16ac5ca50488bfd31637c17fc01a0bf33c4d6b5c7d2d053a157218a9a138c2",
+      "functions": 2,
+      "bytes": {
+        "source": 241,
+        "compact": 229
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 64,
+          "compact": 59
+        },
+        "o200k_base": {
+          "source": 65,
+          "compact": 60
+        },
+        "Qwen2.5-Coder": {
+          "source": 67,
+          "compact": 59
+        }
+      }
+    },
+    {
+      "path": "examples/loop_control.tok",
+      "source_sha256": "6438885e3948db504fd015d9a69a718348bf7651a0b27492f516f6e77ef564c1",
+      "compact_sha256": "6242bd733a851ded4763d4dc5b7f05cc970bde198461268cfdb0acb922b72cc5",
+      "functions": 1,
+      "bytes": {
+        "source": 182,
+        "compact": 173
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 65,
+          "compact": 61
+        },
+        "o200k_base": {
+          "source": 65,
+          "compact": 61
+        },
+        "Qwen2.5-Coder": {
+          "source": 69,
+          "compact": 62
+        }
+      }
+    },
+    {
+      "path": "examples/match_result.tok",
+      "source_sha256": "b8e20823d43b3360302cb1c6e282742fdec9d0b12a6fbf02c582ba474ad32423",
+      "compact_sha256": "1f49d918bf5609a1c12cf8ab851de9aaefd20618695f56092436e21aea3bbd57",
+      "functions": 2,
+      "bytes": {
+        "source": 271,
+        "compact": 259
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 84,
+          "compact": 79
+        },
+        "o200k_base": {
+          "source": 84,
+          "compact": 79
+        },
+        "Qwen2.5-Coder": {
+          "source": 87,
+          "compact": 79
+        }
+      }
+    },
+    {
+      "path": "examples/modules/main.tok",
+      "source_sha256": "3769388bf5f5bde3b623f512f8f8845061a510d65a197761010abc6de055d0a7",
+      "compact_sha256": "3031377e27541c30651748b96ea3e31551600c05c9ae45b6733972addda97f2c",
+      "functions": 1,
+      "bytes": {
+        "source": 55,
+        "compact": 50
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 20,
+          "compact": 18
+        },
+        "o200k_base": {
+          "source": 20,
+          "compact": 18
+        },
+        "Qwen2.5-Coder": {
+          "source": 21,
+          "compact": 18
+        }
+      }
+    },
+    {
+      "path": "examples/modules/math.tok",
+      "source_sha256": "89552b595da2a7603da19b01e1b4e1819b420b0bee077913b33d1839849d6915",
+      "compact_sha256": "f553421262a01eae240a094a21f0abde305333de802ea417d20af721ec1e35d8",
+      "functions": 1,
+      "bytes": {
+        "source": 31,
+        "compact": 24
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 13,
+          "compact": 10
+        },
+        "o200k_base": {
+          "source": 14,
+          "compact": 11
+        },
+        "Qwen2.5-Coder": {
+          "source": 15,
+          "compact": 10
+        }
+      }
+    },
+    {
+      "path": "examples/modules/tests.tok",
+      "source_sha256": "c538ffb14ffa599daf5260690f71c8c4664b9d6322faa60a0e1767c1ed27ef84",
+      "compact_sha256": "75ddebbb8b21e362cc79b9a15c80bf6de441a6e12c5e34faf9823d903d317b0a",
+      "functions": 1,
+      "bytes": {
+        "source": 67,
+        "compact": 64
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 23,
+          "compact": 22
+        },
+        "o200k_base": {
+          "source": 23,
+          "compact": 22
+        },
+        "Qwen2.5-Coder": {
+          "source": 24,
+          "compact": 23
+        }
+      }
+    },
+    {
+      "path": "examples/option_lookup.tok",
+      "source_sha256": "03c59bbe0545cea43bb2e0ef90e8bc1c9b4b10f44b099c0f48d9dc5089bba99e",
+      "compact_sha256": "71257170626a41ba93df666654d0543209f1038f3a4913375e594503094a61ad",
+      "functions": 2,
+      "bytes": {
+        "source": 121,
+        "compact": 109
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 41,
+          "compact": 36
+        },
+        "o200k_base": {
+          "source": 41,
+          "compact": 36
+        },
+        "Qwen2.5-Coder": {
+          "source": 44,
+          "compact": 36
+        }
+      }
+    },
+    {
+      "path": "examples/package_json/main.tok",
+      "source_sha256": "89e1a5f61180feaf06c1c640f00803fd736cff64e0ce4470e6edb6169ea0c34c",
+      "compact_sha256": "e0382fe83821d8ce9e4b0c86c9f67b565cf0573c471e6f63047134816c0b9f38",
+      "functions": 1,
+      "bytes": {
+        "source": 198,
+        "compact": 195
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 54,
+          "compact": 53
+        },
+        "o200k_base": {
+          "source": 55,
+          "compact": 54
+        },
+        "Qwen2.5-Coder": {
+          "source": 54,
+          "compact": 53
+        }
+      }
+    },
+    {
+      "path": "examples/package_tree/app/main.tok",
+      "source_sha256": "8f29b4ca1634730ce3f81fd1c43b3e1c518647da0b3ae6ee8792dffe620bc4f2",
+      "compact_sha256": "10bd0ec357584d900080ed03a987882da522c385bb4467d2e3b5de3e92b3e3ef",
+      "functions": 1,
+      "bytes": {
+        "source": 54,
+        "compact": 49
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 17,
+          "compact": 15
+        },
+        "o200k_base": {
+          "source": 17,
+          "compact": 15
+        },
+        "Qwen2.5-Coder": {
+          "source": 18,
+          "compact": 15
+        }
+      }
+    },
+    {
+      "path": "examples/package_tree/lib/api.tok",
+      "source_sha256": "4d94ceff21ba57de180addb2330bbcccb56333ffc21555274cea977a858ad7fe",
+      "compact_sha256": "a37d2d5d555ff67ffc5a7785244173214bd05b78859b68d98c6438c3c4dc243e",
+      "functions": 1,
+      "bytes": {
+        "source": 71,
+        "compact": 66
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 21,
+          "compact": 19
+        },
+        "o200k_base": {
+          "source": 21,
+          "compact": 19
+        },
+        "Qwen2.5-Coder": {
+          "source": 23,
+          "compact": 20
+        }
+      }
+    },
+    {
+      "path": "examples/package_tree/lib/internal/math.tok",
+      "source_sha256": "b0eb4c289c1c169054a245ed550521adf8730be5150f86004359b33d95aed558",
+      "compact_sha256": "f336dd2f83caa5c795cdb0487a83e2641813a308e66a8d82ce4191ed8f42ad55",
+      "functions": 1,
+      "bytes": {
+        "source": 31,
+        "compact": 24
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 13,
+          "compact": 10
+        },
+        "o200k_base": {
+          "source": 14,
+          "compact": 11
+        },
+        "Qwen2.5-Coder": {
+          "source": 15,
+          "compact": 10
+        }
+      }
+    },
+    {
+      "path": "examples/parse_argument.tok",
+      "source_sha256": "127b7dd34e325754a8e9f0412c15959c48610ad91539402081ac405b4a0e0502",
+      "compact_sha256": "ca895c70d482530be34d0af04926bfacb4d31c9e1b7b46672979e9b69f851dc1",
+      "functions": 1,
+      "bytes": {
+        "source": 142,
+        "compact": 137
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 42,
+          "compact": 40
+        },
+        "o200k_base": {
+          "source": 42,
+          "compact": 40
+        },
+        "Qwen2.5-Coder": {
+          "source": 44,
+          "compact": 41
+        }
+      }
+    },
+    {
+      "path": "examples/parse_numbers.tok",
+      "source_sha256": "9439038a8609046714358794dd3432f2601eaee75d582e226bb8c50b69be5655",
+      "compact_sha256": "64bf6be775fa1747a2096788920b587da68e25a5a2f779a9fd801a6c8f3a2f14",
+      "functions": 1,
+      "bytes": {
+        "source": 135,
+        "compact": 128
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 38,
+          "compact": 35
+        },
+        "o200k_base": {
+          "source": 38,
+          "compact": 35
+        },
+        "Qwen2.5-Coder": {
+          "source": 41,
+          "compact": 36
+        }
+      }
+    },
+    {
+      "path": "examples/payload_enum.tok",
+      "source_sha256": "e9e4247c57bb4ec04f289d1391343f397edce24f9e5e045abaa5db376eac6187",
+      "compact_sha256": "bdc96c981af10a8e93bac0fcf18fd6cfe7469df8b13222d2ce1aeb651a20b157",
+      "functions": 2,
+      "bytes": {
+        "source": 299,
+        "compact": 291
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 72,
+          "compact": 69
+        },
+        "o200k_base": {
+          "source": 73,
+          "compact": 70
+        },
+        "Qwen2.5-Coder": {
+          "source": 73,
+          "compact": 69
+        }
+      }
+    },
+    {
+      "path": "examples/record.tok",
+      "source_sha256": "6cd56914a610b88b80419d8f38b4e3e372bfa1f9083595f90cc0e2057b1dae27",
+      "compact_sha256": "f86e8a1da5122ea212235b63ec5e96112f1f0974b3e7a4b2d27cc582fb636456",
+      "functions": 2,
+      "bytes": {
+        "source": 181,
+        "compact": 169
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 56,
+          "compact": 51
+        },
+        "o200k_base": {
+          "source": 57,
+          "compact": 52
+        },
+        "Qwen2.5-Coder": {
+          "source": 59,
+          "compact": 51
+        }
+      }
+    },
+    {
+      "path": "examples/signed_literals.tok",
+      "source_sha256": "031749242a19575e78a5560b91dfabb1b4d6b5aa330d74f8a803004dc8a99947",
+      "compact_sha256": "e9d9ed09eac0da90b1824a7eda1bf26e292f7a970c50c00c0ea55b013848281c",
+      "functions": 2,
+      "bytes": {
+        "source": 114,
+        "compact": 106
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 35,
+          "compact": 32
+        },
+        "o200k_base": {
+          "source": 37,
+          "compact": 35
+        },
+        "Qwen2.5-Coder": {
+          "source": 42,
+          "compact": 38
+        }
+      }
+    },
+    {
+      "path": "examples/string_builder.tok",
+      "source_sha256": "3caaefd5edc41a93aa428fa46e8710e84bb61d3ed9e447e65b1679c1349f83c5",
+      "compact_sha256": "ed1460f14a91e1dcaf479363caaabcf5a6235f06e12634cd5eca1d31fe4af263",
+      "functions": 1,
+      "bytes": {
+        "source": 76,
+        "compact": 73
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 22,
+          "compact": 21
+        },
+        "o200k_base": {
+          "source": 22,
+          "compact": 21
+        },
+        "Qwen2.5-Coder": {
+          "source": 22,
+          "compact": 21
+        }
+      }
+    },
+    {
+      "path": "examples/sum_positive.tok",
+      "source_sha256": "370d571132a473effff30137a7cf5e757319b175dfacbd0f30b35cb0deb676fd",
+      "compact_sha256": "e5ced79f842d9eb1f97a199383a90c30ef1baac843c7b8d280a491f030a59baa",
+      "functions": 2,
+      "bytes": {
+        "source": 152,
+        "compact": 138
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 60,
+          "compact": 54
+        },
+        "o200k_base": {
+          "source": 60,
+          "compact": 54
+        },
+        "Qwen2.5-Coder": {
+          "source": 64,
+          "compact": 54
+        }
+      }
+    },
+    {
+      "path": "examples/task_square.tok",
+      "source_sha256": "333cfca5b3937ef96391620482d4a8e89f98cea9f04e76069420313debc1ece8",
+      "compact_sha256": "ec9fc38dbca3e42a9b336ba5f0f86e95e3fe506bb7165d20ecfb40b121c32972",
+      "functions": 2,
+      "bytes": {
+        "source": 213,
+        "compact": 193
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 73,
+          "compact": 64
+        },
+        "o200k_base": {
+          "source": 73,
+          "compact": 64
+        },
+        "Qwen2.5-Coder": {
+          "source": 80,
+          "compact": 64
+        }
+      }
+    },
+    {
+      "path": "examples/tests.tok",
+      "source_sha256": "e9341d9825eb3a64be409677a73efc812df7c934192d9c33c0ac4453ac2a8cd6",
+      "compact_sha256": "54c89ae4b1fbcc31cc62e92139dbaf02a065fdc45edcbda83c1d736e8917b19a",
+      "functions": 4,
+      "bytes": {
+        "source": 206,
+        "compact": 184
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 80,
+          "compact": 71
+        },
+        "o200k_base": {
+          "source": 80,
+          "compact": 71
+        },
+        "Qwen2.5-Coder": {
+          "source": 88,
+          "compact": 74
+        }
+      }
+    },
+    {
+      "path": "examples/utf8_roundtrip.tok",
+      "source_sha256": "0698a0974b27ebb86d44e19a89bbf7ada4e67f722f0e4f9ab608173e4ec2b402",
+      "compact_sha256": "cbc71e225396b07937ff06c36bca719aa88ac21d07367c1cadf203ae1232634b",
+      "functions": 1,
+      "bytes": {
+        "source": 69,
+        "compact": 66
+      },
+      "tokens": {
+        "cl100k_base": {
+          "source": 21,
+          "compact": 20
+        },
+        "o200k_base": {
+          "source": 22,
+          "compact": 21
+        },
+        "Qwen2.5-Coder": {
+          "source": 21,
+          "compact": 20
+        }
+      }
+    }
+  ]
+}
