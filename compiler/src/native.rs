@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::ast::{Expr, ExprKind, Op, PatternKind, Program, Span, Stmt, Type};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
+use crate::ir::{self, BinaryOp, InstructionKind};
 use crate::sources::SourceMap;
 
 const PRELUDE_CORE: &str = include_str!("native_runtime/core.rs.txt");
@@ -474,6 +475,83 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     }
 }
 
+fn emit_ir_function(function: &ir::Function, source: &SourceMap) -> String {
+    let params = function
+        .params
+        .iter()
+        .map(|(name, ty)| format!("{}: {}", user_name(name), rust_type(ty)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let (source_id, line, column) = location(source, function.span);
+    let mut out = format!(
+        "fn {}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({source_id},{line},{column});\n",
+        user_name(&function.name),
+        rust_type(&function.ret)
+    );
+    for instruction in &function.instructions {
+        let value = match instruction.kind {
+            InstructionKind::Parameter(index) => user_name(&function.params[index].0),
+            InstructionKind::I32(value) => format!("{value}i32"),
+            InstructionKind::I64(value) => format!("{value}i64"),
+            InstructionKind::Bool(value) => value.to_string(),
+            InstructionKind::CheckedNeg(value) => {
+                let helper = if instruction.ty == Type::I64 {
+                    "__tok_neg_i64"
+                } else {
+                    "__tok_neg"
+                };
+                let (source_id, line, column) = location(source, instruction.span);
+                format!("{helper}(__tok_v{},{source_id},{line},{column})", value.0)
+            }
+            InstructionKind::Binary(op, left, right) => {
+                let left_name = format!("__tok_v{}", left.0);
+                let right_name = format!("__tok_v{}", right.0);
+                match op {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                        let operation = match op {
+                            BinaryOp::Add => "add",
+                            BinaryOp::Sub => "sub",
+                            BinaryOp::Mul => "mul",
+                            BinaryOp::Div => "div",
+                            _ => unreachable!(),
+                        };
+                        let suffix = if instruction.ty == Type::I64 {
+                            "_i64"
+                        } else {
+                            ""
+                        };
+                        let (source_id, line, column) = location(source, instruction.span);
+                        format!(
+                            "__tok_{operation}{suffix}({left_name},{right_name},{source_id},{line},{column})"
+                        )
+                    }
+                    _ => {
+                        let symbol = match op {
+                            BinaryOp::Eq => "==",
+                            BinaryOp::Ne => "!=",
+                            BinaryOp::Lt => "<",
+                            BinaryOp::Le => "<=",
+                            BinaryOp::Gt => ">",
+                            BinaryOp::Ge => ">=",
+                            _ => unreachable!(),
+                        };
+                        format!("({left_name} {symbol} {right_name})")
+                    }
+                }
+            }
+        };
+        writeln!(
+            out,
+            "let __tok_v{}: {} = {value};",
+            instruction.id.0,
+            rust_type(&instruction.ty)
+        )
+        .expect("writing to String cannot fail");
+    }
+    writeln!(out, "__tok_v{} }}", function.result.0).expect("writing to String cannot fail");
+    out
+}
+
 pub fn emit(program: &Program, source: &str) -> Result<String, Diagnostic> {
     emit_with_sources(program, &SourceMap::single(source))
 }
@@ -620,6 +698,10 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             .expect("writing to String cannot fail");
     }
     for function in &program.functions {
+        if let Some(lowered) = ir::lower_function(function, &types) {
+            out.push_str(&emit_ir_function(&lowered, source));
+            continue;
+        }
         let bounds = function
             .type_params
             .iter()

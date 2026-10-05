@@ -7,6 +7,7 @@ pub mod explain;
 pub mod filesystem;
 pub mod format;
 pub mod interpreter;
+pub mod ir;
 pub mod lexer;
 pub mod lsp;
 pub mod module_resolver;
