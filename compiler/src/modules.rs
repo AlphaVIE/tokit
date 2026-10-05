@@ -37,8 +37,9 @@ impl LoadError {
     }
 }
 
-struct Loader {
+struct Loader<'a> {
     root_dir: PathBuf,
+    overrides: &'a HashMap<PathBuf, String>,
     sources: SourceMap,
     visited: HashMap<PathBuf, SourceId>,
     active: HashSet<PathBuf>,
@@ -66,10 +67,17 @@ fn package_relative_path(parent: &Path, root: &Path, relative: &Path) -> Option<
     path.starts_with(root).then_some(path)
 }
 
-impl Loader {
-    fn new(root_dir: PathBuf) -> Self {
+fn overlay_path(path: &Path, overrides: &HashMap<PathBuf, String>) -> Option<PathBuf> {
+    let parent = fs::canonicalize(path.parent()?).ok()?;
+    let candidate = parent.join(path.file_name()?);
+    overrides.contains_key(&candidate).then_some(candidate)
+}
+
+impl<'a> Loader<'a> {
+    fn new(root_dir: PathBuf, overrides: &'a HashMap<PathBuf, String>) -> Self {
         Self {
             root_dir,
+            overrides,
             sources: SourceMap::new(),
             visited: HashMap::new(),
             active: HashSet::new(),
@@ -145,13 +153,16 @@ impl Loader {
                 Diagnostic::new("E120", import.span, "import escapes the package directory")
             })?
         } else {
-            fs::canonicalize(parent.join(relative)).map_err(|error| {
-                Diagnostic::new(
-                    "E118",
-                    import.span,
-                    format!("cannot resolve import {}: {error}", import.path),
-                )
-            })?
+            let requested = parent.join(relative);
+            fs::canonicalize(&requested)
+                .or_else(|error| overlay_path(&requested, self.overrides).ok_or(error))
+                .map_err(|error| {
+                    Diagnostic::new(
+                        "E118",
+                        import.span,
+                        format!("cannot resolve import {}: {error}", import.path),
+                    )
+                })?
         };
         if !canonical.starts_with(boundary) {
             return Err(Diagnostic::new(
@@ -202,7 +213,9 @@ impl Loader {
         if let Some(id) = self.visited.get(&path) {
             return Ok(*id);
         }
-        let text = if let Some(file) = self.package_files.get(&path) {
+        let text = if let Some(text) = self.overrides.get(&path) {
+            text.clone()
+        } else if let Some(file) = self.package_files.get(&path) {
             file.source.clone()
         } else {
             fs::read_to_string(&path).map_err(|error| {
@@ -266,26 +279,35 @@ impl Loader {
 }
 
 pub fn load(path: &Path) -> Result<LoadedProgram, LoadError> {
-    let root = match fs::canonicalize(path) {
-        Ok(root) => root,
-        Err(error) => {
-            let mut sources = SourceMap::new();
-            sources.push(path.to_path_buf(), String::new());
-            return Err(LoadError {
-                diagnostic: Diagnostic::new(
-                    "E118",
-                    Span::new(0, 0),
-                    format!("cannot open entry file: {error}"),
-                ),
-                sources,
-            });
-        }
-    };
+    load_with_overrides(path, &HashMap::new())
+}
+
+/// Load a module graph while replacing canonical source paths with editor text.
+pub fn load_with_overrides(
+    path: &Path,
+    overrides: &HashMap<PathBuf, String>,
+) -> Result<LoadedProgram, LoadError> {
+    let root =
+        match fs::canonicalize(path).or_else(|error| overlay_path(path, overrides).ok_or(error)) {
+            Ok(root) => root,
+            Err(error) => {
+                let mut sources = SourceMap::new();
+                sources.push(path.to_path_buf(), String::new());
+                return Err(LoadError {
+                    diagnostic: Diagnostic::new(
+                        "E118",
+                        Span::new(0, 0),
+                        format!("cannot open entry file: {error}"),
+                    ),
+                    sources,
+                });
+            }
+        };
     let root_dir = root
         .parent()
         .expect("canonical entry has parent")
         .to_path_buf();
-    let mut loader = Loader::new(root_dir);
+    let mut loader = Loader::new(root_dir, overrides);
     if let Err(diagnostic) = loader.visit(root.clone(), None) {
         if loader.sources.is_empty() {
             loader.sources.push(root, String::new());

@@ -1,7 +1,9 @@
 //! Small stdio language server for live diagnostics and document symbols.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value as Json, json};
 
@@ -13,6 +15,66 @@ const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 struct Document {
     text: String,
     version: i64,
+}
+
+fn file_uri_path(uri: &str) -> Option<PathBuf> {
+    let encoded = uri.strip_prefix("file://")?;
+    let encoded = encoded.strip_prefix("localhost").unwrap_or(encoded);
+    let encoded = encoded.split(['?', '#']).next()?;
+    if !encoded.starts_with('/') {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(encoded.len());
+    let mut at = 0;
+    while at < encoded.len() {
+        if encoded.as_bytes()[at] == b'%' {
+            let hex = std::str::from_utf8(encoded.as_bytes().get(at + 1..at + 3)?).ok()?;
+            bytes.push(u8::from_str_radix(hex, 16).ok()?);
+            at += 3;
+        } else {
+            bytes.push(encoded.as_bytes()[at]);
+            at += 1;
+        }
+    }
+    let decoded = String::from_utf8(bytes).ok()?;
+    #[cfg(windows)]
+    let decoded = {
+        let bytes = decoded.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0] == b'/'
+            && bytes[1].is_ascii_alphabetic()
+            && bytes[2] == b':'
+        {
+            &decoded[1..]
+        } else {
+            decoded.as_str()
+        }
+    };
+    let path = PathBuf::from(decoded);
+    if path.extension().is_none_or(|extension| extension != "tok") {
+        return None;
+    }
+    fs::canonicalize(&path).ok().or_else(|| {
+        let parent = fs::canonicalize(path.parent()?).ok()?;
+        Some(parent.join(path.file_name()?))
+    })
+}
+
+fn path_uri(path: &Path) -> Option<String> {
+    let raw = path.to_str()?.replace('\\', "/");
+    #[cfg(windows)]
+    let raw = raw.strip_prefix("//?/").unwrap_or(&raw);
+    #[cfg(windows)]
+    let raw = format!("/{raw}");
+    let mut encoded = String::new();
+    for byte in raw.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b':' | b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    Some(format!("file://{encoded}"))
 }
 
 fn read_message<R: BufRead>(input: &mut R) -> io::Result<Option<Result<Json, serde_json::Error>>> {
@@ -93,28 +155,95 @@ fn diagnostic(text: &str, error: &Diagnostic) -> Json {
     })
 }
 
-fn publish<W: Write>(output: &mut W, uri: &str, document: Option<&Document>) -> io::Result<()> {
-    let diagnostics = document
-        .and_then(|document| {
-            let error = match crate::parse(&document.text) {
-                Err(error) => Some(error),
-                Ok(program) if program.imports.is_empty() => crate::checker::check(&program).err(),
-                // Module resolution needs a file-backed graph. Until the LSP
-                // has an in-memory graph, avoid false unresolved-name errors.
-                Ok(_) => None,
-            };
-            error.map(|error| (document, error))
-        })
-        .map(|(document, error)| vec![diagnostic(&document.text, &error)])
-        .unwrap_or_default();
+fn standalone_error(text: &str) -> Option<Diagnostic> {
+    match crate::parse(text) {
+        Err(error) => Some(error),
+        Ok(program) if program.imports.is_empty() => crate::checker::check(&program).err(),
+        Ok(_) => None,
+    }
+}
+
+fn collect_diagnostics(documents: &HashMap<String, Document>) -> HashMap<String, Vec<Json>> {
+    let mut overrides = HashMap::new();
+    let mut uri_for_path = HashMap::new();
+    for (uri, document) in documents {
+        if let Some(path) = file_uri_path(uri) {
+            overrides.insert(path.clone(), document.text.clone());
+            uri_for_path.insert(path, uri.clone());
+        }
+    }
+    let mut publications = documents
+        .keys()
+        .map(|uri| (uri.clone(), Vec::new()))
+        .collect::<HashMap<_, _>>();
+    let mut entries = documents.iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(uri, _)| *uri);
+    for (uri, document) in entries {
+        let finding = if let Some(path) = file_uri_path(uri) {
+            crate::modules::load_with_overrides(&path, &overrides)
+                .err()
+                .and_then(|error| {
+                    let source = error.sources.get(error.diagnostic.span.source_id)?;
+                    let target_uri = uri_for_path
+                        .get(&source.path)
+                        .cloned()
+                        .or_else(|| path_uri(&source.path))
+                        .unwrap_or_else(|| uri.clone());
+                    Some((target_uri, diagnostic(&source.text, &error.diagnostic)))
+                })
+        } else {
+            standalone_error(&document.text)
+                .map(|error| (uri.clone(), diagnostic(&document.text, &error)))
+        };
+        if let Some((target_uri, finding)) = finding {
+            let list = publications.entry(target_uri).or_default();
+            if !list.contains(&finding) {
+                list.push(finding);
+            }
+        }
+    }
+    publications
+}
+
+fn publish<W: Write>(
+    output: &mut W,
+    uri: &str,
+    version: Option<i64>,
+    diagnostics: Vec<Json>,
+) -> io::Result<()> {
     let mut params = json!({"uri": uri, "diagnostics": diagnostics});
-    if let Some(document) = document {
-        params["version"] = json!(document.version);
+    if let Some(version) = version {
+        params["version"] = json!(version);
     }
     send(
         output,
         &json!({"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": params}),
     )
+}
+
+fn publish_all<W: Write>(
+    output: &mut W,
+    documents: &HashMap<String, Document>,
+    previously_published: &mut HashSet<String>,
+) -> io::Result<()> {
+    let mut current = collect_diagnostics(documents);
+    let current_uris = current.keys().cloned().collect::<HashSet<_>>();
+    let mut all_uris = current_uris
+        .union(previously_published)
+        .cloned()
+        .collect::<Vec<_>>();
+    all_uris.sort();
+    for uri in all_uris {
+        let version = documents.get(&uri).map(|document| document.version);
+        publish(
+            output,
+            &uri,
+            version,
+            current.remove(&uri).unwrap_or_default(),
+        )?;
+    }
+    *previously_published = current_uris;
+    Ok(())
 }
 
 fn symbols(text: &str) -> Json {
@@ -178,6 +307,7 @@ fn error_response(id: &Json, code: i32, message: &str) -> Json {
 /// Serve LSP messages until `exit` or EOF. Returns true only after a clean shutdown.
 pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<bool> {
     let mut documents = HashMap::<String, Document>::new();
+    let mut previously_published = HashSet::new();
     let mut initialized = false;
     let mut shutdown = false;
     while let Some(message) = read_message(input)? {
@@ -232,7 +362,7 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                             version,
                         },
                     );
-                    publish(output, uri, documents.get(uri))?;
+                    publish_all(output, &documents, &mut previously_published)?;
                 }
             }
             Some("textDocument/didChange") if initialized && !shutdown && id.is_none() => {
@@ -249,14 +379,14 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                 {
                     document.text = text.to_owned();
                     document.version = version;
-                    publish(output, uri, Some(document))?;
+                    publish_all(output, &documents, &mut previously_published)?;
                 }
             }
             Some("textDocument/didClose") if initialized && !shutdown && id.is_none() => {
                 if let Some(uri) = params["textDocument"]["uri"].as_str()
                     && documents.remove(uri).is_some()
                 {
-                    publish(output, uri, None)?;
+                    publish_all(output, &documents, &mut previously_published)?;
                 }
             }
             Some("textDocument/documentSymbol") if initialized && !shutdown && id.is_some() => {

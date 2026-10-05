@@ -9,14 +9,16 @@ capability. No editor extension is bundled yet.
 The current server supports `initialize`, `shutdown`, `exit`, full-document
 `didOpen`/`didChange`/`didClose` synchronization, published diagnostics, and
 top-level function, record, and enum document symbols. It checks unsaved
-standalone buffers in memory. Diagnostics currently contain the first parser
-or checker error. Closing a document clears its diagnostics. Stale document
-versions are ignored.
+buffers in memory, including relative imports and pinned package sources.
+Diagnostics currently contain the first loader, parser, or checker error.
+Changing an imported buffer rechecks dependent open documents. Closing a
+document discards its unsaved text and clears stale diagnostics. Stale
+document versions are ignored.
 
-Imported files receive syntax diagnostics and document symbols, but semantic
-diagnostics are deferred until an in-memory module graph can resolve open
-buffers and package imports together. Completion, definition lookup, rename,
-incremental text edits, and editor-specific integration are future work. This
-is an IDE bootstrap, not a full language-service implementation.
+The server rechecks all open documents after each change. It has no
+incremental dependency cache yet, and package lockfiles are still validated
+against the saved package tree. Completion, definition lookup, rename,
+incremental text edits, and editor-specific integration are future work.
+This is an IDE bootstrap, not a full language-service implementation.
 
 The protocol behavior follows the [Language Server Protocol specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/).

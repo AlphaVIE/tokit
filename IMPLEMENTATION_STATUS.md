@@ -25,7 +25,7 @@ denominator and revise this inventory when evidence changes.
 | 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md) | Runnable partial implementation; networking and broad APIs absent |
 | 12 Toolchain | [CLI](compiler/src/main.rs), [formatter](compiler/src/format.rs), [local packages](spec/LOCAL_PACKAGE_CANDIDATE.md) | Runnable partial implementation; registry/build ecosystem incomplete |
 | 13 AI interfaces | [Program index](compiler/src/ai_index.rs), [structured diagnostics](spec/AI_INDEX.md) | Runnable partial implementation; transactional AST edits absent |
-| 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; imported-file semantics and editor integration absent |
+| 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; editor integration and navigation absent |
 | 15 Self-hosting | Compiler remains written in Rust | No working artifact |
 
 The current implementation supports a checked experimental subset, including
