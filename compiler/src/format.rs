@@ -46,7 +46,10 @@ pub fn format(source: &str) -> Result<String, Diagnostic> {
         {
             if before.kind == Kind::RBrace
                 && brace_depth == 0
-                && matches!(token.kind, Kind::Fn | Kind::Struct | Kind::Enum)
+                && matches!(
+                    token.kind,
+                    Kind::Fn | Kind::Ident(_) | Kind::Struct | Kind::Enum
+                )
             {
                 out.push('\n');
             } else if needs_space(before, token, source) {
@@ -67,4 +70,38 @@ pub fn format(source: &str) -> Result<String, Diagnostic> {
         out.push('\n');
     }
     Ok(out)
+}
+
+/// Remove optional `fn` tokens from declarations, preserving every other byte.
+pub fn compact_functions(source: &str) -> Result<String, Diagnostic> {
+    let program = crate::parse(source)?;
+    let tokens = lexer::lex(source)?;
+    let mut removals = Vec::new();
+    for function in &program.functions {
+        let Some(index) = tokens
+            .iter()
+            .position(|token| token.span.start == function.span.start)
+        else {
+            continue;
+        };
+        if tokens[index].kind != Kind::Fn {
+            continue;
+        }
+        let end = tokens[index + 1].span.start;
+        let between = &source[tokens[index].span.end..end];
+        removals.push((
+            tokens[index].span.start,
+            if between.chars().all(char::is_whitespace) {
+                end
+            } else {
+                tokens[index].span.end
+            },
+        ));
+    }
+    let mut result = source.to_owned();
+    for (start, end) in removals.into_iter().rev() {
+        result.replace_range(start..end, "");
+    }
+    crate::parse(&result)?;
+    Ok(result)
 }

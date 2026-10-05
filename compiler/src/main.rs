@@ -407,6 +407,30 @@ fn main() {
         }
         return;
     }
+    let compact = match args.as_slice() {
+        [_, command, path] if command == "compact" => Some((path, false)),
+        [_, command, flag, path] if command == "compact" && flag == "--write" => Some((path, true)),
+        _ => None,
+    };
+    if let Some((path, write)) = compact {
+        let source = fs::read_to_string(path).unwrap_or_else(|error| {
+            eprintln!("could not read {path}: {error}");
+            process::exit(2);
+        });
+        let result = tokit_compiler::format::compact_functions(&source).unwrap_or_else(|error| {
+            eprintln!("{}", error.display(&source));
+            process::exit(1);
+        });
+        if write {
+            fs::write(path, result).unwrap_or_else(|error| {
+                eprintln!("could not write {path}: {error}");
+                process::exit(2);
+            });
+        } else {
+            print!("{result}");
+        }
+        return;
+    }
     let fmt = match args.as_slice() {
         [_, command, path] if command == "fmt" => Some(("print", path)),
         [_, command, mode, path]
