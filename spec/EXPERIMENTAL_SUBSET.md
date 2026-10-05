@@ -7,7 +7,7 @@ This document describes exactly what the current Rust prototype accepts. It is a
 ```text
 program  = import* (("pub"? function) | ("pub"? record) | ("pub"? enum))* ;
 import   = "import" identifier "=" string ";" ;
-function = "fn" identifier generic-params? "(" parameters? ")" "->" type block ;
+function = "fn"? identifier generic-params? "(" parameters? ")" "->" type block ;
 record   = "struct" identifier generic-params? "{" (identifier ":" type ("," identifier ":" type)*)? "}" ;
 enum     = "enum" identifier "{" (enum-variant ("," enum-variant)*)? "}" ;
 enum-variant = identifier ("(" type ")")? ;

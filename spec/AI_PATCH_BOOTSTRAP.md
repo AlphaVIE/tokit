@@ -31,7 +31,7 @@ writing it. Add `--write` to save it. A version 1 request has this shape:
 
 The target is a `.tok` file inside the entry directory and must belong to its
 loaded module graph. Pinned package sources are excluded. Each replacement
-contains exactly one function with the same name and no `pub` or surrounding
+contains exactly one function (with optional `fn`) with the same name and no `pub` or surrounding
 comments. All hashes and replacements are checked against one
 source snapshot. The compiler then checks the entire loaded module graph with
 the proposed text, including importers, before writing any change. `--write`
