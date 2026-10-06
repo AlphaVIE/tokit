@@ -1253,11 +1253,21 @@ fn infer(
             if actual == Type::Never {
                 return Ok(Type::Never);
             }
+            if let Type::Option(value) = actual {
+                if !matches!(return_type, Type::Option(_)) {
+                    return Err(Diagnostic::new(
+                        "E111",
+                        expr.span,
+                        "? on an Option requires an Option return type",
+                    ));
+                }
+                return Ok(*value);
+            }
             let Type::Result(ok, err) = actual else {
                 return Err(Diagnostic::new(
                     "E111",
                     inner.span,
-                    "? requires a Result value",
+                    "? requires a Result or Option value",
                 ));
             };
             let Type::Result(_, expected_err) = return_type else {

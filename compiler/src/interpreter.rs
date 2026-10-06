@@ -454,8 +454,9 @@ fn eval(
         ExprKind::Try(inner) => {
             let value = take_value!(eval(inner, env, program, depth, runtime));
             match value {
-                Value::Ok(value) => *value,
+                Value::Ok(value) | Value::Some(value) => *value,
                 Value::Err(value) => return Ok(Flow::Return(Value::Err(value))),
+                Value::None => return Ok(Flow::Return(Value::None)),
                 _ => {
                     return Err(Diagnostic::new(
                         "E204",
