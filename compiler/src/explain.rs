@@ -27,6 +27,7 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
         ExprKind::Int(_)
         | ExprKind::I64(_)
+        | ExprKind::F64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)
@@ -90,8 +91,13 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("array or byte length");
             } else if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {
                 facts.operations.insert("integer parsing");
-            } else if name == builtins::WIDEN_I64 || name == builtins::NARROW_I32 {
-                facts.operations.insert("integer conversion");
+            } else if name == builtins::PARSE_F64 {
+                facts.operations.insert("float parsing");
+            } else if name == builtins::WIDEN_I64
+                || name == builtins::NARROW_I32
+                || name == builtins::TO_F64
+            {
+                facts.operations.insert("numeric conversion");
             } else if name == builtins::UTF8_BYTES {
                 facts.operations.insert("UTF-8 encoding");
             } else if name == builtins::UTF8_DECODE {

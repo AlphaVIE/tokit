@@ -97,7 +97,13 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             vec![Type::String],
             builtins::parse_i64_result(),
         ),
+        (
+            builtins::PARSE_F64,
+            vec![Type::String],
+            builtins::parse_f64_result(),
+        ),
         (builtins::WIDEN_I64, vec![Type::I32], Type::I64),
+        (builtins::TO_F64, vec![Type::I32], Type::F64),
         (
             builtins::NARROW_I32,
             vec![Type::I64],
@@ -172,6 +178,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             record.name.as_str(),
             "i32"
                 | "i64"
+                | "f64"
                 | "bool"
                 | "String"
                 | "Bytes"
@@ -188,6 +195,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "len"
                 | "parse_i32"
                 | "parse_i64"
+                | "parse_f64"
                 | "utf8_bytes"
                 | "utf8_decode"
                 | "utf8_encode"
@@ -210,6 +218,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             enum_decl.name.as_str(),
             "i32"
                 | "i64"
+                | "f64"
                 | "bool"
                 | "String"
                 | "Bytes"
@@ -226,6 +235,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "len"
                 | "parse_i32"
                 | "parse_i64"
+                | "parse_f64"
                 | "utf8_bytes"
                 | "utf8_decode"
                 | "utf8_encode"
@@ -443,6 +453,7 @@ fn expression_is_spawn_safe(
     match &expr.kind {
         ExprKind::Int(_)
         | ExprKind::I64(_)
+        | ExprKind::F64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)
@@ -477,7 +488,9 @@ fn expression_is_spawn_safe(
                         | builtins::LEN
                         | builtins::PARSE_I32
                         | builtins::PARSE_I64
+                        | builtins::PARSE_F64
                         | builtins::WIDEN_I64
+                        | builtins::TO_F64
                         | builtins::NARROW_I32
                         | builtins::UTF8_BYTES
                         | builtins::UTF8_DECODE
@@ -851,9 +864,10 @@ fn infer(
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::I64(_) => Ok(Type::I64),
+        ExprKind::F64(_) => Ok(Type::F64),
         ExprKind::Neg(value) => {
             let actual = type_of(value, env, signatures, return_type, types)?;
-            if matches!(actual, Type::I32 | Type::I64 | Type::Never) {
+            if matches!(actual, Type::I32 | Type::I64 | Type::F64 | Type::Never) {
                 Ok(actual)
             } else {
                 Err(Diagnostic::new(
@@ -1054,7 +1068,7 @@ fn infer(
             }
             match op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Lt | Op::Le | Op::Gt | Op::Ge
-                    if lhs == rhs && matches!(lhs, Type::I32 | Type::I64) =>
+                    if lhs == rhs && matches!(lhs, Type::I32 | Type::I64 | Type::F64) =>
                 {
                     if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
                         Ok(lhs)
@@ -1067,7 +1081,12 @@ fn infer(
                     if lhs == rhs
                         && matches!(
                             lhs,
-                            Type::I32 | Type::I64 | Type::Bool | Type::String | Type::Bytes
+                            Type::I32
+                                | Type::I64
+                                | Type::F64
+                                | Type::Bool
+                                | Type::String
+                                | Type::Bytes
                         ) =>
                 {
                     Ok(Type::Bool)
@@ -1107,6 +1126,17 @@ fn infer(
                 .collect::<Result<Vec<_>, _>>()?;
             if name == builtins::LEN && actuals == [Type::Bytes] {
                 return Ok(Type::I32);
+            }
+            if actuals == [Type::F64] {
+                if name == builtins::NARROW_I32 {
+                    return Ok(Type::Option(Box::new(Type::I32)));
+                }
+                if name == builtins::WIDEN_I64 {
+                    return Ok(Type::Option(Box::new(Type::I64)));
+                }
+            }
+            if name == builtins::TO_F64 && actuals == [Type::I64] {
+                return Ok(Type::F64);
             }
             let mut inferred = HashMap::new();
             for ((arg, expected), actual) in args.iter().zip(&signature.params).zip(&actuals) {

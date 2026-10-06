@@ -43,6 +43,7 @@ fn runtime_prelude(body: &str) -> String {
     if body.contains("__TokParseError")
         || body.contains("__tok_parse_i32")
         || body.contains("__tok_parse_i64")
+        || body.contains("__tok_parse_f64")
     {
         prelude.push_str(PRELUDE_PARSE);
     }
@@ -62,6 +63,7 @@ fn rust_type(ty: &Type) -> String {
     match ty {
         Type::I32 => "i32".to_owned(),
         Type::I64 => "i64".to_owned(),
+        Type::F64 => "f64".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         Type::Bytes => "__TokBytes".to_owned(),
@@ -150,8 +152,12 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::I64(value) => format!("{value}i64"),
+        ExprKind::F64(bits) => format!("f64::from_bits({bits}u64)"),
         ExprKind::Not(value) => format!("!({})", emit_expr(value, source, types)),
         ExprKind::Neg(value) => {
+            if types.get(&value.span) == Some(&Type::F64) {
+                return format!("-({})", emit_expr(value, source, types));
+            }
             let (source_id, line, column) = location(source, expr.span);
             let helper = if types.get(&value.span) == Some(&Type::I64) {
                 "__tok_neg_i64"
@@ -220,8 +226,15 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
                 builtins::PARSE_I64 => "__tok_parse_i64".to_owned(),
-                builtins::WIDEN_I64 => "__tok_i64_from_i32".to_owned(),
-                builtins::NARROW_I32 => "__tok_i32_from_i64".to_owned(),
+                builtins::PARSE_F64 => "__tok_parse_f64".to_owned(),
+                builtins::WIDEN_I64 | builtins::NARROW_I32 | builtins::TO_F64 => {
+                    let from = match types.get(&args[0].span) {
+                        Some(Type::I32) => "i32",
+                        Some(Type::I64) => "i64",
+                        _ => "f64",
+                    };
+                    format!("__tok_{name}_from_{from}")
+                }
                 builtins::UTF8_BYTES => "__tok_utf8_bytes".to_owned(),
                 builtins::UTF8_DECODE => "__tok_utf8_decode".to_owned(),
                 builtins::UTF8_ENCODE => "__tok_utf8_encode".to_owned(),
@@ -283,6 +296,16 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 Op::Or => format!("({left} || {right})"),
                 Op::Add if left_type == Some(&Type::String) => {
                     format!("({left} + &{right})")
+                }
+                Op::Add | Op::Sub | Op::Mul | Op::Div if left_type == Some(&Type::F64) => {
+                    let symbol = match op {
+                        Op::Add => "+",
+                        Op::Sub => "-",
+                        Op::Mul => "*",
+                        Op::Div => "/",
+                        _ => unreachable!(),
+                    };
+                    format!("({left} {symbol} {right})")
                 }
                 Op::Add | Op::Sub | Op::Mul | Op::Div => {
                     let operation = match op {
@@ -493,6 +516,7 @@ fn emit_ir_instructions(
             InstructionKind::Parameter(index) => user_name(&function.params[index].0),
             InstructionKind::I32(value) => format!("{value}i32"),
             InstructionKind::I64(value) => format!("{value}i64"),
+            InstructionKind::F64(bits) => format!("f64::from_bits({bits}u64)"),
             InstructionKind::Bool(value) => value.to_string(),
             InstructionKind::Not(value) => format!("!__tok_v{}", value.0),
             InstructionKind::CheckedNeg(value) => {
@@ -504,10 +528,26 @@ fn emit_ir_instructions(
                 let (source_id, line, column) = location(source, instruction.span);
                 format!("{helper}(__tok_v{},{source_id},{line},{column})", value.0)
             }
+            InstructionKind::FloatNeg(value) => format!("-__tok_v{}", value.0),
+            InstructionKind::Convert(value) => {
+                format!("(__tok_v{} as {})", value.0, rust_type(&instruction.ty))
+            }
             InstructionKind::Binary(op, left, right) => {
                 let left_name = format!("__tok_v{}", left.0);
                 let right_name = format!("__tok_v{}", right.0);
                 match op {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div
+                        if instruction.ty == Type::F64 =>
+                    {
+                        let symbol = match op {
+                            BinaryOp::Add => "+",
+                            BinaryOp::Sub => "-",
+                            BinaryOp::Mul => "*",
+                            BinaryOp::Div => "/",
+                            _ => unreachable!(),
+                        };
+                        format!("({left_name} {symbol} {right_name})")
+                    }
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
                         let operation = match op {
                             BinaryOp::Add => "add",

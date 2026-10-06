@@ -6,11 +6,12 @@ one typed value with a source span. Values have sequential IDs, and operands
 refer only to earlier instructions. A verifier checks these ordering and type
 invariants before backend use.
 
-The current slice supports scalar functions over `i32`, `i64`, and `bool`:
-parameters, literals, checked negation and arithmetic, equality, integer
-comparisons, immutable local bindings, scalar expression statements, nested
-lexical blocks, `if` expressions, short-circuit boolean operators, and calls
-to non-generic scalar functions.
+The current slice supports scalar functions over `i32`, `i64`, `f64`, and `bool`:
+parameters, literals, checked integer negation and arithmetic, IEEE 754 float
+arithmetic and comparisons, equality, immutable local bindings, scalar expression statements, nested
+lexical blocks, `if` expressions, short-circuit boolean operators, calls
+to non-generic scalar functions, and the infallible conversions `i64(i32)`,
+`f64(i32)`, and `f64(i64)` as a typed `Convert` instruction.
 A local name points to the SSA value of its initializer; nested scopes may
 shadow it without mutating that value.
 An `if` instruction owns two nested regions. The verifier checks each region

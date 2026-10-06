@@ -4,7 +4,7 @@ This document describes exactly what the current Rust prototype accepts. It is a
 
 ## Accepted constructs
 
-`I` and `L` are short spellings of `i32` and `i64` in type positions,
+`I`, `L`, and `F` are short spellings of `i32`, `i64`, and `f64` in type positions,
 including generic arguments. These identifiers are reserved in type positions.
 Integer literal suffixes, conversion functions, and library names retain their
 existing spellings. The longer type names remain accepted.
@@ -18,7 +18,7 @@ enum     = "enum" identifier "{" (enum-variant ("," enum-variant)*)? "}" ;
 enum-variant = identifier ("(" type ")")? ;
 generic-params = "<" identifier ("," identifier)* ">" ;
 parameters = identifier ":" type ("," identifier ":" type)* ;
-type     = "i32" | "I" | "i64" | "L" | "bool" | "String" | "Unit" | "[" type "]"
+type     = "i32" | "I" | "i64" | "L" | "f64" | "F" | "bool" | "String" | "Unit" | "[" type "]"
          | "Result" "<" type "," type ">" | "Option" "<" type ">"
          | "Task" "<" type ">" | identifier | identifier "::" identifier
          | (identifier | identifier "::" identifier) "<" type ("," type)* ">" ;
@@ -31,7 +31,7 @@ statement = ("let" | "var") identifier (":" type)? "=" expression ";"
           | "break" ";" | "continue" ";"
           | "return" expression ";"
           | expression ";" ;
-expression = integer | integer "i64" | "-" integer | "-" integer "i64" | "-" expression | "!" expression | string | "true" | "false" | identifier | "[" arguments? "]"
+expression = integer | integer "i64" | float | "-" integer | "-" integer "i64" | "-" float | "-" expression | "!" expression | string | "true" | "false" | identifier | "[" arguments? "]"
            | identifier "::" identifier ("(" arguments? ")")?
            | identifier "::" identifier "::" identifier ("(" expression ")")?
            | "Ok" "(" expression ")" | "Err" "(" expression ")"
@@ -49,6 +49,8 @@ pattern = "Ok" "(" identifier ")" | "Err" "(" identifier ")"
         | identifier "::" identifier "::" identifier ("(" identifier ")")? | "true" | "false"
         | integer | integer "i64" | "-" integer | "-" integer "i64" | "_" ;
 binary-op = "||" | "&&" | "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+float = integer "." integer ("e" | "E") ("+" | "-")? integer
+      | integer "." integer | integer ("e" | "E") ("+" | "-")? integer ;
 ```
 
 `!` requires `bool` and binds more tightly than arithmetic. `&&` binds more
@@ -68,6 +70,8 @@ Binary operators use normal arithmetic precedence, with equality below compariso
 `Option<T>` represents a present value with `Some(value)` or an absent value with `None`; there is no unrestricted null value. `None` gets its element type from a declared return, binding, field, or another expression. Matching an untyped bare `None` reports `E115`. A match on `Option<T>` must cover both `Some(binding)` and `None`, either explicitly or with a final `_` arm. `Option<T>` has an inline value layout, so directly recursive records or enums through `Option` report `E112`; arrays and tasks provide indirection. `?` currently applies only to `Result`, not `Option`.
 
 `i32` and `i64` arithmetic are checked in both backends: overflow and division by zero produce `E201`. Unsuffixed integer literals have type `i32` and must fit that range, including `-2147483648`. A literal with the adjacent `i64` suffix has type `i64`, for example `3000000000i64` or `-9223372036854775808i64`; it must fit that range. The minus sign must be adjacent to the digits. Unary `-` negates computed values of either integer type with higher precedence than multiplication and reports `E201` for the minimum value. The types do not mix implicitly. `i64(i32)->i64` widens without loss; `i32(i64)->Option<i32>` returns `None` outside the narrow range. Array and `Bytes` indices and `len` results remain `i32`. These are prototype choices, not final numeric semantics.
+
+`f64` literals require a decimal fraction or exponent, for example `1.5`, `1e3`, and `-0.0`; the minus sign must be adjacent to a literal. A non-finite literal such as `1e309` reports `E003`, but arithmetic follows IEEE 754 and may produce infinity or NaN. Float `+`, `-`, `*`, `/`, unary `-`, comparisons, and equality work in both backends; division by zero does not report `E201`. NaN compares unequal to itself, and positive and negative zero compare equal. Values render with a decimal point where applicable, including `-0.0`; infinities and NaN render as `inf`, `-inf`, and `NaN`. Floats do not mix implicitly with integers. Conversions are named after their target type: `f64(i32)->f64` is exact, and `f64(i64)->f64` rounds to the nearest representable value (ties to even). `i32(f64)->Option<i32>` and `i64(f64)->Option<i64>` truncate toward zero and return `None` for NaN, infinities, and values whose truncation falls outside the target range. `parse_f64(String)->Result<f64,ParseError>` accepts an optional ASCII sign, decimal digits, an optional fraction with at least one digit, and an optional exponent; it does not accept whitespace, `inf`, `NaN`, `.5`, or `5.`, which yield `ParseError::Invalid`. A syntactically valid text whose value is not finite, such as `1e400`, yields `ParseError::OutOfRange`. All conversions and `parse_f64` are pure.
 
 Strings are UTF-8 values written in double quotes. Literals accept direct Unicode and the escapes `\n`, `\r`, `\t`, `\"`, and `\\`; a raw line break or unknown escape is `E004`. `+` concatenates two strings, and `==` / `!=` compare their contents. Values print with quotes and escaped control characters, including inside arrays and results. This syntax is experimental.
 
