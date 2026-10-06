@@ -1,0 +1,7 @@
+[package]
+name = "redis"
+version = "0.1.0"
+entry = "redis.tok"
+description = "Redis client (RESP2) over TCP: commands, GET/SET/INCR/DEL, AUTH"
+
+[dependencies]
