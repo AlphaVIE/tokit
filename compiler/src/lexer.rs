@@ -6,6 +6,7 @@ pub enum Kind {
     Ident(String),
     Int(String),
     Int64(String),
+    Float64(String),
     String(String),
     Fn,
     Struct,
@@ -168,7 +169,34 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
                 i += 1;
             }
             let digits_end = i;
-            if bytes.get(i..i + 3) == Some(b"i64")
+            if bytes.get(i) == Some(&b'.') && bytes.get(i + 1).is_some_and(u8::is_ascii_digit) {
+                i += 2;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+            }
+            let fraction = i != digits_end;
+            if bytes.get(i).is_some_and(|byte| matches!(byte, b'e' | b'E')) {
+                let exponent_start = i;
+                i += 1;
+                if bytes.get(i).is_some_and(|byte| matches!(byte, b'+' | b'-')) {
+                    i += 1;
+                }
+                if !bytes.get(i).is_some_and(u8::is_ascii_digit) {
+                    return Err(Diagnostic::new(
+                        "E003",
+                        Span::in_source(source_id, start, i),
+                        "invalid f64 exponent",
+                    ));
+                }
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+                debug_assert!(i > exponent_start);
+            }
+            if fraction || i != digits_end {
+                Kind::Float64(source[start..i].to_owned())
+            } else if bytes.get(i..i + 3) == Some(b"i64")
                 && !bytes
                     .get(i + 3)
                     .is_some_and(|next| next.is_ascii_alphanumeric() || *next == b'_')

@@ -38,6 +38,7 @@ impl Span {
 pub enum Type {
     I32,
     I64,
+    F64,
     Bool,
     String,
     Bytes,
@@ -58,6 +59,7 @@ impl std::fmt::Display for Type {
         let name = match self {
             Self::I32 => "i32",
             Self::I64 => "i64",
+            Self::F64 => "f64",
             Self::Bool => "bool",
             Self::String => "String",
             Self::Bytes => "Bytes",
@@ -114,6 +116,7 @@ impl Expr {
         match &self.kind {
             ExprKind::Int(_)
             | ExprKind::I64(_)
+            | ExprKind::F64(_)
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(_) => true,
@@ -151,6 +154,7 @@ pub struct Pattern {
 pub enum ExprKind {
     Int(i32),
     I64(i64),
+    F64(u64),
     Bool(bool),
     String(String),
     Array(Vec<Expr>),

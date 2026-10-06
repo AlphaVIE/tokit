@@ -443,6 +443,7 @@ fn expression_is_spawn_safe(
     match &expr.kind {
         ExprKind::Int(_)
         | ExprKind::I64(_)
+        | ExprKind::F64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)
@@ -851,9 +852,10 @@ fn infer(
     match &expr.kind {
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::I64(_) => Ok(Type::I64),
+        ExprKind::F64(_) => Ok(Type::F64),
         ExprKind::Neg(value) => {
             let actual = type_of(value, env, signatures, return_type, types)?;
-            if matches!(actual, Type::I32 | Type::I64 | Type::Never) {
+            if matches!(actual, Type::I32 | Type::I64 | Type::F64 | Type::Never) {
                 Ok(actual)
             } else {
                 Err(Diagnostic::new(
@@ -1054,7 +1056,7 @@ fn infer(
             }
             match op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Lt | Op::Le | Op::Gt | Op::Ge
-                    if lhs == rhs && matches!(lhs, Type::I32 | Type::I64) =>
+                    if lhs == rhs && matches!(lhs, Type::I32 | Type::I64 | Type::F64) =>
                 {
                     if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
                         Ok(lhs)
@@ -1067,7 +1069,12 @@ fn infer(
                     if lhs == rhs
                         && matches!(
                             lhs,
-                            Type::I32 | Type::I64 | Type::Bool | Type::String | Type::Bytes
+                            Type::I32
+                                | Type::I64
+                                | Type::F64
+                                | Type::Bool
+                                | Type::String
+                                | Type::Bytes
                         ) =>
                 {
                     Ok(Type::Bool)

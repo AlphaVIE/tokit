@@ -12,6 +12,7 @@ use crate::filesystem::{ReadPolicy, WritePolicy};
 pub enum Value {
     I32(i32),
     I64(i64),
+    F64(u64),
     Bool(bool),
     String(String),
     Bytes(Arc<Vec<u8>>),
@@ -31,6 +32,7 @@ impl std::fmt::Display for Value {
         match self {
             Self::I32(n) => write!(f, "{n}"),
             Self::I64(n) => write!(f, "{n}"),
+            Self::F64(bits) => write!(f, "{:?}", f64::from_bits(*bits)),
             Self::Bool(value) => write!(f, "{value}"),
             Self::String(value) => write!(f, "{value:?}"),
             Self::Bytes(values) => write!(f, "Bytes({values:?})"),
@@ -334,6 +336,7 @@ fn eval(
     let value = match &expr.kind {
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::I64(number) => Value::I64(*number),
+        ExprKind::F64(bits) => Value::F64(*bits),
         ExprKind::Not(inner) => match take_value!(eval(inner, env, program, depth, runtime)) {
             Value::Bool(value) => Value::Bool(!value),
             _ => {
@@ -351,6 +354,7 @@ fn eval(
             Value::I64(value) => Value::I64(value.checked_neg().ok_or_else(|| {
                 Diagnostic::new("E201", expr.span, "integer overflow or division by zero")
             })?),
+            Value::F64(bits) => Value::F64((-f64::from_bits(bits)).to_bits()),
             _ => return Err(Diagnostic::new("E204", expr.span, "invalid negation value")),
         },
         ExprKind::Bool(value) => Value::Bool(*value),
@@ -883,6 +887,10 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         return Ok(Value::String(format!("{a}{b}")));
     }
     if matches!(op, Op::Eq | Op::Ne) {
+        if let (Value::F64(a), Value::F64(b)) = (&left, &right) {
+            let equal = f64::from_bits(*a) == f64::from_bits(*b);
+            return Ok(Value::Bool(if op == Op::Eq { equal } else { !equal }));
+        }
         return Ok(Value::Bool(if op == Op::Eq {
             left == right
         } else {
@@ -890,6 +898,23 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         }));
     }
     let number = match (left, right) {
+        (Value::F64(a), Value::F64(b)) => {
+            let (a, b) = (f64::from_bits(a), f64::from_bits(b));
+            let value = match op {
+                Op::Add => a + b,
+                Op::Sub => a - b,
+                Op::Mul => a * b,
+                Op::Div => a / b,
+                Op::Lt => return Ok(Value::Bool(a < b)),
+                Op::Le => return Ok(Value::Bool(a <= b)),
+                Op::Gt => return Ok(Value::Bool(a > b)),
+                Op::Ge => return Ok(Value::Bool(a >= b)),
+                Op::Eq | Op::Ne | Op::And | Op::Or => {
+                    return Err(Diagnostic::new("E204", span, "invalid runtime operator"));
+                }
+            };
+            return Ok(Value::F64(value.to_bits()));
+        }
         (Value::I32(a), Value::I32(b)) => {
             let value = match op {
                 Op::Add => a.checked_add(b),

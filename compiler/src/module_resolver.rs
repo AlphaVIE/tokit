@@ -271,6 +271,7 @@ impl Resolver<'_> {
             }
             Type::I32
             | Type::I64
+            | Type::F64
             | Type::Bool
             | Type::String
             | Type::Bytes
@@ -286,6 +287,7 @@ impl Resolver<'_> {
         match &mut expr.kind {
             ExprKind::Int(_)
             | ExprKind::I64(_)
+            | ExprKind::F64(_)
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(_)

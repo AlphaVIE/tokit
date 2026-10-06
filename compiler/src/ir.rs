@@ -49,9 +49,11 @@ pub enum InstructionKind {
     Parameter(usize),
     I32(i32),
     I64(i64),
+    F64(u64),
     Bool(bool),
     Not(ValueId),
     CheckedNeg(ValueId),
+    FloatNeg(ValueId),
     Binary(BinaryOp, ValueId, ValueId),
     Call(String, Vec<ValueId>),
     Conditional {
@@ -135,8 +137,12 @@ fn verify_instructions(
             }
             InstructionKind::I32(_) if instruction.ty == Type::I32 => {}
             InstructionKind::I64(_) if instruction.ty == Type::I64 => {}
+            InstructionKind::F64(_) if instruction.ty == Type::F64 => {}
             InstructionKind::Bool(_) if instruction.ty == Type::Bool => {}
-            InstructionKind::I32(_) | InstructionKind::I64(_) | InstructionKind::Bool(_) => {
+            InstructionKind::I32(_)
+            | InstructionKind::I64(_)
+            | InstructionKind::F64(_)
+            | InstructionKind::Bool(_) => {
                 return Err("literal type mismatch");
             }
             InstructionKind::Not(value) => {
@@ -151,6 +157,11 @@ fn verify_instructions(
                     return Err("negation operand type mismatch");
                 }
             }
+            InstructionKind::FloatNeg(value) => {
+                if instruction.ty != Type::F64 || operand(value) != Some(&Type::F64) {
+                    return Err("float negation operand type mismatch");
+                }
+            }
             InstructionKind::Binary(op, left, right) => {
                 let left_ty = operand(left).ok_or("binary operand is not defined")?;
                 let right_ty = operand(right).ok_or("binary operand is not defined")?;
@@ -159,7 +170,9 @@ fn verify_instructions(
                 }
                 match op {
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
-                        if !matches!(left_ty, Type::I32 | Type::I64) || *left_ty != instruction.ty {
+                        if !matches!(left_ty, Type::I32 | Type::I64 | Type::F64)
+                            || *left_ty != instruction.ty
+                        {
                             return Err("arithmetic result type mismatch");
                         }
                     }
@@ -169,7 +182,8 @@ fn verify_instructions(
                         }
                     }
                     BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                        if !matches!(left_ty, Type::I32 | Type::I64) || instruction.ty != Type::Bool
+                        if !matches!(left_ty, Type::I32 | Type::I64 | Type::F64)
+                            || instruction.ty != Type::Bool
                         {
                             return Err("ordering result type mismatch");
                         }
@@ -216,7 +230,7 @@ fn verify_instructions(
 }
 
 fn scalar(ty: &Type) -> bool {
-    matches!(ty, Type::I32 | Type::I64 | Type::Bool)
+    matches!(ty, Type::I32 | Type::I64 | Type::F64 | Type::Bool)
 }
 
 struct Lowerer<'a> {
@@ -317,6 +331,7 @@ impl Lowerer<'_> {
         let kind = match &expr.kind {
             ExprKind::Int(value) => InstructionKind::I32(*value),
             ExprKind::I64(value) => InstructionKind::I64(*value),
+            ExprKind::F64(value) => InstructionKind::F64(*value),
             ExprKind::Bool(value) => InstructionKind::Bool(*value),
             ExprKind::Not(value) => InstructionKind::Not(self.expression(value)?),
             ExprKind::Var(name) => {
@@ -325,7 +340,14 @@ impl Lowerer<'_> {
                 }
                 InstructionKind::Parameter(self.params.iter().position(|(param, _)| param == name)?)
             }
-            ExprKind::Neg(value) => InstructionKind::CheckedNeg(self.expression(value)?),
+            ExprKind::Neg(value) => {
+                let id = self.expression(value)?;
+                if ty == Type::F64 {
+                    InstructionKind::FloatNeg(id)
+                } else {
+                    InstructionKind::CheckedNeg(id)
+                }
+            }
             ExprKind::Binary(left, op, right) => {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;

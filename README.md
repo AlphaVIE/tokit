@@ -10,11 +10,11 @@ An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and p
 
 An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agents submit hash-guarded, checked changes to named functions without resending their surrounding source file.
 
-The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, and `bool` functions with immutable local bindings, conditional expressions, and non-generic scalar calls. Other checked functions still use the AST emitter while the IR grows.
+The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, `f64`, and `bool` functions with immutable local bindings, conditional expressions, and non-generic scalar calls. Other checked functions still use the AST emitter while the IR grows.
 
 Direct [record field reads](research/RECORD_FIELD_PROJECTION.md) now copy only the selected field in both execution paths; a versioned fixture records the focused runtime measurements.
 
-Function declarations may omit `fn`, and `I`/`L` abbreviate `i32`/`i64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the changes across 43 examples.
+Function declarations may omit `fn`, and `I`/`L`/`F` abbreviate `i32`/`i64`/`f64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms and shorter type names, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the earlier integer changes across 43 examples.
 
 Boolean expressions support `!`, lazy `&&`, and lazy `||`; [boolean_logic.tok](examples/boolean_logic.tok) shows the provisional syntax and [token counts](research/BOOLEAN_LOGIC_TOKENS.md) compare it with equivalent branches.
 
@@ -43,6 +43,8 @@ Programs can read their own arguments with `args()->[String]`. For example, `tok
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
 
 Experimental `i64` values use explicit literals such as `3000000000i64`, checked arithmetic, and `parse_i64(String)->Result<i64,ParseError>`. `i64(value)` widens an `i32`; `i32(value)` narrows an `i64` with an `Option` result. [i64_counter.tok](examples/i64_counter.tok) reads a wide CLI integer. The types do not mix implicitly.
+
+Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`, and `-0.0`. Arithmetic follows IEEE 754, including infinities and NaN; literal overflow is rejected. [float64.tok](examples/float64.tok) shows a typed function. There is no implicit conversion between float and integer types.
 
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
 

@@ -27,6 +27,7 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
         ExprKind::Int(_)
         | ExprKind::I64(_)
+        | ExprKind::F64(_)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Var(_)

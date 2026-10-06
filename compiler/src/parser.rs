@@ -130,11 +130,13 @@ impl Parser {
         match name.as_str() {
             "i32" => self.compactible_types.push((span, "I")),
             "i64" => self.compactible_types.push((span, "L")),
+            "f64" => self.compactible_types.push((span, "F")),
             _ => {}
         }
         match name.as_str() {
             "i32" | "I" => Ok(Type::I32),
             "i64" | "L" => Ok(Type::I64),
+            "f64" | "F" => Ok(Type::F64),
             "bool" => Ok(Type::Bool),
             "String" => Ok(Type::String),
             "Bytes" => Ok(Type::Bytes),
@@ -600,6 +602,29 @@ impl Parser {
                         kind: ExprKind::I64(number),
                         span,
                     })
+                } else if self.at(&Kind::Float64(String::new())) {
+                    let number = self.bump();
+                    let span = token.span.join(number.span);
+                    if token.span.end != number.span.start {
+                        return Err(Diagnostic::new(
+                            "E002",
+                            span,
+                            "negative literal requires adjacent digits",
+                        ));
+                    }
+                    let Kind::Float64(text) = number.kind else {
+                        unreachable!()
+                    };
+                    let value = format!("-{text}")
+                        .parse::<f64>()
+                        .map_err(|_| Diagnostic::new("E003", span, "invalid f64 literal"))?;
+                    if !value.is_finite() {
+                        return Err(Diagnostic::new("E003", span, "f64 literal out of range"));
+                    }
+                    Ok(Expr {
+                        kind: ExprKind::F64(value.to_bits()),
+                        span,
+                    })
                 } else {
                     let value = self.expr(6)?;
                     Ok(Expr {
@@ -623,6 +648,22 @@ impl Parser {
                     .map_err(|_| Diagnostic::new("E003", token.span, "i64 literal out of range"))?;
                 Ok(Expr {
                     kind: ExprKind::I64(number),
+                    span: token.span,
+                })
+            }
+            Kind::Float64(value) => {
+                let number = value
+                    .parse::<f64>()
+                    .map_err(|_| Diagnostic::new("E003", token.span, "invalid f64 literal"))?;
+                if !number.is_finite() {
+                    return Err(Diagnostic::new(
+                        "E003",
+                        token.span,
+                        "f64 literal out of range",
+                    ));
+                }
+                Ok(Expr {
+                    kind: ExprKind::F64(number.to_bits()),
                     span: token.span,
                 })
             }

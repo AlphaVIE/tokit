@@ -1,5 +1,6 @@
 trait __TokRender { fn tok_render(&self) -> String; }
 impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
+impl __TokRender for f64 { fn tok_render(&self) -> String { format!("{:?}", self) } }
 impl __TokRender for bool { fn tok_render(&self) -> String { self.to_string() } }
 impl __TokRender for String { fn tok_render(&self) -> String { format!("{:?}", self) } }
 impl __TokRender for () { fn tok_render(&self) -> String { "()".to_owned() } }
