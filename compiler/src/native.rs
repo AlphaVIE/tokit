@@ -37,7 +37,7 @@ fn runtime_prelude(body: &str) -> String {
     if uses_bytes {
         prelude.push_str(PRELUDE_BYTES);
     }
-    if uses_io || body.contains("__TokIoError") {
+    if uses_io || body.contains("__TokIoError") || body.contains("__tok_stdin_all") {
         prelude.push_str(PRELUDE_IO_ERROR);
     }
     if body.contains("__TokParseError")
@@ -254,6 +254,10 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::WRITE_BYTES => "__tok_write_bytes".to_owned(),
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
+                builtins::PRINT => "__tok_print".to_owned(),
+                builtins::READ_LINE => "__tok_stdin_line".to_owned(),
+                builtins::READ_STDIN => "__tok_stdin_all".to_owned(),
+                builtins::EXIT => "__tok_exit".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
                 builtins::PARSE_I64 => "__tok_parse_i64".to_owned(),
                 builtins::PARSE_F64 => "__tok_parse_f64".to_owned(),
@@ -892,8 +896,12 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
     }
     writeln!(
         out,
-        "fn main() {{ let program = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(|| {{ __tok_configure_runtime(); println!(\"{{}}\", {}().tok_render()); }}).expect(\"cannot start program thread\"); if program.join().is_err() {{ std::process::exit(101); }} }}",
-        user_name("main")
+        "fn main() {{ let program = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(|| {{ __tok_configure_runtime(); {} }}).expect(\"cannot start program thread\"); let failed = program.join().is_err(); __tok_flush(); if failed {{ std::process::exit(101); }} }}",
+        if main.ret == Type::Unit {
+            format!("{}();", user_name("main"))
+        } else {
+            format!("__tok_print({}().tok_render());", user_name("main"))
+        }
     )
     .expect("writing to String cannot fail");
     let mut generated = runtime_prelude(&out);

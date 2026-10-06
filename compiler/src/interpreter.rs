@@ -88,6 +88,16 @@ const CALLS_PER_STACK_SEGMENT: usize = 256;
 /// Unoptimized builds need up to ~100 KiB of host stack per Tokit call.
 const STACK_SEGMENT_BYTES: usize = 64 * 1024 * 1024;
 
+/// Pseudo-diagnostic code that carries a status requested by `exit`.
+const EXIT_REQUEST: &str = "X000";
+
+/// The status of an `exit` call that ended evaluation, if any.
+pub fn exit_status(diagnostic: &Diagnostic) -> Option<i32> {
+    (diagnostic.code == EXIT_REQUEST)
+        .then(|| diagnostic.message.parse().ok())
+        .flatten()
+}
+
 struct Runtime<'a> {
     read: ReadPolicy,
     write: WritePolicy,
@@ -735,6 +745,53 @@ fn eval_builtin(
         return Ok(Flow::Value(Value::Array(
             runtime.args.iter().cloned().map(Value::String).collect(),
         )));
+    }
+    if name == builtins::PRINT {
+        let [Value::String(text)] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid print call"));
+        };
+        println!("{text}");
+        return Ok(Flow::Value(Value::Unit));
+    }
+    if name == builtins::READ_LINE {
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        let mut line = String::new();
+        return Ok(Flow::Value(match std::io::stdin().read_line(&mut line) {
+            Ok(0) | Err(_) => Value::None,
+            Ok(_) => {
+                if line.ends_with('\n') {
+                    line.pop();
+                    if line.ends_with('\r') {
+                        line.pop();
+                    }
+                }
+                Value::Some(Box::new(Value::String(line)))
+            }
+        }));
+    }
+    if name == builtins::READ_STDIN {
+        use std::io::{Read, Write};
+        let _ = std::io::stdout().flush();
+        let mut bytes = Vec::new();
+        let variant = match std::io::stdin().read_to_end(&mut bytes) {
+            Ok(_) => match String::from_utf8(bytes) {
+                Ok(text) => return Ok(Flow::Value(Value::Ok(Box::new(Value::String(text))))),
+                Err(_) => "InvalidUtf8",
+            },
+            Err(_) => "Other",
+        };
+        return Ok(Flow::Value(Value::Err(Box::new(Value::Enum(
+            builtins::IO_ERROR.to_owned(),
+            variant.to_owned(),
+            None,
+        )))));
+    }
+    if name == builtins::EXIT {
+        let [Value::I32(status)] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid exit call"));
+        };
+        return Err(Diagnostic::new(EXIT_REQUEST, expr.span, status.to_string()));
     }
     if name == builtins::LEN {
         let [value] = values.as_slice() else {

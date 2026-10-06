@@ -40,6 +40,8 @@ Experimental `Bytes` values store packed byte data, with UTF-8 and checked `[i32
 
 An experimental [JSON module](spec/JSON_MODULE_CANDIDATE.md) parses and renders recursive JSON values in Tokit. Its parser reports byte offsets and has an explicit nesting limit; packaging and performance work remain open.
 
+Programs talk to the terminal with `print(String)`, `read_line()->Option<String>`, `read_stdin()->Result<String,IoError>`, and `exit(status)`; a `main` returning `Unit` prints nothing extra. [greet.tok](examples/greet.tok) reads names until end of input.
+
 Programs can read their own arguments with `args()->[String]`. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
 
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.

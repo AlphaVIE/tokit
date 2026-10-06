@@ -87,6 +87,18 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Vec::new(),
             Type::Array(Box::new(Type::String)),
         ),
+        (builtins::PRINT, vec![Type::String], Type::Unit),
+        (
+            builtins::READ_LINE,
+            Vec::new(),
+            Type::Option(Box::new(Type::String)),
+        ),
+        (
+            builtins::READ_STDIN,
+            Vec::new(),
+            builtins::read_text_result(),
+        ),
+        (builtins::EXIT, vec![Type::I32], Type::Never),
         (
             builtins::PARSE_I32,
             vec![Type::String],
@@ -192,6 +204,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "write_bytes"
                 | "lines"
                 | "args"
+                | "print"
+                | "read_line"
+                | "read_stdin"
+                | "exit"
                 | "len"
                 | "parse_i32"
                 | "parse_i64"
@@ -232,6 +248,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "write_bytes"
                 | "lines"
                 | "args"
+                | "print"
+                | "read_line"
+                | "read_stdin"
+                | "exit"
                 | "len"
                 | "parse_i32"
                 | "parse_i64"
@@ -481,6 +501,10 @@ fn expression_is_spawn_safe(
                 && name != builtins::WRITE_TEXT
                 && name != builtins::WRITE_BYTES
                 && name != builtins::ARGS
+                && name != builtins::PRINT
+                && name != builtins::READ_LINE
+                && name != builtins::READ_STDIN
+                && name != builtins::EXIT
                 && name != builtins::JOIN
                 && (matches!(
                     name.as_str(),
