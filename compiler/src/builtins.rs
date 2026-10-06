@@ -8,6 +8,10 @@ pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
 pub const MAP: &str = "Map";
+pub const RANGE: &str = "range";
+pub const SORT: &str = "sort";
+pub const REVERSE: &str = "reverse";
+pub const SLICE: &str = "slice";
 pub const GET: &str = "get";
 pub const GET_OR: &str = "get_or";
 pub const KEYS: &str = "keys";
@@ -138,5 +142,21 @@ pub fn map_key(ty: &Type) -> bool {
     matches!(
         ty,
         Type::I32 | Type::I64 | Type::String | Type::Bool | Type::Never
+    )
+}
+
+/// Element types with a total order shared by both backends.
+pub fn orderable(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::I32 | Type::I64 | Type::F64 | Type::String | Type::Bool | Type::Never
+    )
+}
+
+/// Element types whose `==` is defined.
+pub fn equatable(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::I32 | Type::I64 | Type::F64 | Type::Bool | Type::String | Type::Bytes | Type::Never
     )
 }

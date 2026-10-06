@@ -23,6 +23,7 @@ const PRELUDE_TASKS: &str = include_str!("native_runtime/tasks.rs.txt");
 const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt");
 const PRELUDE_STRINGS: &str = include_str!("native_runtime/strings.rs.txt");
 const PRELUDE_MAPS: &str = include_str!("native_runtime/maps.rs.txt");
+const PRELUDE_ARRAYS: &str = include_str!("native_runtime/arrays.rs.txt");
 
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
@@ -57,6 +58,10 @@ fn runtime_prelude(body: &str) -> String {
     }
     if body.contains("BTreeMap") {
         prelude.push_str(PRELUDE_MAPS);
+    }
+    if body.contains("__tok_arr_") || body.contains("__tok_range") || body.contains("__tok_concat")
+    {
+        prelude.push_str(PRELUDE_ARRAYS);
     }
     if body.contains("__TokTask") || body.contains("__tok_spawn") || body.contains("__tok_join") {
         prelude.push_str(PRELUDE_TASKS);
@@ -286,6 +291,12 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::CONTAINS if is_map(types.get(&args[0].span)) => {
                     "__tok_map_contains".to_owned()
                 }
+                builtins::CONTAINS if matches!(types.get(&args[0].span), Some(Type::Array(_))) => {
+                    "__tok_arr_contains".to_owned()
+                }
+                builtins::RANGE => "__tok_range".to_owned(),
+                builtins::SORT => "__tok_arr_sort".to_owned(),
+                builtins::REVERSE => "__tok_arr_reverse".to_owned(),
                 builtins::TO_STRING => "__tok_string".to_owned(),
                 builtins::JOIN if args.len() == 2 => "__tok_str_join".to_owned(),
                 builtins::CHARS => "__tok_str_chars".to_owned(),
@@ -321,6 +332,15 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
+            if name == builtins::SLICE {
+                let (source_id, line, column) = location(source, expr.span);
+                return format!(
+                    "__tok_arr_slice({},{},{},{source_id},{line},{column})",
+                    emit_array_borrow(&args[0], source, types),
+                    emit_expr(&args[1], source, types),
+                    emit_expr(&args[2], source, types)
+                );
+            }
             if name == builtins::LEN && is_map(types.get(&args[0].span)) {
                 return format!(
                     "__tok_map_len({})",
@@ -345,7 +365,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 args.iter()
                     .enumerate()
                     .map(|(index, arg)| {
-                        let lent_map = index == 0 && callee.starts_with("__tok_map_");
+                        let lent_map = index == 0
+                            && (callee.starts_with("__tok_map_")
+                                || callee.starts_with("__tok_arr_"));
                         if lent_map || borrowed.is_some_and(|modes| modes[index]) {
                             emit_array_borrow(arg, source, types)
                         } else {
@@ -394,6 +416,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 Op::Or => format!("({left} || {right})"),
                 Op::Add if left_type == Some(&Type::String) => {
                     format!("({left} + &{right})")
+                }
+                Op::Add if matches!(left_type, Some(Type::Array(_) | Type::EmptyArray)) => {
+                    format!("__tok_concat({left}, {right})")
                 }
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem
                     if left_type == Some(&Type::F64) =>
@@ -620,7 +645,16 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &EmitContext<'_>) -> String
             format!(
                 "for {} in {} {{ {discarded} }}\n",
                 user_name(name),
-                if types.get(&iterable.span) == Some(&Type::Bytes) {
+                if let ExprKind::Call(callee, bounds) = &iterable.kind
+                    && callee == builtins::RANGE
+                {
+                    // Iterate the half-open range directly instead of building it.
+                    format!(
+                        "({})..({})",
+                        emit_expr(&bounds[0], source, types),
+                        emit_expr(&bounds[1], source, types)
+                    )
+                } else if types.get(&iterable.span) == Some(&Type::Bytes) {
                     format!(
                         "__tok_into_bytes({}).into_iter().map(i32::from)",
                         emit_expr(iterable, source, types)

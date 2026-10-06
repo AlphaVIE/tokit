@@ -58,6 +58,8 @@ Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`
 
 Mutable bindings support element and field assignment such as `xs[i]=v;` and `grid.rows[y][x].alive=true;`, with bounds checks in both backends.
 
+Arrays concatenate with `+` and provide `range`, `sort`, `reverse`, `slice`, and `contains`. `for i in range(0,n){...}` saves 5 of 21 tokens against the equivalent `while` loop in all three measured tokenizers and runs as a native range loop without allocation.
+
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
 
 Mutable strings support `text.push(piece);` with a `String` piece. [string_builder.tok](examples/string_builder.tok) demonstrates append without rebuilding the accumulated text on each step.
