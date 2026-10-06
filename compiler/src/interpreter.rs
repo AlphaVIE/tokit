@@ -135,6 +135,8 @@ struct Runtime<'a> {
     read: ReadPolicy,
     write: WritePolicy,
     args: &'a [String],
+    /// Origin of the monotonic `clock_ns` builtin.
+    started: std::time::Instant,
 }
 
 macro_rules! take_value {
@@ -198,6 +200,7 @@ fn run_entry(
         read: ReadPolicy::from_root(read_root),
         write: WritePolicy::from_root(write_root),
         args,
+        started: std::time::Instant::now(),
     };
     let function = program
         .functions
@@ -845,6 +848,35 @@ fn eval_builtin(
     }
     if let Some(value) = eval_string_builtin(name, &values) {
         return Ok(Flow::Value(value));
+    }
+    match (name.as_str(), values.as_slice()) {
+        (builtins::ENV, [Value::String(key)]) => {
+            return Ok(Flow::Value(match std::env::var(key) {
+                Ok(value) => Value::Some(Box::new(Value::String(value))),
+                Err(_) => Value::None,
+            }));
+        }
+        (builtins::NOW_MS, []) => {
+            let millis = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_millis());
+            return Ok(Flow::Value(Value::I64(
+                i64::try_from(millis).unwrap_or(i64::MAX),
+            )));
+        }
+        (builtins::CLOCK_NS, []) => {
+            let nanos = runtime.started.elapsed().as_nanos();
+            return Ok(Flow::Value(Value::I64(
+                i64::try_from(nanos).unwrap_or(i64::MAX),
+            )));
+        }
+        (builtins::SLEEP_MS, [Value::I64(millis)]) => {
+            std::thread::sleep(std::time::Duration::from_millis(
+                u64::try_from(*millis).unwrap_or(0),
+            ));
+            return Ok(Flow::Value(Value::Unit));
+        }
+        _ => {}
     }
     if name == builtins::PRINT {
         let [Value::String(text)] = values.as_slice() else {

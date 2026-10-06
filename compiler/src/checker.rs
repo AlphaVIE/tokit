@@ -90,6 +90,14 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (
+            builtins::ENV,
+            vec![Type::String],
+            Type::Option(Box::new(Type::String)),
+        ),
+        (builtins::NOW_MS, Vec::new(), Type::I64),
+        (builtins::CLOCK_NS, Vec::new(), Type::I64),
+        (builtins::SLEEP_MS, vec![Type::I64], Type::Unit),
         (builtins::ABS, vec![Type::I32], Type::I32),
         (builtins::MIN, vec![Type::I32, Type::I32], Type::I32),
         (builtins::MAX, vec![Type::I32, Type::I32], Type::I32),
@@ -463,6 +471,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "env"
+                | "now_ms"
+                | "clock_ns"
+                | "sleep_ms"
                 | "abs"
                 | "min"
                 | "max"
@@ -547,6 +559,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "env"
+                | "now_ms"
+                | "clock_ns"
+                | "sleep_ms"
                 | "abs"
                 | "min"
                 | "max"
@@ -866,6 +882,10 @@ fn expression_is_spawn_safe(
                 && name != builtins::WRITE_BYTES
                 && name != builtins::ARGS
                 && name != builtins::PRINT
+                && name != builtins::ENV
+                && name != builtins::NOW_MS
+                && name != builtins::CLOCK_NS
+                && name != builtins::SLEEP_MS
                 && name != builtins::READ_LINE
                 && name != builtins::READ_STDIN
                 && name != builtins::EXIT
