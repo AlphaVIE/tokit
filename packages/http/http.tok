@@ -1,0 +1,11 @@
+// Routing and helpers on top of the built-in serve(addr,limit,handler).
+pub struct Route{method:String,pattern:String,handler:(Request,Map<String,String>)->Response}
+// Path parameters when `pattern` (segments like `:id`) matches `path`.
+pub match_path(pattern:String,path:String)->Option<Map<String,String>>{let want=split(pattern,"/");let have=split(path,"/");if len(want)!=len(have){return None;}var params:Map<String,String>=Map();for i in range(0,len(want)){if starts_with(want[i],":"){if have[i]==""{return None;}params[replace(want[i],":","")]=url_decode(have[i]);}else if want[i]!=have[i]{return None;}}Some(params)}
+// The first route matching method and path; 405 when only the path matches, else 404.
+pub dispatch(routes:[Route],r:Request)->Response{var path_matched=false;for route in routes{match match_path(route.pattern,r.path){Some(params)=>{if route.method==r.method{return route.handler(r,params);}path_matched=true;},None=>{}}}if path_matched{text(405,"method not allowed")}else{text(404,"not found")}}
+hex_value(b:I)->I{if b>=48&&b<=57{b-48}else if b>=97&&b<=102{b-87}else if b>=65&&b<=70{b-55}else{-1}}
+// Decode `%XX` escapes and `+` as space; invalid escapes stay as written.
+pub url_decode(s:String)->String{let b=utf8_encode(s);var out=utf8_encode("");var i=0;while i<len(b){if b[i]==43{out.push(32);i=i+1;}else if b[i]==37&&i+2<len(b)&&hex_value(b[i+1])>=0&&hex_value(b[i+2])>=0{out.push(hex_value(b[i+1])*16+hex_value(b[i+2]));i=i+3;}else{out.push(b[i]);i=i+1;}}match utf8_decode_bytes(out){Some(t)=>t,None=>s}}
+// Query parameters; a repeated key keeps its last value.
+pub query(r:Request)->Map<String,String>{var params:Map<String,String>=Map();for pair in split(r.query,"&"){if pair!=""{let kv=split(pair,"=");params[url_decode(kv[0])]=if len(kv)>1{url_decode(join(slice(kv,1,len(kv)),"="))}else{""};}}params}pub header(r:Request,name:String)->Option<String>{get(r.headers,lower(name))}pub text(status:I,body:String)->Response{var h:Map<String,String>=Map();h["content-type"]="text/plain; charset=utf-8";Response(status,h,body)}pub json(status:I,body:String)->Response{var h:Map<String,String>=Map();h["content-type"]="application/json";Response(status,h,body)}pub redirect(location:String)->Response{var h:Map<String,String>=Map();h["location"]=location;Response(302,h,"")}
