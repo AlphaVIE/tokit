@@ -141,14 +141,44 @@ fn location(source: &SourceMap, span: Span) -> (usize, usize, usize) {
     (span.source_id.0, line, column)
 }
 
-fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
+/// Checked expression types plus how each user function receives its parameters.
+struct EmitContext<'a> {
+    types: &'a HashMap<Span, Type>,
+    borrowed_params: HashMap<String, Vec<bool>>,
+}
+
+impl EmitContext<'_> {
+    fn get(&self, span: &Span) -> Option<&Type> {
+        self.types.get(span)
+    }
+}
+
+/// Parameters are immutable, so non-scalar arguments can be lent to the callee
+/// instead of copied; every read inside the callee still clones its own value.
+/// Bare type parameters stay by value because they may be instantiated as scalars.
+fn borrowed_param(ty: &Type) -> bool {
+    !matches!(
+        ty,
+        Type::I32 | Type::I64 | Type::F64 | Type::Bool | Type::Unit | Type::Param(_)
+    )
+}
+
+fn param_type(ty: &Type) -> String {
+    if borrowed_param(ty) {
+        format!("&{}", rust_type(ty))
+    } else {
+        rust_type(ty)
+    }
+}
+
+fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String {
     match &expr.kind {
         ExprKind::Var(name) => format!("&{}", user_name(name)),
         _ => format!("&({})", emit_expr(expr, source, types)),
     }
 }
 
-fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
+fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String {
     match &expr.kind {
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::I64(value) => format!("{value}i64"),
@@ -257,10 +287,18 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 };
                 return format!("__tok_len({},{source_id},{line},{column})", borrowed);
             }
+            let borrowed = types.borrowed_params.get(name);
             format!(
                 "{callee}({})",
                 args.iter()
-                    .map(|x| emit_expr(x, source, types))
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        if borrowed.is_some_and(|modes| modes[index]) {
+                            emit_array_borrow(arg, source, types)
+                        } else {
+                            emit_expr(arg, source, types)
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join(",")
             )
@@ -278,8 +316,15 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 )
                 .expect("writing to String cannot fail");
             }
+            let borrowed = types.borrowed_params.get(name);
             let args = (0..args.len())
-                .map(|index| format!("__tok_arg{index}"))
+                .map(|index| {
+                    if borrowed.is_some_and(|modes| modes[index]) {
+                        format!("&__tok_arg{index}")
+                    } else {
+                        format!("__tok_arg{index}")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(",");
             write!(out, "__tok_spawn(move || {}({args})) }}", user_name(name))
@@ -400,7 +445,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
     }
 }
 
-fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &HashMap<Span, Type>) -> String {
+fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &EmitContext<'_>) -> String {
     match stmt {
         Stmt::Let {
             name,
@@ -790,6 +835,21 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         writeln!(out, "impl{render_generics} __TokRender for {name}{generics} {{ fn tok_render(&self) -> String {{ {render_expression} }} }}")
             .expect("writing to String cannot fail");
     }
+    let context = EmitContext {
+        types: &types,
+        borrowed_params: program
+            .functions
+            .iter()
+            .map(|function| {
+                let modes = function
+                    .params
+                    .iter()
+                    .map(|(_, ty)| borrowed_param(ty))
+                    .collect();
+                (function.name.clone(), modes)
+            })
+            .collect(),
+    };
     let lowering = ir::LoweringContext::new(program);
     for function in &program.functions {
         if let Some(lowered) = lowering.lower_function(function, &types) {
@@ -810,7 +870,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         let params = function
             .params
             .iter()
-            .map(|(name, ty)| format!("{}: {}", user_name(name), rust_type(ty)))
+            .map(|(name, ty)| format!("{}: {}", user_name(name), param_type(ty)))
             .collect::<Vec<_>>()
             .join(",");
         let (source_id, line, column) = location(source, function.span);
@@ -819,7 +879,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             "fn {}{generics}({params}) -> {} {{ let __tok_depth = __TokDepthGuard::enter({source_id},{line},{column}); {} }}",
             user_name(&function.name),
             rust_type(&function.ret),
-            emit_expr(&function.body, source, &types)
+            emit_expr(&function.body, source, &context)
         )
         .expect("writing to String cannot fail");
     }
