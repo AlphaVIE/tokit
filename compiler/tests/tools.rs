@@ -1,3 +1,5 @@
+mod common;
+
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -5,10 +7,7 @@ fn temporary_file(name: &str, contents: &str) -> std::path::PathBuf {
     let directory = std::env::temp_dir().join(format!(
         "tokit-tools-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join(name);

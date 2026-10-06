@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::process::Command;
 
@@ -89,10 +91,7 @@ fn cli_validates_import_dependents_before_writing() {
     let root = std::env::temp_dir().join(format!(
         "tokit-ai-patch-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     fs::create_dir(&root).unwrap();
     let entry = root.join("main.tok");

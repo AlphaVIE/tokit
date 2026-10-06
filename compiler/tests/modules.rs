@@ -1,3 +1,5 @@
+mod common;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,10 +7,7 @@ use std::process::Command;
 use tokit_compiler::{ai_index, check, interpreter, modules, native};
 
 fn temporary_directory(label: &str) -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let path = std::env::temp_dir().join(format!("tokit-{label}-{}-{nonce}", std::process::id()));
     std::fs::create_dir(&path).unwrap();
     path

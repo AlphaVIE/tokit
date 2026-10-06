@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -41,10 +43,7 @@ fn optional_values_match_in_interpreter_and_native() {
         if !native_available {
             continue;
         }
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = common::nonce();
         let output = std::env::temp_dir().join(format!(
             "tokit-option-{}-{nonce}{}",
             std::process::id(),

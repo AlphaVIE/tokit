@@ -1,6 +1,8 @@
 //! The registry's postgres package against an in-process server that speaks
 //! the PostgreSQL v3 protocol, including real SCRAM-SHA-256 verification.
 
+mod common;
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -250,10 +252,7 @@ fn project() -> (PathBuf, PathBuf) {
     let base = std::env::temp_dir().join(format!(
         "tokit-postgres-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&base).unwrap();
     let home = base.join("home");

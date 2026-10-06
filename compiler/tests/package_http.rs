@@ -1,5 +1,7 @@
 //! The registry's http package serving a small API in both backends.
 
+mod common;
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -70,10 +72,7 @@ fn project() -> (PathBuf, PathBuf) {
     let base = std::env::temp_dir().join(format!(
         "tokit-http-package-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&base).unwrap();
     let home = base.join("home");

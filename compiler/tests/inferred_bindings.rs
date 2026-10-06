@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -11,10 +13,7 @@ fn inferred_bindings_keep_mutability_and_run_in_both_backends() {
         let output = directory.join(format!(
             "tokit-inferred-{}-{}{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            common::nonce(),
             std::env::consts::EXE_SUFFIX
         ));
         native::build(&check(source).unwrap(), source, &output).unwrap();

@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -30,10 +32,7 @@ fn string_push_preserves_value_copies_in_both_backends() {
         if !native_available {
             continue;
         }
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = common::nonce();
         let output = std::env::temp_dir().join(format!(
             "tokit-string-push-{}-{nonce}{}",
             std::process::id(),

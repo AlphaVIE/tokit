@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -29,10 +31,7 @@ fn native_negation_matches_reference_success_and_overflow() {
     let directory = std::env::temp_dir().join(format!(
         "tokit-negation-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir(&directory).unwrap();
     for (name, source) in [

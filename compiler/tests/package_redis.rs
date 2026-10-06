@@ -1,5 +1,7 @@
 //! The registry's redis package against an in-process RESP2 server.
 
+mod common;
+
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -84,10 +86,7 @@ fn project(label: &str) -> (PathBuf, PathBuf) {
     let base = std::env::temp_dir().join(format!(
         "tokit-redis-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&base).unwrap();
     let home = base.join("home");

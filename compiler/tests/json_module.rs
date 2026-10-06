@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -71,10 +73,7 @@ fn json_renderer_agrees_with_native_backend() {
         let loaded =
             modules::load(&example(entry)).unwrap_or_else(|error| panic!("{}", error.display()));
         let expected = interpreter::run(&loaded.program).unwrap().to_string();
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = common::nonce();
         let output = std::env::temp_dir().join(format!(
             "tokit-json-{}-{nonce}{}",
             std::process::id(),
@@ -101,10 +100,7 @@ fn json_cli_corpus_agrees_across_interpreter_and_native() {
     if !native_available {
         assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
     }
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let output = std::env::temp_dir().join(format!(
         "tokit-json-corpus-{}-{nonce}{}",
         std::process::id(),

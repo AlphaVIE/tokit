@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -69,10 +71,7 @@ fn byte_values_match_interpreter_and_native() {
         if !native_available {
             continue;
         }
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = common::nonce();
         let output = std::env::temp_dir().join(format!(
             "tokit-bytes-{}-{nonce}{}",
             std::process::id(),
@@ -133,10 +132,7 @@ fn byte_push_range_matches_native_diagnostic() {
     }
     let source = "fn main()->Bytes{var data=utf8_encode(\"\");data.push(256);data}";
     let expected = run(source).unwrap_err().display(source);
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let output = std::env::temp_dir().join(format!(
         "tokit-byte-push-{}-{nonce}{}",
         std::process::id(),
@@ -158,10 +154,7 @@ fn byte_index_bounds_match_native_diagnostic() {
         assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
         return;
     }
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let output = std::env::temp_dir().join(format!(
         "tokit-byte-bounds-{}-{nonce}{}",
         std::process::id(),

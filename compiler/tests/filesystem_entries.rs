@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -11,10 +13,7 @@ fn fresh(label: &str) -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
         "tokit-fs-entries-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(directory.join("granted")).unwrap();
     directory

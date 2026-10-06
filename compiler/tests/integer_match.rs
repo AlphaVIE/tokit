@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -51,10 +53,7 @@ fn native_integer_match_agrees_with_reference() {
     let directory = std::env::temp_dir().join(format!(
         "tokit-integer-match-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir(&directory).unwrap();
     let binary = directory.join(format!("integer_match{}", std::env::consts::EXE_SUFFIX));

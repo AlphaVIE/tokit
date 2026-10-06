@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run_with_runtime_args};
@@ -123,10 +125,7 @@ fn record_field_benchmark_uses_runtime_iterations_and_size() {
     let binary = std::env::temp_dir().join(format!(
         "tokit-record-field-bench-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&check(RECORD_FIELD).unwrap(), RECORD_FIELD, &binary).unwrap();

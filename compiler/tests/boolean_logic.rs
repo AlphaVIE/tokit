@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::ir::{self, InstructionKind, ValueId};
@@ -7,10 +9,7 @@ fn native_result(source: &str) -> (bool, String, String) {
     let binary = std::env::temp_dir().join(format!(
         "tokit-boolean-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&check(source).unwrap(), source, &binary).unwrap();

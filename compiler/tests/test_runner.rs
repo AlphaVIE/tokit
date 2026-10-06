@@ -1,13 +1,12 @@
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use tokit_compiler::test_runner::{Outcome, run, run_with_capabilities};
 
 fn temporary_directory() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let directory = std::env::temp_dir().join(format!("tokit-test-{}-{nonce}", std::process::id()));
     std::fs::create_dir(&directory).unwrap();
     directory
