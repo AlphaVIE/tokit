@@ -54,6 +54,12 @@ fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize
         __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
     })
 }
+fn __tok_slot<T>(values: &mut [T], index: i32, source_id: usize, line: usize, column: usize) -> &mut T {
+    match usize::try_from(index).ok().and_then(|i| values.get_mut(i)) {
+        Some(slot) => slot,
+        None => __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds"),
+    }
+}
 fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i32 {
     i32::try_from(values.len()).unwrap_or_else(|_| {
         __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")

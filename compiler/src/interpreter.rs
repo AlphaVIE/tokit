@@ -3,7 +3,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::ast::{Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Span, Stmt};
+use crate::ast::{
+    Expr, ExprKind, Function, Op, Pattern, PatternKind, PlaceStep, Program, Span, Stmt,
+};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::filesystem::{ReadPolicy, WritePolicy};
@@ -981,12 +983,34 @@ fn eval_block(
                 let value = take_value!(eval(value, &scope, program, depth, runtime));
                 scope.insert(name.clone(), Rc::new(RefCell::new(value)));
             }
-            Stmt::Assign { name, value, span } => {
+            Stmt::Assign {
+                name,
+                path,
+                value,
+                span,
+            } => {
+                // Indices are evaluated left to right before the value.
+                let mut indices = Vec::new();
+                for step in path {
+                    if let PlaceStep::Index(index, _) = step {
+                        match take_value!(eval(index, &scope, program, depth, runtime)) {
+                            Value::I32(index) => indices.push(index),
+                            _ => {
+                                return Err(Diagnostic::new(
+                                    "E204",
+                                    *span,
+                                    "invalid runtime index",
+                                ));
+                            }
+                        }
+                    }
+                }
                 let value = take_value!(eval(value, &scope, program, depth, runtime));
                 let cell = scope.get(name).ok_or_else(|| {
                     Diagnostic::new("E204", *span, format!("unresolved runtime name {name}"))
                 })?;
-                *cell.borrow_mut() = value;
+                let mut binding = cell.borrow_mut();
+                store(&mut binding, path, &mut indices.into_iter(), value)?;
             }
             Stmt::Push { name, value, span } => {
                 let value = take_value!(eval(value, &scope, program, depth, runtime));
@@ -1261,4 +1285,54 @@ fn eval_string_builtin(name: &str, values: &[Value]) -> Option<Value> {
         (builtins::UPPER, [Value::String(value)]) => Value::String(value.to_uppercase()),
         _ => return None,
     })
+}
+
+/// Assign `value` at `path` below `target`, checking indices and byte ranges.
+fn store(
+    target: &mut Value,
+    path: &[PlaceStep],
+    indices: &mut impl Iterator<Item = i32>,
+    value: Value,
+) -> Result<(), Diagnostic> {
+    let Some((step, rest)) = path.split_first() else {
+        *target = value;
+        return Ok(());
+    };
+    match (step, target) {
+        (PlaceStep::Index(_, span), Value::Array(items)) => {
+            let index = indices.next().unwrap_or(-1);
+            let slot = usize::try_from(index)
+                .ok()
+                .and_then(|at| items.get_mut(at))
+                .ok_or_else(|| Diagnostic::new("E205", *span, "array index out of bounds"))?;
+            store(slot, rest, indices, value)
+        }
+        (PlaceStep::Index(_, span), Value::Bytes(bytes)) => {
+            let index = indices.next().unwrap_or(-1);
+            let at = usize::try_from(index)
+                .ok()
+                .filter(|at| *at < bytes.len())
+                .ok_or_else(|| Diagnostic::new("E205", *span, "array index out of bounds"))?;
+            let Value::I32(byte) = value else {
+                return Err(Diagnostic::new("E204", *span, "invalid runtime byte"));
+            };
+            let byte = u8::try_from(byte)
+                .map_err(|_| Diagnostic::new("E207", *span, "byte value outside 0..255"))?;
+            Arc::make_mut(bytes)[at] = byte;
+            Ok(())
+        }
+        (PlaceStep::Field(field, span), Value::Record(_, fields)) => {
+            let slot = fields
+                .iter_mut()
+                .find(|(name, _)| name == field)
+                .map(|(_, slot)| slot)
+                .ok_or_else(|| Diagnostic::new("E204", *span, "unknown runtime field"))?;
+            store(slot, rest, indices, value)
+        }
+        (PlaceStep::Index(_, span) | PlaceStep::Field(_, span), _) => Err(Diagnostic::new(
+            "E204",
+            *span,
+            "invalid runtime assignment target",
+        )),
+    }
 }

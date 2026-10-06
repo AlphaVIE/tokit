@@ -15,6 +15,15 @@ fn __tok_byte_push(values: &mut __TokBytes, value: i32, source_id: usize, line: 
     });
     std::sync::Arc::make_mut(&mut values.0).push(byte);
 }
+fn __tok_byte_store(values: &mut __TokBytes, index: i32, value: i32, source_id: usize, line: usize, column: usize) {
+    let at = usize::try_from(index).ok().filter(|at| *at < values.0.len()).unwrap_or_else(|| {
+        __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")
+    });
+    let byte = u8::try_from(value).unwrap_or_else(|_| {
+        __tok_runtime_fail("E207", source_id, line, column, "byte value outside 0..255")
+    });
+    std::sync::Arc::make_mut(&mut values.0)[at] = byte;
+}
 fn __tok_into_bytes(values: __TokBytes) -> Vec<u8> {
     std::sync::Arc::try_unwrap(values.0).unwrap_or_else(|shared| (*shared).clone())
 }
