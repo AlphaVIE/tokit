@@ -371,6 +371,23 @@ fn main() {
         }
         return;
     }
+    if args.get(1).is_some_and(|command| command == "repl") {
+        let stdin = std::io::stdin();
+        let mut input = stdin.lock();
+        let mut output = std::io::stdout();
+        if let Err(error) = tokit_compiler::tools::repl(&mut input, &mut output) {
+            eprintln!("{error}");
+            process::exit(1);
+        }
+        return;
+    }
+    if args
+        .get(1)
+        .is_some_and(|command| matches!(command.as_str(), "doc" | "lint" | "bench"))
+    {
+        tools_command(&args[1..]);
+        return;
+    }
     // Project commands that work in the current directory.
     match args.as_slice() {
         [_, command, name] if command == "new" => {
@@ -592,7 +609,7 @@ fn main() {
         [_, command, flag, path] if command == "explain" && flag == "--pseudo" => (false, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain [--pseudo]|expand|stats|ai-index|tokens> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain [--pseudo]|expand|stats|ai-index|tokens> <file.tok> | tok doc [--private] <file.tok> | tok lint [--json] <file.tok> | tok bench [--iterations N] <file.tok> | tok repl | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
             );
             process::exit(2);
         }
@@ -642,6 +659,115 @@ fn exit_with(result: Result<std::path::PathBuf, String>) -> ! {
         Err(error) => {
             eprintln!("{error}");
             process::exit(1);
+        }
+    }
+}
+
+/// `tok doc [--private] file.tok`, `tok lint [--json] file.tok`,
+/// `tok bench [--iterations N] file.tok`.
+fn tools_command(args: &[String]) {
+    let command = args[0].as_str();
+    let mut flags = Vec::new();
+    let mut iterations = 1000;
+    let mut path = None;
+    let mut index = 1;
+    while let Some(arg) = args.get(index) {
+        match arg.as_str() {
+            "--iterations" => {
+                iterations = args
+                    .get(index + 1)
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or_else(|| {
+                        eprintln!("--iterations needs a positive number");
+                        process::exit(2);
+                    });
+                index += 2;
+                continue;
+            }
+            flag if flag.starts_with("--") => flags.push(flag.to_owned()),
+            other => path = Some(other.to_owned()),
+        }
+        index += 1;
+    }
+    let Some(path) = path else {
+        eprintln!(
+            "usage: tok doc [--private] <file.tok> | tok lint [--json] <file.tok> | tok bench [--iterations N] <file.tok>"
+        );
+        process::exit(2);
+    };
+    let loaded = match tokit_compiler::modules::load(Path::new(&path)) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            eprintln!("{}", display_diagnostic(&error.diagnostic, &error.sources));
+            process::exit(1);
+        }
+    };
+    match command {
+        "doc" => {
+            let source = fs::read_to_string(&path).unwrap_or_default();
+            let entry = tokit_compiler::parse(&source).unwrap_or_else(|_| loaded.program.clone());
+            let title = Path::new(&path)
+                .file_stem()
+                .map_or("module".into(), |stem| stem.to_string_lossy());
+            print!(
+                "{}",
+                tokit_compiler::doc::document(
+                    &entry,
+                    &source,
+                    &title,
+                    flags.iter().any(|f| f == "--private")
+                )
+            );
+        }
+        "lint" => {
+            let warnings = tokit_compiler::lint::lint(&loaded.program);
+            if flags.iter().any(|flag| flag == "--json") {
+                let items = warnings
+                    .iter()
+                    .map(|warning| json_diagnostic(warning, &loaded.sources))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                println!("{{\"ok\":true,\"warnings\":[{items}]}}");
+            } else {
+                for warning in &warnings {
+                    println!("{}", display_diagnostic(warning, &loaded.sources));
+                }
+            }
+        }
+        _ => {
+            let (program, names) =
+                match tokit_compiler::tools::bench_program(loaded.program.clone(), iterations) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        process::exit(1);
+                    }
+                };
+            let binary = std::env::temp_dir().join(format!(
+                "tok-bench-{}{}",
+                process::id(),
+                std::env::consts::EXE_SUFFIX
+            ));
+            match tokit_compiler::native::build_with_sources(&program, &loaded.sources, &binary) {
+                Ok(()) => {
+                    let status = process::Command::new(&binary).status();
+                    let _ = fs::remove_file(&binary);
+                    if !status.is_ok_and(|status| status.success()) {
+                        process::exit(1);
+                    }
+                }
+                Err(error) => {
+                    eprintln!(
+                        "native build unavailable ({}); timing in the interpreter",
+                        error.lines().next().unwrap_or("")
+                    );
+                    if let Err(error) = tokit_compiler::interpreter::run(&program) {
+                        eprintln!("{}", display_diagnostic(&error, &loaded.sources));
+                        process::exit(1);
+                    }
+                }
+            }
+            let _ = names;
         }
     }
 }

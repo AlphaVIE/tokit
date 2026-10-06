@@ -6,6 +6,7 @@ pub mod checker;
 #[doc(hidden)]
 pub mod crypto;
 pub mod diagnostic;
+pub mod doc;
 pub mod expand;
 pub mod explain;
 pub mod filesystem;
@@ -14,6 +15,7 @@ mod http;
 pub mod interpreter;
 pub mod ir;
 pub mod lexer;
+pub mod lint;
 pub mod lsp;
 pub mod module_resolver;
 pub mod modules;
@@ -24,6 +26,7 @@ pub mod registry;
 pub mod sources;
 pub mod stats;
 pub mod test_runner;
+pub mod tools;
 
 use ast::{Program, SourceId};
 use diagnostic::Diagnostic;
