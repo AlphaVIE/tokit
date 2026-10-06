@@ -1,6 +1,6 @@
 # Experimental filesystem capabilities
 
-The current subset exposes five built-in functions:
+The current subset exposes these built-in functions:
 
 ```text
 read_text(path:String) -> Result<String,IoError>
@@ -8,7 +8,13 @@ read_bytes(path:String) -> Result<Bytes,IoError>
 write_text(path:String,text:String) -> Result<Unit,IoError>
 write_bytes(path:String,data:Bytes) -> Result<Unit,IoError>
 lines(text:String) -> [String]
+list_dir(path:String) -> Result<[String],IoError>
+exists(path:String) -> bool
+make_dir(path:String) -> Result<Unit,IoError>
+remove_file(path:String) -> Result<Unit,IoError>
 ```
+
+`list_dir` and `exists` use the read grant; `make_dir` and `remove_file` use the write grant. `list_dir` returns the entry names (not paths) of a directory sorted by byte value, so listings are deterministic across platforms; a name that is not valid Unicode yields `InvalidUtf8`. `exists` is `true` only for an existing path inside the read grant, so it is `false` without a grant. `make_dir` creates one directory whose parent exists inside the write grant; an existing entry yields `IoError::Other`. `remove_file` removes an existing file inside the write grant (never the granted root itself, and never a directory) and returns `NotFound` for a missing file in a granted directory.
 
 `IoError` is a reserved built-in enum with `Denied`, `NotFound`, `InvalidUtf8`, and `Other` variants. `read_text` decodes the entire file as UTF-8 and returns an error value rather than a runtime diagnostic. `read_bytes` returns the exact file bytes, including invalid UTF-8; it never produces `InvalidUtf8`. `write_text` writes the UTF-8 bytes of its second argument. `write_bytes` writes the exact `Bytes` value. Both replace an existing file or create a new file when its parent directory exists, return `Ok(())`, and do not create directories. `lines` follows Rust `str.lines()` behavior: it splits on LF, removes a CR immediately before LF, and does not add an empty final element for a trailing LF. Counting lines with `i32` arithmetic still reports `E201` on overflow.
 

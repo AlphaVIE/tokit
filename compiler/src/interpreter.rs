@@ -849,7 +849,36 @@ fn eval_builtin(
     if let Some(value) = eval_string_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
+    let io_error = |error: crate::filesystem::IoError| {
+        Value::Err(Box::new(Value::Enum(
+            builtins::IO_ERROR.to_owned(),
+            error.variant().to_owned(),
+            None,
+        )))
+    };
     match (name.as_str(), values.as_slice()) {
+        (builtins::LIST_DIR, [Value::String(path)]) => {
+            return Ok(Flow::Value(match runtime.read.list_dir(path) {
+                Ok(names) => Value::Ok(Box::new(Value::Array(
+                    names.into_iter().map(Value::String).collect(),
+                ))),
+                Err(error) => io_error(error),
+            }));
+        }
+        (builtins::EXISTS, [Value::String(path)]) => {
+            return Ok(Flow::Value(Value::Bool(runtime.read.exists(path))));
+        }
+        (builtins::MAKE_DIR | builtins::REMOVE_FILE, [Value::String(path)]) => {
+            let result = if name == builtins::MAKE_DIR {
+                runtime.write.make_dir(path)
+            } else {
+                runtime.write.remove_file(path)
+            };
+            return Ok(Flow::Value(match result {
+                Ok(()) => Value::Ok(Box::new(Value::Unit)),
+                Err(error) => io_error(error),
+            }));
+        }
         (builtins::ENV, [Value::String(key)]) => {
             return Ok(Flow::Value(match std::env::var(key) {
                 Ok(value) => Value::Some(Box::new(Value::String(value))),

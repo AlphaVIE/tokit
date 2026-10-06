@@ -91,6 +91,25 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
         (
+            builtins::LIST_DIR,
+            vec![Type::String],
+            Type::Result(
+                Box::new(Type::Array(Box::new(Type::String))),
+                Box::new(Type::Named(builtins::IO_ERROR.to_owned())),
+            ),
+        ),
+        (builtins::EXISTS, vec![Type::String], Type::Bool),
+        (
+            builtins::MAKE_DIR,
+            vec![Type::String],
+            builtins::write_text_result(),
+        ),
+        (
+            builtins::REMOVE_FILE,
+            vec![Type::String],
+            builtins::write_text_result(),
+        ),
+        (
             builtins::ENV,
             vec![Type::String],
             Type::Option(Box::new(Type::String)),
@@ -471,6 +490,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "list_dir"
+                | "exists"
+                | "make_dir"
+                | "remove_file"
                 | "env"
                 | "now_ms"
                 | "clock_ns"
@@ -559,6 +582,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "list_dir"
+                | "exists"
+                | "make_dir"
+                | "remove_file"
                 | "env"
                 | "now_ms"
                 | "clock_ns"
@@ -882,6 +909,10 @@ fn expression_is_spawn_safe(
                 && name != builtins::WRITE_BYTES
                 && name != builtins::ARGS
                 && name != builtins::PRINT
+                && name != builtins::LIST_DIR
+                && name != builtins::EXISTS
+                && name != builtins::MAKE_DIR
+                && name != builtins::REMOVE_FILE
                 && name != builtins::ENV
                 && name != builtins::NOW_MS
                 && name != builtins::CLOCK_NS
