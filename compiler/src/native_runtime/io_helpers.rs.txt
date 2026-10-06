@@ -2,8 +2,24 @@ fn __tok_read_error(kind: std::io::ErrorKind) -> __TokIoError {
     if kind == std::io::ErrorKind::NotFound { __TokIoError::NotFound } else { __TokIoError::Other }
 }
 fn __tok_read_bytes(path: String) -> Result<__TokBytes, __TokIoError> {
+    let resolved = __tok_read_resolve(&path)?;
+    std::fs::read(resolved).map(|bytes| __TokBytes(std::sync::Arc::new(bytes))).map_err(|error| __tok_read_error(error.kind()))
+}
+fn __tok_read_list_dir(path: String) -> Result<Vec<String>, __TokIoError> {
+    let resolved = __tok_read_resolve(&path)?;
+    let mut names = std::fs::read_dir(resolved).map_err(|error| __tok_read_error(error.kind()))?
+        .map(|entry| {
+            let entry = entry.map_err(|error| __tok_read_error(error.kind()))?;
+            entry.file_name().into_string().map_err(|_| __TokIoError::InvalidUtf8)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    names.sort();
+    Ok(names)
+}
+fn __tok_read_exists(path: String) -> bool { __tok_read_resolve(&path).is_ok() }
+fn __tok_read_resolve(path: &str) -> Result<std::path::PathBuf, __TokIoError> {
     let root = __TOK_READ_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
-    let requested = std::path::Path::new(&path);
+    let requested = std::path::Path::new(path);
     let resolved = match requested.canonicalize() {
         Ok(resolved) => resolved,
         Err(error) => {
@@ -16,14 +32,32 @@ fn __tok_read_bytes(path: String) -> Result<__TokBytes, __TokIoError> {
         }
     };
     if !resolved.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::read(resolved).map(|bytes| __TokBytes(std::sync::Arc::new(bytes))).map_err(|error| __tok_read_error(error.kind()))
+    Ok(resolved)
 }
 fn __tok_read_text(path: String) -> Result<String, __TokIoError> {
     String::from_utf8(__tok_into_bytes(__tok_read_bytes(path)?)).map_err(|_| __TokIoError::InvalidUtf8)
 }
 fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError> {
+    let target = __tok_write_target(&path)?;
+    std::fs::write(target, bytes.0.as_slice()).map_err(|error| __tok_read_error(error.kind()))
+}
+fn __tok_write_make_dir(path: String) -> Result<(), __TokIoError> {
+    let target = __tok_write_target(&path)?;
+    std::fs::create_dir(target).map_err(|error| __tok_read_error(error.kind()))
+}
+fn __tok_write_remove_file(path: String) -> Result<(), __TokIoError> {
     let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
     let requested = std::path::Path::new(&path);
+    let resolved = requested.canonicalize().map_err(|error| {
+        let parent = requested.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+        if parent.canonicalize().is_ok_and(|parent| parent.starts_with(&root)) { __tok_read_error(error.kind()) } else { __TokIoError::Denied }
+    })?;
+    if !resolved.starts_with(&root) || resolved == root { return Err(__TokIoError::Denied); }
+    std::fs::remove_file(resolved).map_err(|error| __tok_read_error(error.kind()))
+}
+fn __tok_write_target(path: &str) -> Result<std::path::PathBuf, __TokIoError> {
+    let root = __TOK_WRITE_ROOT.with(|cell| cell.borrow().clone()).ok_or(__TokIoError::Denied)?;
+    let requested = std::path::Path::new(path);
     let target = match requested.canonicalize() {
         Ok(target) => target,
         Err(_) => {
@@ -38,7 +72,7 @@ fn __tok_write_bytes(path: String, bytes: __TokBytes) -> Result<(), __TokIoError
         }
     };
     if !target.starts_with(&root) { return Err(__TokIoError::Denied); }
-    std::fs::write(target, bytes.0.as_slice()).map_err(|error| __tok_read_error(error.kind()))
+    Ok(target)
 }
 fn __tok_write_text(path: String, text: String) -> Result<(), __TokIoError> {
     __tok_write_bytes(path, __TokBytes(std::sync::Arc::new(text.into_bytes())))

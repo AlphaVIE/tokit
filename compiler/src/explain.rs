@@ -155,6 +155,12 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if name == builtins::LIST_DIR || name == builtins::EXISTS {
+                facts.operations.insert("filesystem query");
+                facts.effects.insert("fs.read");
+            } else if name == builtins::MAKE_DIR || name == builtins::REMOVE_FILE {
+                facts.operations.insert("filesystem change");
+                facts.effects.insert("fs.write");
             } else if name == builtins::ENV {
                 facts.operations.insert("environment variable");
                 facts.effects.insert("env.read");

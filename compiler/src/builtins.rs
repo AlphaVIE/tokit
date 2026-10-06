@@ -7,6 +7,10 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const LIST_DIR: &str = "list_dir";
+pub const EXISTS: &str = "exists";
+pub const MAKE_DIR: &str = "make_dir";
+pub const REMOVE_FILE: &str = "remove_file";
 pub const ENV: &str = "env";
 pub const NOW_MS: &str = "now_ms";
 pub const CLOCK_NS: &str = "clock_ns";
@@ -193,7 +197,11 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "env"
+        "list_dir"
+            | "exists"
+            | "make_dir"
+            | "remove_file"
+            | "env"
             | "now_ms"
             | "clock_ns"
             | "sleep_ms"

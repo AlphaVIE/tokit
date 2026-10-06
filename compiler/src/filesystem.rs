@@ -45,6 +45,41 @@ impl WritePolicy {
     }
 
     pub fn write_bytes(&self, path: &str, bytes: &[u8]) -> Result<(), IoError> {
+        let target = self.target(path)?;
+        std::fs::write(target, bytes).map_err(|error| classify(error.kind()))
+    }
+
+    /// Create one directory whose parent lies inside the grant.
+    pub fn make_dir(&self, path: &str) -> Result<(), IoError> {
+        let target = self.target(path)?;
+        std::fs::create_dir(target).map_err(|error| classify(error.kind()))
+    }
+
+    /// Remove an existing file inside the grant; directories are not removed.
+    pub fn remove_file(&self, path: &str) -> Result<(), IoError> {
+        let root = self.root.as_ref().ok_or(IoError::Denied)?;
+        let resolved = Path::new(path).canonicalize().map_err(|error| {
+            if Path::new(path)
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or(Path::new("."))
+                .canonicalize()
+                .is_ok_and(|parent| parent.starts_with(root))
+            {
+                classify(error.kind())
+            } else {
+                IoError::Denied
+            }
+        })?;
+        if !resolved.starts_with(root) || resolved == *root {
+            return Err(IoError::Denied);
+        }
+        std::fs::remove_file(resolved).map_err(|error| classify(error.kind()))
+    }
+
+    /// The path a write or creation may touch: an existing target or a new
+    /// name in an existing parent, either way inside the grant.
+    fn target(&self, path: &str) -> Result<PathBuf, IoError> {
         let root = self.root.as_ref().ok_or(IoError::Denied)?;
         let requested = Path::new(path);
         let target = match requested.canonicalize() {
@@ -69,7 +104,7 @@ impl WritePolicy {
         if !target.starts_with(root) {
             return Err(IoError::Denied);
         }
-        std::fs::write(target, bytes).map_err(|error| classify(error.kind()))
+        Ok(target)
     }
 }
 
@@ -86,6 +121,33 @@ impl ReadPolicy {
     }
 
     pub fn read_bytes(&self, path: &str) -> Result<Vec<u8>, ReadError> {
+        let resolved = self.resolve(path)?;
+        std::fs::read(resolved).map_err(|error| classify(error.kind()))
+    }
+
+    /// Entry names of a directory inside the grant, sorted for determinism.
+    pub fn list_dir(&self, path: &str) -> Result<Vec<String>, ReadError> {
+        let resolved = self.resolve(path)?;
+        let mut names = std::fs::read_dir(resolved)
+            .map_err(|error| classify(error.kind()))?
+            .map(|entry| {
+                let entry = entry.map_err(|error| classify(error.kind()))?;
+                entry
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| ReadError::InvalidUtf8)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        names.sort();
+        Ok(names)
+    }
+
+    /// Whether a path inside the grant exists; without a grant nothing exists.
+    pub fn exists(&self, path: &str) -> bool {
+        self.resolve(path).is_ok()
+    }
+
+    fn resolve(&self, path: &str) -> Result<PathBuf, ReadError> {
         let root = self.root.as_ref().ok_or(ReadError::Denied)?;
         let requested = Path::new(path);
         let resolved = match requested.canonicalize() {
@@ -108,7 +170,7 @@ impl ReadPolicy {
         if !resolved.starts_with(root) {
             return Err(ReadError::Denied);
         }
-        std::fs::read(resolved).map_err(|error| classify(error.kind()))
+        Ok(resolved)
     }
 }
 
