@@ -85,7 +85,7 @@ fn run_command(args: &[String]) {
         [separator, rest @ ..] if separator == "--" => rest,
         _ => {
             eprintln!(
-                "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...]"
+                "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
             );
             process::exit(2);
         }
@@ -274,8 +274,44 @@ fn patch_command(entry: &Path, request_path: &Path, write: bool) -> Result<Strin
     }
 }
 
+const USAGE: &str = "usage: tok <command> ...
+
+Run and build
+  tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- args...]
+  tok build <file.tok> -o <output>
+  tok test [--allow-read <path>] [--allow-write <path>] <file.tok>
+  tok bench [--iterations N] <file.tok>
+  tok repl
+
+Check and inspect
+  tok check [--json] <file.tok>
+  tok lint [--json] <file.tok>
+  tok explain [--pseudo] <file.tok>
+  tok expand | stats | ai-index | tokens <file.tok>
+  tok doc [--private] <file.tok>
+
+Format
+  tok fmt [--check|--write] <file.tok>
+  tok compact [--write] <file.tok>
+
+Projects and packages
+  tok new <name>
+  tok add <name> | tok rm <name> | tok search [term]
+  tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>]
+  tok rm <entry.tok> <name>
+  tok lock <entry.tok>
+  tok pkg-hash <file.tok|directory>
+
+Editors
+  tok lsp";
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() == 1 || (args.len() == 2 && matches!(args[1].as_str(), "help" | "--help" | "-h"))
+    {
+        println!("{USAGE}");
+        return;
+    }
     if args.len() == 2 && args[1] == "lsp" {
         let stdin = std::io::stdin();
         let stdout = std::io::stdout();
@@ -608,9 +644,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         [_, command, flag, path] if command == "explain" && flag == "--pseudo" => (false, path),
         _ => {
-            eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain [--pseudo]|expand|stats|ai-index|tokens> <file.tok> | tok doc [--private] <file.tok> | tok lint [--json] <file.tok> | tok bench [--iterations N] <file.tok> | tok repl | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
-            );
+            eprintln!("{USAGE}");
             process::exit(2);
         }
     };

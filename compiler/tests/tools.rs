@@ -111,3 +111,49 @@ fn bench_times_each_bench_function() {
     assert!(lines[0].starts_with("bench_add ") && lines[0].ends_with(" ns/iter (20 iterations)"));
     assert!(lines[1].starts_with("bench_text "));
 }
+
+#[test]
+fn help_lists_every_command() {
+    let help = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(help.status.success());
+    let text = String::from_utf8(help.stdout).unwrap();
+    for command in [
+        "run",
+        "build",
+        "test",
+        "bench",
+        "repl",
+        "check",
+        "lint",
+        "explain",
+        "expand",
+        "stats",
+        "ai-index",
+        "tokens",
+        "doc",
+        "fmt",
+        "compact",
+        "new",
+        "add",
+        "rm",
+        "search",
+        "lock",
+        "pkg-hash",
+        "lsp",
+        "--allow-net",
+    ] {
+        assert!(
+            text.contains(&format!(" {command}")) || text.contains(&format!("[{command}")),
+            "{command} missing from help"
+        );
+    }
+    let unknown = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .arg("frobnicate")
+        .output()
+        .unwrap();
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).starts_with("usage: tok <command>"));
+}
