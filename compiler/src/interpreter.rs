@@ -892,6 +892,9 @@ fn eval_builtin(
     if let Some(value) = eval_map_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
+    if let Some(value) = eval_crypto_builtin(name, &values) {
+        return Ok(Flow::Value(value));
+    }
     if let Some(value) = eval_math_builtin(name, &values, expr.span) {
         return Ok(Flow::Value(value?));
     }
@@ -2052,4 +2055,30 @@ fn eval_http(
         )),
         _ => None,
     }
+}
+
+/// Hashing, encoding, and random bytes through the code native programs embed.
+fn eval_crypto_builtin(name: &str, values: &[Value]) -> Option<Value> {
+    use crate::crypto as c;
+    let bytes = |data: Vec<u8>| Value::Bytes(Arc::new(data));
+    Some(match (name, values) {
+        (builtins::SHA256, [Value::Bytes(data)]) => bytes(c::__tok_sha256(data)),
+        (builtins::MD5, [Value::Bytes(data)]) => bytes(c::__tok_md5(data)),
+        (builtins::HMAC_SHA256, [Value::Bytes(key), Value::Bytes(data)]) => {
+            bytes(c::__tok_hmac_sha256(key, data))
+        }
+        (builtins::PBKDF2_SHA256, [Value::Bytes(password), Value::Bytes(salt), Value::I32(n)]) => {
+            bytes(c::__tok_pbkdf2_sha256(password, salt, *n))
+        }
+        (builtins::BASE64_ENCODE, [Value::Bytes(data)]) => {
+            Value::String(c::__tok_base64_encode(data))
+        }
+        (builtins::BASE64_DECODE, [Value::String(text)]) => match c::__tok_base64_decode(text) {
+            Some(data) => Value::Some(Box::new(bytes(data))),
+            None => Value::None,
+        },
+        (builtins::HEX, [Value::Bytes(data)]) => Value::String(c::__tok_hex(data)),
+        (builtins::RANDOM_BYTES, [Value::I32(count)]) => bytes(c::__tok_random_bytes(*count)),
+        _ => return None,
+    })
 }

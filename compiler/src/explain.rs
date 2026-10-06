@@ -155,6 +155,20 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if name == builtins::RANDOM_BYTES {
+                facts.operations.insert("random bytes");
+                facts.effects.insert("random");
+            } else if matches!(
+                name.as_str(),
+                builtins::SHA256
+                    | builtins::MD5
+                    | builtins::HMAC_SHA256
+                    | builtins::PBKDF2_SHA256
+                    | builtins::BASE64_ENCODE
+                    | builtins::BASE64_DECODE
+                    | builtins::HEX
+            ) {
+                facts.operations.insert("hashing or encoding");
             } else if name == builtins::TCP_CONNECT {
                 facts.operations.insert("TCP connection");
                 facts.effects.insert("net.connect");

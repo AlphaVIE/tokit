@@ -7,6 +7,14 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const SHA256: &str = "sha256";
+pub const MD5: &str = "md5";
+pub const HMAC_SHA256: &str = "hmac_sha256";
+pub const PBKDF2_SHA256: &str = "pbkdf2_sha256";
+pub const BASE64_ENCODE: &str = "base64_encode";
+pub const BASE64_DECODE: &str = "base64_decode";
+pub const HEX: &str = "hex";
+pub const RANDOM_BYTES: &str = "random_bytes";
 pub const CONN: &str = "Conn";
 pub const TCP_CONNECT: &str = "tcp_connect";
 pub const TCP_SEND: &str = "tcp_send";
@@ -206,7 +214,15 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "tcp_connect"
+        "sha256"
+            | "md5"
+            | "hmac_sha256"
+            | "pbkdf2_sha256"
+            | "base64_encode"
+            | "base64_decode"
+            | "hex"
+            | "random_bytes"
+            | "tcp_connect"
             | "tcp_send"
             | "tcp_recv"
             | "tcp_close"

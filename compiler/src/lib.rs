@@ -3,6 +3,7 @@ pub mod ai_patch;
 pub mod ast;
 pub mod builtins;
 pub mod checker;
+mod crypto;
 pub mod diagnostic;
 pub mod explain;
 pub mod filesystem;
