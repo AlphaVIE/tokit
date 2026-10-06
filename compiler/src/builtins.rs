@@ -8,6 +8,12 @@ pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
 pub const MAP: &str = "Map";
+pub const MAP_FN: &str = "map";
+pub const FILTER: &str = "filter";
+pub const ANY: &str = "any";
+pub const ALL: &str = "all";
+pub const FOLD: &str = "fold";
+pub const SORT_BY: &str = "sort_by";
 pub const RANGE: &str = "range";
 pub const SORT: &str = "sort";
 pub const REVERSE: &str = "reverse";
@@ -158,5 +164,62 @@ pub fn equatable(ty: &Type) -> bool {
     matches!(
         ty,
         Type::I32 | Type::I64 | Type::F64 | Type::Bool | Type::String | Type::Bytes | Type::Never
+    )
+}
+
+/// Every builtin that is invoked with call syntax.
+pub fn is_call(name: &str) -> bool {
+    matches!(
+        name,
+        "read_text"
+            | "read_bytes"
+            | "write_text"
+            | "write_bytes"
+            | "lines"
+            | "args"
+            | "print"
+            | "map"
+            | "filter"
+            | "any"
+            | "all"
+            | "fold"
+            | "sort_by"
+            | "range"
+            | "sort"
+            | "reverse"
+            | "slice"
+            | "Map"
+            | "get"
+            | "get_or"
+            | "keys"
+            | "values"
+            | "remove"
+            | "String"
+            | "chars"
+            | "split"
+            | "trim"
+            | "contains"
+            | "starts_with"
+            | "ends_with"
+            | "replace"
+            | "lower"
+            | "upper"
+            | "read_line"
+            | "read_stdin"
+            | "exit"
+            | "len"
+            | "parse_i32"
+            | "parse_i64"
+            | "parse_f64"
+            | "i32"
+            | "i64"
+            | "f64"
+            | "utf8_bytes"
+            | "utf8_decode"
+            | "utf8_encode"
+            | "utf8_decode_bytes"
+            | "bytes_from_i32"
+            | "bytes_to_i32"
+            | "join"
     )
 }

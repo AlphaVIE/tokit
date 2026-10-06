@@ -3,6 +3,7 @@ impl __TokRender for i32 { fn tok_render(&self) -> String { self.to_string() } }
 impl __TokRender for f64 { fn tok_render(&self) -> String { format!("{:?}", self) } }
 impl __TokRender for bool { fn tok_render(&self) -> String { self.to_string() } }
 impl __TokRender for String { fn tok_render(&self) -> String { format!("{:?}", self) } }
+impl<T: ?Sized> __TokRender for std::sync::Arc<T> { fn tok_render(&self) -> String { "<fn>".to_owned() } }
 impl __TokRender for () { fn tok_render(&self) -> String { "()".to_owned() } }
 impl<T: __TokRender> __TokRender for Vec<T> {
     fn tok_render(&self) -> String {

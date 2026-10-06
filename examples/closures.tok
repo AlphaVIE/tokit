@@ -1,0 +1,4 @@
+// Function values: lambdas capture copies of locals; map, filter, sort_by, and fold take them.
+struct Person{name:String,age:I}
+older(people:[Person],limit:I)->[String]{map(filter(sort_by(people,|p|p.age),|p|p.age>limit),|p|p.name)}
+main()->[String]{let people=[Person("bo",30),Person("al",25),Person("cy",35)];let total=fold(people,0,|sum,p|sum+p.age);older(people,26)+[String(total)]}

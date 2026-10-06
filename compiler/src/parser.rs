@@ -132,6 +132,20 @@ impl Parser {
         Ok((value, span))
     }
     fn ty(&mut self) -> Result<Type, Diagnostic> {
+        if self.at(&Kind::LParen) {
+            self.bump();
+            let mut params = Vec::new();
+            while !self.at(&Kind::RParen) {
+                params.push(self.ty()?);
+                if !self.at(&Kind::RParen) {
+                    self.expect(Kind::Comma)?;
+                }
+            }
+            self.bump();
+            self.expect(Kind::Arrow)?;
+            let ret = self.ty()?;
+            return Ok(Type::Fn(params, Box::new(ret)));
+        }
         if self.at(&Kind::LBracket) {
             self.bump();
             let element = self.ty()?;
@@ -562,6 +576,28 @@ impl Parser {
                 };
                 continue;
             }
+            if self.at(&Kind::LParen)
+                && matches!(
+                    left.kind,
+                    ExprKind::Field(..) | ExprKind::Index(..) | ExprKind::Apply(..)
+                )
+            {
+                self.bump();
+                let mut args = Vec::new();
+                while !self.at(&Kind::RParen) {
+                    args.push(self.expr(0)?);
+                    if !self.at(&Kind::RParen) {
+                        self.expect(Kind::Comma)?;
+                    }
+                }
+                let end = self.bump().span;
+                let span = left.span.join(end);
+                left = Expr {
+                    kind: ExprKind::Apply(Box::new(left), args),
+                    span,
+                };
+                continue;
+            }
             if self.at(&Kind::Question) {
                 let end = self.bump().span;
                 let span = left.span.join(end);
@@ -620,6 +656,34 @@ impl Parser {
     fn atom(&mut self) -> Result<Expr, Diagnostic> {
         let token = self.bump();
         match token.kind {
+            Kind::Pipe | Kind::OrOr => {
+                let mut params = Vec::new();
+                if token.kind == Kind::Pipe {
+                    while !self.at(&Kind::Pipe) {
+                        let (name, _) = self.ident()?;
+                        let ty = if self.at(&Kind::Colon) {
+                            self.bump();
+                            Some(self.ty()?)
+                        } else {
+                            None
+                        };
+                        params.push((name, ty));
+                        if !self.at(&Kind::Pipe) {
+                            self.expect(Kind::Comma)?;
+                        }
+                    }
+                    self.bump();
+                }
+                // `break` and `continue` cannot leave a lambda body.
+                let loop_depth = std::mem::take(&mut self.loop_depth);
+                let body = self.expr(0);
+                self.loop_depth = loop_depth;
+                let body = body?;
+                Ok(Expr {
+                    span: token.span.join(body.span),
+                    kind: ExprKind::Lambda(params, Box::new(body)),
+                })
+            }
             Kind::Bang => {
                 let value = self.expr(6)?;
                 Ok(Expr {

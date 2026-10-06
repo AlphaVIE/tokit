@@ -169,6 +169,11 @@ impl BlockCompactor<'_> {
 
     fn expr(&mut self, expr: &Expr) {
         match &expr.kind {
+            ExprKind::Lambda(_, body) => self.expr(body),
+            ExprKind::Apply(callee, args) => {
+                self.expr(callee);
+                args.iter().for_each(|arg| self.expr(arg));
+            }
             ExprKind::Int(_)
             | ExprKind::I64(_)
             | ExprKind::F64(_)

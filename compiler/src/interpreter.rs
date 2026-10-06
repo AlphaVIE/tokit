@@ -28,8 +28,26 @@ pub enum Value {
     Some(Box<Value>),
     None,
     Task(Box<Value>),
+    Closure(Arc<Closure>),
     Unit,
 }
+
+/// A lambda value with copies of the locals it reads.
+#[derive(Debug)]
+pub struct Closure {
+    params: Vec<String>,
+    body: Expr,
+    captured: Vec<(String, Value)>,
+}
+
+/// Closures compare by identity; the language exposes no closure equality.
+impl PartialEq for Closure {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Closure {}
 
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -50,6 +68,7 @@ impl std::fmt::Display for Value {
                 }
                 f.write_str("]")
             }
+            Self::Closure(_) => f.write_str("<fn>"),
             Self::Map(entries) => {
                 f.write_str("{")?;
                 for (index, (key, value)) in entries.iter().enumerate() {
@@ -394,6 +413,37 @@ fn eval(
     runtime: &Runtime<'_>,
 ) -> Result<Flow, Diagnostic> {
     let value = match &expr.kind {
+        ExprKind::Apply(callee, args) => {
+            let Value::Closure(closure) = take_value!(eval(callee, env, program, depth, runtime))
+            else {
+                return Err(Diagnostic::new(
+                    "E204",
+                    expr.span,
+                    "called a non-function value",
+                ));
+            };
+            let mut values = Vec::with_capacity(args.len());
+            for arg in args {
+                values.push(take_value!(eval(arg, env, program, depth, runtime)));
+            }
+            call_closure(&closure, values, program, depth, runtime, expr.span)?
+        }
+        ExprKind::Lambda(params, body) => {
+            let captured = body
+                .free_names()
+                .into_iter()
+                .filter(|name| !params.iter().any(|(param, _)| param == name))
+                .filter_map(|name| {
+                    let value = env.get(&name)?.borrow().clone();
+                    Some((name, value))
+                })
+                .collect();
+            Value::Closure(Arc::new(Closure {
+                params: params.iter().map(|(name, _)| name.clone()).collect(),
+                body: (**body).clone(),
+                captured,
+            }))
+        }
         ExprKind::Int(number) => Value::I32(*number),
         ExprKind::I64(number) => Value::I64(*number),
         ExprKind::F64(bits) => Value::F64(*bits),
@@ -653,6 +703,28 @@ fn eval_call(
     let mut values = Vec::new();
     for arg in args {
         values.push(take_value!(eval(arg, env, program, depth, runtime)));
+    }
+    // Functions, records, and builtins take precedence over local values.
+    let declared = builtins::is_call(name)
+        || program
+            .functions
+            .iter()
+            .any(|function| function.name == *name)
+        || program.records.iter().any(|record| record.name == *name);
+    if !declared && let Some(binding) = env.get(name) {
+        let Value::Closure(closure) = binding.borrow().clone() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "called a non-function value",
+            ));
+        };
+        return Ok(Flow::Value(call_closure(
+            &closure, values, program, depth, runtime, expr.span,
+        )?));
+    }
+    if let Some(result) = eval_higher_order(name, &values, program, depth, runtime, expr.span) {
+        return Ok(Flow::Value(result?));
     }
     let Some(function) = program
         .functions
@@ -1502,4 +1574,125 @@ fn eval_array_builtin(
         }
         _ => return None,
     }))
+}
+
+/// Run `frame` with room for one more call, on a fresh stack segment when due.
+fn with_call_stack(
+    depth: usize,
+    span: Span,
+    frame: impl FnOnce() -> Result<Value, Diagnostic> + Send,
+) -> Result<Value, Diagnostic> {
+    if depth >= MAX_CALL_DEPTH {
+        return Err(Diagnostic::new("E202", span, "call depth limit exceeded"));
+    }
+    if depth > 0 && depth.is_multiple_of(CALLS_PER_STACK_SEGMENT) {
+        return std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .stack_size(STACK_SEGMENT_BYTES)
+                .spawn_scoped(scope, frame)
+                .map_err(|error| {
+                    Diagnostic::new(
+                        "E204",
+                        span,
+                        format!("cannot extend evaluator stack: {error}"),
+                    )
+                })?
+                .join()
+                .map_err(|_| Diagnostic::new("E204", span, "reference evaluator panicked"))?
+        });
+    }
+    frame()
+}
+
+fn call_closure(
+    closure: &Closure,
+    args: Vec<Value>,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+    span: Span,
+) -> Result<Value, Diagnostic> {
+    let depth = depth + 1;
+    with_call_stack(depth, span, move || {
+        let env: Env = closure
+            .captured
+            .iter()
+            .cloned()
+            .chain(closure.params.iter().cloned().zip(args))
+            .map(|(name, value)| (name, Rc::new(RefCell::new(value))))
+            .collect();
+        match eval(&closure.body, &env, program, depth, runtime)? {
+            Flow::Value(value) | Flow::Return(value) => Ok(value),
+            Flow::Break | Flow::Continue => Err(Diagnostic::new(
+                "E204",
+                span,
+                "loop control escaped a lambda",
+            )),
+        }
+    })
+}
+
+/// Builtins that call function values.
+fn eval_higher_order(
+    name: &str,
+    values: &[Value],
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+    span: Span,
+) -> Option<Result<Value, Diagnostic>> {
+    let call = |f: &Closure, args: Vec<Value>| call_closure(f, args, program, depth, runtime, span);
+    let truth = |value: Value| match value {
+        Value::Bool(value) => Ok(value),
+        _ => Err(Diagnostic::new(
+            "E204",
+            span,
+            "predicate returned a non-bool",
+        )),
+    };
+    let (items, function, init) = match values {
+        [Value::Array(items), Value::Closure(f)] => (items, f, None),
+        [Value::Array(items), init, Value::Closure(f)] => (items, f, Some(init)),
+        _ => return None,
+    };
+    let each = |item: &Value| call(function, vec![item.clone()]);
+    Some(match (name, init) {
+        (builtins::MAP_FN, None) => items
+            .iter()
+            .map(each)
+            .collect::<Result<_, _>>()
+            .map(Value::Array),
+        (builtins::FILTER, None) => (|| {
+            let mut kept = Vec::new();
+            for item in items {
+                if truth(each(item)?)? {
+                    kept.push(item.clone());
+                }
+            }
+            Ok(Value::Array(kept))
+        })(),
+        (builtins::ANY | builtins::ALL, None) => (|| {
+            let wanted = name == builtins::ANY;
+            for item in items {
+                if truth(each(item)?)? == wanted {
+                    return Ok(Value::Bool(wanted));
+                }
+            }
+            Ok(Value::Bool(!wanted))
+        })(),
+        (builtins::FOLD, Some(init)) => items.iter().try_fold(init.clone(), |total, item| {
+            call(function, vec![total, item.clone()])
+        }),
+        (builtins::SORT_BY, None) => (|| {
+            let mut keyed = items
+                .iter()
+                .map(|item| Ok((each(item)?, item.clone())))
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            keyed.sort_by(|(left, _), (right, _)| value_order(left, right));
+            Ok(Value::Array(
+                keyed.into_iter().map(|(_, item)| item).collect(),
+            ))
+        })(),
+        _ => return None,
+    })
 }
