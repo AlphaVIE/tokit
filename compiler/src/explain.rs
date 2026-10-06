@@ -87,6 +87,15 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             } else if name == builtins::ARGS {
                 facts.operations.insert("program arguments");
                 facts.effects.insert("env.args");
+            } else if name == builtins::PRINT {
+                facts.operations.insert("standard output");
+                facts.effects.insert("io.stdout");
+            } else if name == builtins::READ_LINE || name == builtins::READ_STDIN {
+                facts.operations.insert("standard input");
+                facts.effects.insert("io.stdin");
+            } else if name == builtins::EXIT {
+                facts.operations.insert("process exit");
+                facts.effects.insert("process.exit");
             } else if name == builtins::LEN {
                 facts.operations.insert("array or byte length");
             } else if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {

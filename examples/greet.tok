@@ -1,0 +1,2 @@
+// Prints a prompt, greets each input line, and exits with 1 on empty input.
+main()->Unit{print("name?");var greeted=false;while true{match read_line(){Some(name)=>{print("hello "+name);greeted=true;},None=>{break;}}}if!greeted{exit(1);}}

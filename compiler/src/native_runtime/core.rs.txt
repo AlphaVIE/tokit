@@ -20,6 +20,7 @@ impl<T: __TokRender> __TokRender for Option<T> {
     }
 }
 fn __tok_runtime_fail(code: &str, source_id: usize, line: usize, column: usize, message: &str) -> ! {
+    __tok_flush();
     if __TOK_SOURCES.len() > 1 {
         eprintln!("{}:{code}@{line}:{column} {message}", __TOK_SOURCES[source_id]);
     } else {
@@ -112,3 +113,29 @@ fn __tok_lines(text: String) -> Vec<String> {
 }
 fn __tok_f64_from_i32(value: i32) -> f64 { f64::from(value) }
 fn __tok_i32_from_f64(value: f64) -> Option<i32> { let t = value.trunc(); (t >= -2147483648.0 && t <= 2147483647.0).then_some(t as i32) }
+// Buffered standard output; flushed before input, exit, failures, and program end.
+static __TOK_STDOUT: std::sync::Mutex<Option<std::io::BufWriter<std::io::Stdout>>> = std::sync::Mutex::new(None);
+fn __tok_print(text: String) {
+    use std::io::Write;
+    let mut guard = __TOK_STDOUT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let out = guard.get_or_insert_with(|| std::io::BufWriter::new(std::io::stdout()));
+    let _ = out.write_all(text.as_bytes());
+    let _ = out.write_all(b"\n");
+}
+fn __tok_flush() {
+    use std::io::Write;
+    let mut guard = __TOK_STDOUT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(out) = guard.as_mut() { let _ = out.flush(); }
+}
+fn __tok_exit(status: i32) -> ! { __tok_flush(); std::process::exit(status) }
+fn __tok_stdin_line() -> Option<String> {
+    __tok_flush();
+    let mut line = String::new();
+    match std::io::stdin().read_line(&mut line) {
+        Ok(0) | Err(_) => None,
+        Ok(_) => {
+            if line.ends_with('\n') { line.pop(); if line.ends_with('\r') { line.pop(); } }
+            Some(line)
+        }
+    }
+}

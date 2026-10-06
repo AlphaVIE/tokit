@@ -106,10 +106,18 @@ fn run_command(args: &[String]) {
         program_args,
     );
     match result {
+        Err(diagnostic) if tokit_compiler::interpreter::exit_status(&diagnostic).is_some() => {
+            let status = tokit_compiler::interpreter::exit_status(&diagnostic).unwrap_or(1);
+            if json {
+                println!("{{\"ok\":true,\"exit\":{status}}}");
+            }
+            process::exit(status);
+        }
         Ok(value) if json => println!(
             "{{\"ok\":true,\"result\":\"{}\"}}",
             tokit_compiler::diagnostic::escape_json(&value.to_string())
         ),
+        Ok(tokit_compiler::interpreter::Value::Unit) => {}
         Ok(value) => println!("{value}"),
         Err(diagnostic) if json => {
             println!(
