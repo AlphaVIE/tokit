@@ -825,7 +825,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
     }
     writeln!(
         out,
-        "fn main() {{ __tok_configure_runtime(); println!(\"{{}}\", {}().tok_render()); }}",
+        "fn main() {{ let program = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(|| {{ __tok_configure_runtime(); println!(\"{{}}\", {}().tok_render()); }}).expect(\"cannot start program thread\"); if program.join().is_err() {{ std::process::exit(101); }} }}",
         user_name("main")
     )
     .expect("writing to String cannot fail");

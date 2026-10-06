@@ -12,7 +12,7 @@ impl<T> __TokRender for __TokTask<T> {
 }
 fn __tok_spawn<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> __TokTask<T> {
     __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState {
-        handle: Some(std::thread::spawn(job)), result: None,
+        handle: Some(std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(job).expect("cannot start task thread")), result: None,
     })))
 }
 fn __tok_join<T: Clone>(task: __TokTask<T>) -> Result<T, __TokTaskError> {
