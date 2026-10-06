@@ -17,6 +17,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Rem,
     Eq,
     Ne,
     Lt,
@@ -35,6 +36,7 @@ impl TryFrom<Op> for BinaryOp {
             Op::Sub => Self::Sub,
             Op::Mul => Self::Mul,
             Op::Div => Self::Div,
+            Op::Rem => Self::Rem,
             Op::Eq => Self::Eq,
             Op::Ne => Self::Ne,
             Op::Lt => Self::Lt,
@@ -180,7 +182,11 @@ fn verify_instructions(
                     return Err("binary operand types differ");
                 }
                 match op {
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Rem => {
                         if !matches!(left_ty, Type::I32 | Type::I64 | Type::F64)
                             || *left_ty != instruction.ty
                         {

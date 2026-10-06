@@ -14,6 +14,9 @@ fn __tok_mul_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -
 fn __tok_div_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
     a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
+fn __tok_rem_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -> i64 {
+    if b == 0 { __tok_fail(source_id, line, column) } else { a.wrapping_rem(b) }
+}
 fn __tok_i64_from_i32(value: i32) -> i64 { i64::from(value) }
 fn __tok_i32_from_i64(value: i64) -> Option<i32> { i32::try_from(value).ok() }
 fn __tok_f64_from_i64(value: i64) -> f64 { value as f64 }

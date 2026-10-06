@@ -44,6 +44,8 @@ The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)-
 
 Experimental `i64` values use explicit literals such as `3000000000i64`, checked arithmetic, and `parse_i64(String)->Result<i64,ParseError>`. `i64(value)` widens an `i32`; `i32(value)` narrows an `i64` with an `Option` result. [i64_counter.tok](examples/i64_counter.tok) reads a wide CLI integer. The types do not mix implicitly.
 
+Integer and float arithmetic supports `%` as a truncated remainder; integer remainder by zero reports `E201`.
+
 Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`, and `-0.0`. Arithmetic follows IEEE 754, including infinities and NaN; literal overflow is rejected. [float64.tok](examples/float64.tok) shows a typed function. There is no implicit conversion between float and integer types; `f64(n)` converts integers, `i32(x)`/`i64(x)` truncate floats with an `Option` result, and `parse_f64(String)` reads decimal text.
 
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.

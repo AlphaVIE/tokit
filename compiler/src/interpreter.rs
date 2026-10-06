@@ -944,6 +944,7 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
                 Op::Sub => a - b,
                 Op::Mul => a * b,
                 Op::Div => a / b,
+                Op::Rem => a % b,
                 Op::Lt => return Ok(Value::Bool(a < b)),
                 Op::Le => return Ok(Value::Bool(a <= b)),
                 Op::Gt => return Ok(Value::Bool(a > b)),
@@ -960,6 +961,8 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
                 Op::Sub => a.checked_sub(b),
                 Op::Mul => a.checked_mul(b),
                 Op::Div => a.checked_div(b),
+                // Truncated remainder; MIN % -1 is 0 rather than an overflow.
+                Op::Rem => (b != 0).then(|| a.wrapping_rem(b)),
                 Op::Lt => return Ok(Value::Bool(a < b)),
                 Op::Le => return Ok(Value::Bool(a <= b)),
                 Op::Gt => return Ok(Value::Bool(a > b)),
@@ -979,6 +982,8 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
                 Op::Sub => a.checked_sub(b),
                 Op::Mul => a.checked_mul(b),
                 Op::Div => a.checked_div(b),
+                // Truncated remainder; MIN % -1 is 0 rather than an overflow.
+                Op::Rem => (b != 0).then(|| a.wrapping_rem(b)),
                 Op::Lt => return Ok(Value::Bool(a < b)),
                 Op::Le => return Ok(Value::Bool(a <= b)),
                 Op::Gt => return Ok(Value::Bool(a > b)),

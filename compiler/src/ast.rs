@@ -95,6 +95,7 @@ pub enum Op {
     Sub,
     Mul,
     Div,
+    Rem,
     Eq,
     Ne,
     Lt,

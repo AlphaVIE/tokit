@@ -547,6 +547,7 @@ impl Parser {
                 Kind::Minus => (Op::Sub, 4),
                 Kind::Star => (Op::Mul, 5),
                 Kind::Slash => (Op::Div, 5),
+                Kind::Percent => (Op::Rem, 5),
                 _ => break,
             };
             if prec < min_prec {

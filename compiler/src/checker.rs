@@ -1067,10 +1067,18 @@ fn infer(
                 return Ok(Type::Never);
             }
             match op {
-                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Lt | Op::Le | Op::Gt | Op::Ge
+                Op::Add
+                | Op::Sub
+                | Op::Mul
+                | Op::Div
+                | Op::Rem
+                | Op::Lt
+                | Op::Le
+                | Op::Gt
+                | Op::Ge
                     if lhs == rhs && matches!(lhs, Type::I32 | Type::I64 | Type::F64) =>
                 {
-                    if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
+                    if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem) {
                         Ok(lhs)
                     } else {
                         Ok(Type::Bool)
