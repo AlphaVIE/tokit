@@ -415,6 +415,20 @@ fn main() {
         }
         return;
     }
+    if let [_, command, path] = args.as_slice()
+        && command == "tokens"
+    {
+        let source = fs::read_to_string(path).unwrap_or_else(|error| {
+            eprintln!("could not read {path}: {error}");
+            process::exit(2);
+        });
+        let listing = tokit_compiler::lexer::listing(&source);
+        println!("{listing}");
+        if listing.starts_with("error ") {
+            process::exit(1);
+        }
+        return;
+    }
     let compact = match args.as_slice() {
         [_, command, path] if command == "compact" => Some((path, false, "all")),
         [_, command, flag, path] if command == "compact" && flag == "--write" => {
@@ -541,7 +555,7 @@ fn main() {
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index|tokens> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
             );
             process::exit(2);
         }
