@@ -164,6 +164,7 @@ pub enum PatternKind {
     None,
     Variant(String, String, Option<String>),
     Bool(bool),
+    String(String),
 }
 
 #[derive(Clone, Debug)]
@@ -442,7 +443,8 @@ impl Pattern {
             | PatternKind::I64(_)
             | PatternKind::Wildcard
             | PatternKind::None
-            | PatternKind::Bool(_) => None,
+            | PatternKind::Bool(_)
+            | PatternKind::String(_) => None,
         }
     }
 }

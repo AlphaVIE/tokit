@@ -1032,6 +1032,7 @@ fn eval_match(
             }
             (PatternKind::None, Value::None) => Some(None),
             (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => Some(None),
+            (PatternKind::String(pattern), Value::String(value)) if pattern == value => Some(None),
             (PatternKind::Variant(name, variant, binding), Value::Enum(actual, value, payload))
                 if name == actual && variant == value =>
             {

@@ -950,6 +950,7 @@ impl Parser {
                 })?),
                 token.span,
             ),
+            Kind::String(value) => (PatternKind::String(value), token.span),
             Kind::True => (PatternKind::Bool(true), token.span),
             Kind::False => (PatternKind::Bool(false), token.span),
             Kind::Ok | Kind::Err | Kind::Some => {

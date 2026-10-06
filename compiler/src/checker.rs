@@ -1225,6 +1225,7 @@ fn match_pattern(
         }
         (PatternKind::None, Type::Option(_)) => Ok(("None".to_owned(), None)),
         (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
+        (PatternKind::String(value), Type::String) => Ok((format!("{value:?}"), None)),
         (PatternKind::Variant(name, variant, binding), Type::Named(actual)) if name == actual => {
             let declared = signatures
                 .get(name)
@@ -1794,9 +1795,10 @@ fn infer(
                     "cannot infer Option element type for match",
                 ));
             }
-            let integer_match = matches!(matched, Type::I32 | Type::I64);
+            // Integer and string domains cannot be listed, so they need `_`.
+            let integer_match = matches!(matched, Type::I32 | Type::I64 | Type::String);
             let expected: HashSet<String> = match &matched {
-                Type::I32 | Type::I64 => HashSet::new(),
+                Type::I32 | Type::I64 | Type::String => HashSet::new(),
                 Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
                 Type::Option(_) => ["Some".to_owned(), "None".to_owned()].into_iter().collect(),
                 Type::Bool => ["true".to_owned(), "false".to_owned()]
@@ -1809,7 +1811,7 @@ fn infer(
                         Diagnostic::new(
                             "E116",
                             value.span,
-                            "match requires integer, result, enum, or bool",
+                            "match requires integer, string, result, enum, or bool",
                         )
                     })?
                     .iter()
@@ -1819,7 +1821,7 @@ fn infer(
                     return Err(Diagnostic::new(
                         "E116",
                         value.span,
-                        "match requires integer, result, enum, or bool",
+                        "match requires integer, string, result, enum, or bool",
                     ));
                 }
             };
