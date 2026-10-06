@@ -59,6 +59,7 @@ pub fn io_error_decl() -> EnumDecl {
     EnumDecl {
         name: IO_ERROR.to_owned(),
         public: true,
+        type_params: Vec::new(),
         variants: IO_ERROR_VARIANTS
             .iter()
             .map(|name| EnumVariant {
@@ -95,6 +96,7 @@ pub fn task_error_decl() -> EnumDecl {
     EnumDecl {
         name: TASK_ERROR.to_owned(),
         public: true,
+        type_params: Vec::new(),
         variants: vec![EnumVariant {
             name: "Failed".to_owned(),
             payload: None,
@@ -107,6 +109,7 @@ pub fn parse_error_decl() -> EnumDecl {
     EnumDecl {
         name: PARSE_ERROR.to_owned(),
         public: true,
+        type_params: Vec::new(),
         variants: ["Invalid", "OutOfRange"]
             .into_iter()
             .map(|name| EnumVariant {

@@ -1,0 +1,8 @@
+// Generic enums and records build a recursive tree; generic functions traverse it.
+enum Tree<T>{Leaf,Node(Branch<T>)}
+struct Branch<T>{value:T,children:[Tree<T>]}
+enum Either<A,B>{Left(A),Right(B)}
+count<T>(t:Tree<T>)->I{match t{Tree::Leaf=>0,Tree::Node(b)=>1+fold(b.children,0,|n,c|n+count(c))}}
+labels(t:Tree<String>)->[String]{match t{Tree::Leaf=>[],Tree::Node(b)=>fold(b.children,[b.value],|all,c|all+labels(c))}}
+describe(e:Either<I,String>)->String{match e{Either::Left(n)=>"num "+String(n),Either::Right(s)=>"text "+s}}
+main()->[String]{let leaf:Tree<String>=Tree::Leaf;let t=Tree::Node(Branch("root",[Tree::Node(Branch("a",[leaf])),Tree::Node(Branch("b",[]))]));let es:[Either<I,String>]=[Either::Left(1),Either::Right("x")];[String(count(t)),join(labels(t),","),join(map(es,|e|describe(e)),";")]}

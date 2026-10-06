@@ -281,6 +281,7 @@ pub struct Record {
 pub struct EnumDecl {
     pub name: String,
     pub public: bool,
+    pub type_params: Vec<String>,
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }

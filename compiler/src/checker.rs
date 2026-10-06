@@ -564,7 +564,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 format!("duplicate or reserved type {}", enum_decl.name),
             ));
         }
-        arities.insert(enum_decl.name.clone(), 0);
+        arities.insert(enum_decl.name.clone(), enum_decl.type_params.len());
         let mut names = HashSet::new();
         for variant in &enum_decl.variants {
             if !names.insert(&variant.name) {
@@ -578,9 +578,20 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         signatures.insert(
             enum_decl.name.clone(),
             Signature {
-                type_params: Vec::new(),
+                type_params: enum_decl.type_params.clone(),
                 params: Vec::new(),
-                ret: Type::Named(enum_decl.name.clone()),
+                ret: if enum_decl.type_params.is_empty() {
+                    Type::Named(enum_decl.name.clone())
+                } else {
+                    Type::Applied(
+                        enum_decl.name.clone(),
+                        enum_decl
+                            .type_params
+                            .iter()
+                            .map(|param| Type::Param(param.clone()))
+                            .collect(),
+                    )
+                },
                 fields: None,
                 variants: Some(enum_decl.variants.clone()),
                 spawn_safe: false,
@@ -588,6 +599,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         );
     }
     for enum_decl in &program.enums {
+        validate_params(&enum_decl.type_params, &record_names, enum_decl.span)?;
+        for param in &enum_decl.type_params {
+            if !enum_decl
+                .variants
+                .iter()
+                .filter_map(|variant| variant.payload.as_ref())
+                .any(|payload| mentions_param(payload, param))
+            {
+                return Err(Diagnostic::new(
+                    "E115",
+                    enum_decl.span,
+                    format!("unused enum type parameter {param}"),
+                ));
+            }
+        }
         for variant in &enum_decl.variants {
             if let Some(payload) = &variant.payload {
                 validate_type(payload, &arities, enum_decl.span)?;
@@ -1226,14 +1252,27 @@ fn match_pattern(
         (PatternKind::None, Type::Option(_)) => Ok(("None".to_owned(), None)),
         (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
         (PatternKind::String(value), Type::String) => Ok((format!("{value:?}"), None)),
-        (PatternKind::Variant(name, variant, binding), Type::Named(actual)) if name == actual => {
-            let declared = signatures
-                .get(name)
+        (
+            PatternKind::Variant(name, variant, binding),
+            Type::Named(actual) | Type::Applied(actual, _),
+        ) if name == actual => {
+            let signature = signatures.get(name);
+            let args = match matched {
+                Type::Applied(_, args) => args.clone(),
+                _ => Vec::new(),
+            };
+            let inferred: HashMap<String, Type> = signature
+                .map(|signature| signature.type_params.iter().cloned().zip(args).collect())
+                .unwrap_or_default();
+            let declared = signature
                 .and_then(|signature| signature.variants.as_ref())
                 .and_then(|variants| variants.iter().find(|item| item.name == *variant));
             match (declared.and_then(|item| item.payload.as_ref()), binding) {
                 (None, None) if declared.is_some() => Ok((variant.clone(), None)),
-                (Some(ty), Some(name)) => Ok((variant.clone(), Some((name.clone(), ty.clone())))),
+                (Some(ty), Some(name)) => Ok((
+                    variant.clone(),
+                    Some((name.clone(), substitute(ty, &inferred))),
+                )),
                 _ => Err(invalid()),
             }
         }
@@ -1327,14 +1366,22 @@ fn infer(
                         format!("unknown variant {name}::{variant}"),
                     )
                 })?;
+            let mut inferred = HashMap::new();
             match (&declared.payload, payload) {
                 (None, None) => {}
                 (Some(expected), Some(value)) => {
-                    let actual = type_of(value, env, signatures, return_type, types)?;
+                    let actual =
+                        type_expected(value, Some(expected), env, signatures, return_type, types)?;
                     if actual == Type::Never {
                         return Ok(Type::Never);
                     }
-                    require(expected, &actual, value.span, "enum payload")?;
+                    infer_params(expected, &actual, &mut inferred, value.span)?;
+                    require(
+                        &substitute(expected, &inferred),
+                        &actual,
+                        value.span,
+                        "enum payload",
+                    )?;
                 }
                 _ => {
                     return Err(Diagnostic::new(
@@ -1344,7 +1391,19 @@ fn infer(
                     ));
                 }
             }
-            Ok(Type::Named(name.clone()))
+            if signature.type_params.is_empty() {
+                Ok(Type::Named(name.clone()))
+            } else {
+                // Unconstrained arguments stay open, like `None`, until context fixes them.
+                Ok(Type::Applied(
+                    name.clone(),
+                    signature
+                        .type_params
+                        .iter()
+                        .map(|param| inferred.get(param).cloned().unwrap_or(Type::Never))
+                        .collect(),
+                ))
+            }
         }
         ExprKind::Array(values) => {
             let Some(first) = values.first() else {
@@ -1804,7 +1863,7 @@ fn infer(
                 Type::Bool => ["true".to_owned(), "false".to_owned()]
                     .into_iter()
                     .collect(),
-                Type::Named(name) => signatures
+                Type::Named(name) | Type::Applied(name, _) => signatures
                     .get(name)
                     .and_then(|signature| signature.variants.as_ref())
                     .ok_or_else(|| {
