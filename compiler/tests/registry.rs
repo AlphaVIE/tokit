@@ -113,3 +113,32 @@ fn registry_pins_must_match_the_registry() {
     assert!(String::from_utf8_lossy(&lock.stderr).contains("does not match registry package"));
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[test]
+fn registry_packages_check_and_are_canonical() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../packages");
+    let packages = tokit_compiler::registry::packages();
+    assert!(packages.len() >= 3);
+    for package in packages {
+        let source_path = root.join(&package.name).join(&package.entry);
+        let source = std::fs::read_to_string(&source_path).unwrap();
+        tokit_compiler::check(&source)
+            .unwrap_or_else(|error| panic!("{}: {error:?}", package.name));
+        let compact = tokit_compiler::format::compact_functions(&source)
+            .and_then(|text| tokit_compiler::format::compact_integer_types(&text))
+            .and_then(|text| tokit_compiler::format::compact_blocks(&text))
+            .unwrap();
+        assert_eq!(compact, source, "{} is not compact", package.name);
+        assert_eq!(
+            tokit_compiler::format::format(&source).unwrap(),
+            source,
+            "{} is not formatted",
+            package.name
+        );
+        assert!(
+            !package.description.is_empty(),
+            "{} needs a description",
+            package.name
+        );
+    }
+}
