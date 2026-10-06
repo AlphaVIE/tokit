@@ -7,6 +7,22 @@ serve(addr:String,limit:I,handler:(Request)->Response) -> Result<Unit,IoError>
 http_request(method:String,url:String,headers:Map<String,String>,body:String) -> Result<Response,IoError>
 ```
 
+Raw TCP uses an opaque `Conn` handle:
+
+```text
+tcp_connect(addr:String) -> Result<Conn,IoError>
+tcp_send(c:Conn,data:Bytes) -> Result<Unit,IoError>
+tcp_recv(c:Conn,max:I) -> Result<Bytes,IoError>
+tcp_close(c:Conn) -> Unit
+```
+
+Copies of a `Conn` share one socket, like task handles; there is no `==` on
+connections. `tcp_recv` returns between one and `max` bytes, or empty `Bytes`
+when the peer closed the connection; `max` must be positive. After
+`tcp_close`, sends and receives return `IoError::Other`. `tcp_connect` needs
+the same `--allow-net` grant as HTTP. Protocol clients such as Redis and
+PostgreSQL are written in Tokit on top of these functions.
+
 `Request` and `Response` are built-in records; their names are reserved.
 Header names are lowercased and repeated headers are joined with `, `, so a
 `Map` holds them without loss of meaning. Bodies are UTF-8 text; a request
