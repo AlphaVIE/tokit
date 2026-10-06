@@ -1,0 +1,66 @@
+{
+  "name": "tokit",
+  "displayName": "Tokit",
+  "description": "Tokit language support: syntax highlighting and the tok language server.",
+  "version": "0.0.1",
+  "publisher": "alphavie",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlphaVIE/tokit"
+  },
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tokit",
+        "aliases": [
+          "Tokit",
+          "tokit"
+        ],
+        "extensions": [
+          ".tok"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tokit",
+        "scopeName": "source.tokit",
+        "path": "./syntaxes/tokit.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Tokit",
+      "properties": {
+        "tokit.serverPath": {
+          "type": "string",
+          "default": "tok",
+          "description": "Path to the tok executable that serves `tok lsp`."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "tokit.restartServer",
+        "title": "Tokit: Restart Language Server"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.0"
+  }
+}

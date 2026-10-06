@@ -4,7 +4,8 @@
 editor's LSP client to launch the built `tok` executable with the `lsp`
 argument for `.tok` files. The server uses JSON-RPC framing with UTF-8 body
 byte lengths and returns UTF-16 positions, as required by its advertised
-capability. No editor extension is bundled yet.
+capability. A VS Code extension with syntax highlighting that launches the
+server lives in [editors/vscode](../editors/vscode/README.md).
 
 The current server supports `initialize`, `shutdown`, `exit`, full-document
 `didOpen`/`didChange`/`didClose` synchronization, published diagnostics, and
