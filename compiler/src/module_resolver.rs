@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{Expr, ExprKind, PatternKind, PlaceStep, Program, SourceId, Span, Stmt, Type};
+use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::sources::SourceMap;
 
@@ -57,53 +58,7 @@ impl UseKind {
 
     fn builtin(self, name: &str) -> bool {
         match self {
-            Self::Call => matches!(
-                name,
-                "read_text"
-                    | "read_bytes"
-                    | "write_text"
-                    | "write_bytes"
-                    | "lines"
-                    | "args"
-                    | "print"
-                    | "range"
-                    | "sort"
-                    | "reverse"
-                    | "slice"
-                    | "Map"
-                    | "get"
-                    | "get_or"
-                    | "keys"
-                    | "values"
-                    | "remove"
-                    | "String"
-                    | "chars"
-                    | "split"
-                    | "trim"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with"
-                    | "replace"
-                    | "lower"
-                    | "upper"
-                    | "read_line"
-                    | "read_stdin"
-                    | "exit"
-                    | "len"
-                    | "parse_i32"
-                    | "parse_i64"
-                    | "parse_f64"
-                    | "i32"
-                    | "i64"
-                    | "f64"
-                    | "utf8_bytes"
-                    | "utf8_decode"
-                    | "utf8_encode"
-                    | "utf8_decode_bytes"
-                    | "bytes_from_i32"
-                    | "bytes_to_i32"
-                    | "join"
-            ),
+            Self::Call => builtins::is_call(name),
             Self::Type => matches!(name, "IoError" | "TaskError" | "ParseError" | "Map"),
             Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
@@ -133,6 +88,12 @@ fn reserved(name: &str) -> bool {
             | "lines"
             | "args"
             | "print"
+            | "map"
+            | "filter"
+            | "any"
+            | "all"
+            | "fold"
+            | "sort_by"
             | "range"
             | "sort"
             | "reverse"
@@ -263,6 +224,8 @@ fn collect_scope(unit: &ModuleUnit, sources: &SourceMap) -> Result<Scope, Diagno
 struct Resolver<'a> {
     id: SourceId,
     scopes: &'a [Scope],
+    /// Local bindings in scope; calls to them invoke function values.
+    locals: std::cell::RefCell<Vec<String>>,
 }
 
 impl Resolver<'_> {
@@ -317,6 +280,12 @@ impl Resolver<'_> {
                 }
             }
             Type::Array(inner) | Type::Option(inner) | Type::Task(inner) => self.ty(inner, span)?,
+            Type::Fn(params, ret) => {
+                for param in params {
+                    self.ty(param, span)?;
+                }
+                self.ty(ret, span)?;
+            }
             Type::Result(ok, err) => {
                 self.ty(ok, span)?;
                 self.ty(err, span)?;
@@ -368,10 +337,33 @@ impl Resolver<'_> {
             | ExprKind::Try(value)
             | ExprKind::Spawn(value) => self.expr(value)?,
             ExprKind::Call(name, args) => {
-                *name = self.lookup(name, UseKind::Call, expr.span)?;
+                // Declarations win; an unknown name may be a local function value.
+                match self.lookup(name, UseKind::Call, expr.span) {
+                    Ok(resolved) => *name = resolved,
+                    Err(_) if self.locals.borrow().contains(name) => {}
+                    Err(error) => return Err(error),
+                }
                 for argument in args {
                     self.expr(argument)?;
                 }
+            }
+            ExprKind::Apply(callee, args) => {
+                self.expr(callee)?;
+                for argument in args {
+                    self.expr(argument)?;
+                }
+            }
+            ExprKind::Lambda(params, body) => {
+                let depth = self.locals.borrow().len();
+                for (name, ty) in params.iter_mut() {
+                    if let Some(ty) = ty {
+                        self.ty(ty, expr.span)?;
+                    }
+                    self.locals.borrow_mut().push(name.clone());
+                }
+                let result = self.expr(body);
+                self.locals.borrow_mut().truncate(depth);
+                result?;
             }
             ExprKind::If(condition, yes, no) => {
                 self.expr(condition)?;
@@ -384,16 +376,23 @@ impl Resolver<'_> {
                     if let PatternKind::Variant(name, _, _) = &mut pattern.kind {
                         *name = self.lookup(name, UseKind::Enum, pattern.span)?;
                     }
-                    self.expr(body)?;
+                    let depth = self.locals.borrow().len();
+                    if let Some(binding) = pattern.binding() {
+                        self.locals.borrow_mut().push(binding.to_owned());
+                    }
+                    let result = self.expr(body);
+                    self.locals.borrow_mut().truncate(depth);
+                    result?;
                 }
             }
             ExprKind::Block(statements, tail) => {
-                for statement in statements {
-                    self.stmt(statement)?;
-                }
-                if let Some(tail) = tail {
-                    self.expr(tail)?;
-                }
+                let depth = self.locals.borrow().len();
+                let result = statements
+                    .iter_mut()
+                    .try_for_each(|statement| self.stmt(statement))
+                    .and_then(|()| tail.as_mut().map_or(Ok(()), |tail| self.expr(tail)));
+                self.locals.borrow_mut().truncate(depth);
+                result?;
             }
         }
         Ok(())
@@ -402,12 +401,17 @@ impl Resolver<'_> {
     fn stmt(&self, stmt: &mut Stmt) -> Result<(), Diagnostic> {
         match stmt {
             Stmt::Let {
-                ty, value, span, ..
+                name,
+                ty,
+                value,
+                span,
+                ..
             } => {
                 if let Some(ty) = ty {
                     self.ty(ty, *span)?;
                 }
                 self.expr(value)?;
+                self.locals.borrow_mut().push(name.clone());
             }
             Stmt::Assign { path, value, .. } => {
                 for step in path {
@@ -420,9 +424,17 @@ impl Resolver<'_> {
             Stmt::Push { value, .. } | Stmt::Return { value, .. } | Stmt::Expr(value) => {
                 self.expr(value)?
             }
-            Stmt::For { iterable, body, .. } => {
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                ..
+            } => {
                 self.expr(iterable)?;
-                self.expr(body)?;
+                self.locals.borrow_mut().push(name.clone());
+                let result = self.expr(body);
+                self.locals.borrow_mut().pop();
+                result?;
             }
             Stmt::While {
                 condition, body, ..
@@ -455,7 +467,13 @@ impl Resolver<'_> {
                 self.ty(ty, function.span)?;
             }
             self.ty(&mut function.ret, function.span)?;
+            *self.locals.borrow_mut() = function
+                .params
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect();
             self.expr(&mut function.body)?;
+            self.locals.borrow_mut().clear();
             function.name = self.lookup(&function.name, UseKind::Call, function.span)?;
         }
         Ok(())
@@ -482,6 +500,7 @@ pub fn resolve(
         Resolver {
             id: *id,
             scopes: &scopes,
+            locals: std::cell::RefCell::new(Vec::new()),
         }
         .program(&mut unit.program)?;
         merged.records.extend(unit.program.records);

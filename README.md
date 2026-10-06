@@ -58,6 +58,8 @@ Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`
 
 Mutable bindings support element and field assignment such as `xs[i]=v;` and `grid.rows[y][x].alive=true;`, with bounds checks in both backends.
 
+Lambdas such as `|x|x*k` capture copies of locals and work with `map`, `filter`, `any`, `all`, `fold`, and `sort_by`; function types are written `(I)->I`. [closures.tok](examples/closures.tok) sorts and filters records.
+
 Arrays concatenate with `+` and provide `range`, `sort`, `reverse`, `slice`, and `contains`. `for i in range(0,n){...}` saves 5 of 21 tokens against the equivalent `while` loop in all three measured tokenizers and runs as a native range loop without allocation.
 
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.

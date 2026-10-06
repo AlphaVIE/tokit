@@ -50,6 +50,8 @@ pub enum Type {
     Array(Box<Type>),
     Option(Box<Type>),
     Task(Box<Type>),
+    /// A function value `(params)->ret`.
+    Fn(Vec<Type>, Box<Type>),
     EmptyArray,
     Result(Box<Type>, Box<Type>),
 }
@@ -80,6 +82,16 @@ impl std::fmt::Display for Type {
             Self::Array(element) => return write!(f, "[{element}]"),
             Self::Option(element) => return write!(f, "Option<{element}>"),
             Self::Task(result) => return write!(f, "Task<{result}>"),
+            Self::Fn(params, ret) => {
+                f.write_str("(")?;
+                for (index, param) in params.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{param}")?;
+                }
+                return write!(f, ")->{ret}");
+            }
             Self::EmptyArray => "empty array",
             Self::Result(ok, err) => return write!(f, "Result<{ok},{err}>"),
         };
@@ -185,6 +197,10 @@ pub enum ExprKind {
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     Match(Box<Expr>, Vec<(Pattern, Expr)>),
     Block(Vec<Stmt>, Option<Box<Expr>>),
+    /// `|x,y:T|body`: parameters with optional types, captured by value.
+    Lambda(Vec<(String, Option<Type>)>, Box<Expr>),
+    /// Calling a function value read from a field or element: `op.run(x)`.
+    Apply(Box<Expr>, Vec<Expr>),
 }
 
 /// One step of an assignment target such as `grid[y].cells[x]`. The span
@@ -287,4 +303,146 @@ pub struct Program {
     pub records: Vec<Record>,
     pub enums: Vec<EnumDecl>,
     pub functions: Vec<Function>,
+}
+
+impl Expr {
+    /// Names read or called in this expression that are not bound inside it,
+    /// in first-use order. Callers decide which of them are captured locals.
+    pub fn free_names(&self) -> Vec<String> {
+        let mut found = Vec::new();
+        collect_free(self, &mut Vec::new(), &mut found);
+        found
+    }
+}
+
+fn note(name: &str, bound: &[String], found: &mut Vec<String>) {
+    if !bound.iter().any(|candidate| candidate == name) && !found.iter().any(|seen| seen == name) {
+        found.push(name.to_owned());
+    }
+}
+
+fn collect_free(expr: &Expr, bound: &mut Vec<String>, found: &mut Vec<String>) {
+    match &expr.kind {
+        ExprKind::Int(_)
+        | ExprKind::I64(_)
+        | ExprKind::F64(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::None => {}
+        ExprKind::Var(name) => note(name, bound, found),
+        ExprKind::Call(name, args) => {
+            note(name, bound, found);
+            args.iter().for_each(|arg| collect_free(arg, bound, found));
+        }
+        ExprKind::Array(items) => items
+            .iter()
+            .for_each(|item| collect_free(item, bound, found)),
+        ExprKind::Index(left, right) | ExprKind::Binary(left, _, right) => {
+            collect_free(left, bound, found);
+            collect_free(right, bound, found);
+        }
+        ExprKind::Field(inner, _)
+        | ExprKind::Ok(inner)
+        | ExprKind::Err(inner)
+        | ExprKind::Some(inner)
+        | ExprKind::Try(inner)
+        | ExprKind::Not(inner)
+        | ExprKind::Neg(inner)
+        | ExprKind::Spawn(inner) => collect_free(inner, bound, found),
+        ExprKind::Variant(_, _, payload) => {
+            if let Some(payload) = payload {
+                collect_free(payload, bound, found);
+            }
+        }
+        ExprKind::If(condition, yes, no) => {
+            collect_free(condition, bound, found);
+            collect_free(yes, bound, found);
+            collect_free(no, bound, found);
+        }
+        ExprKind::Match(value, arms) => {
+            collect_free(value, bound, found);
+            for (pattern, body) in arms {
+                let depth = bound.len();
+                bound.extend(pattern.binding().map(str::to_owned));
+                collect_free(body, bound, found);
+                bound.truncate(depth);
+            }
+        }
+        ExprKind::Block(stmts, tail) => {
+            let depth = bound.len();
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { name, value, .. } => {
+                        collect_free(value, bound, found);
+                        bound.push(name.clone());
+                    }
+                    Stmt::Assign {
+                        name, path, value, ..
+                    } => {
+                        note(name, bound, found);
+                        for step in path {
+                            if let PlaceStep::Index(index, _) = step {
+                                collect_free(index, bound, found);
+                            }
+                        }
+                        collect_free(value, bound, found);
+                    }
+                    Stmt::Push { name, value, .. } => {
+                        note(name, bound, found);
+                        collect_free(value, bound, found);
+                    }
+                    Stmt::For {
+                        name,
+                        iterable,
+                        body,
+                        ..
+                    } => {
+                        collect_free(iterable, bound, found);
+                        bound.push(name.clone());
+                        collect_free(body, bound, found);
+                        bound.pop();
+                    }
+                    Stmt::While {
+                        condition, body, ..
+                    } => {
+                        collect_free(condition, bound, found);
+                        collect_free(body, bound, found);
+                    }
+                    Stmt::Return { value, .. } | Stmt::Expr(value) => {
+                        collect_free(value, bound, found)
+                    }
+                    Stmt::Break { .. } | Stmt::Continue { .. } => {}
+                }
+            }
+            if let Some(tail) = tail {
+                collect_free(tail, bound, found);
+            }
+            bound.truncate(depth);
+        }
+        ExprKind::Lambda(params, body) => {
+            let depth = bound.len();
+            bound.extend(params.iter().map(|(name, _)| name.clone()));
+            collect_free(body, bound, found);
+            bound.truncate(depth);
+        }
+        ExprKind::Apply(callee, args) => {
+            collect_free(callee, bound, found);
+            args.iter().for_each(|arg| collect_free(arg, bound, found));
+        }
+    }
+}
+
+impl Pattern {
+    /// The payload name a matching arm binds, if any.
+    pub fn binding(&self) -> Option<&str> {
+        match &self.kind {
+            PatternKind::Ok(name) | PatternKind::Err(name) | PatternKind::Some(name) => Some(name),
+            PatternKind::Variant(_, _, binding) => binding.as_deref(),
+            PatternKind::Int(_)
+            | PatternKind::I64(_)
+            | PatternKind::Wildcard
+            | PatternKind::None
+            | PatternKind::Bool(_) => None,
+        }
+    }
 }

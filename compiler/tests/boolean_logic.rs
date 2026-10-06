@@ -69,9 +69,9 @@ fn boolean_operators_reject_non_boolean_operands_and_format_idempotently() {
     ] {
         assert!(matches!(check(source).unwrap_err().code, "E102" | "E104"));
     }
-    for source in ["main()->bool{true&false}", "main()->bool{true|false}"] {
-        assert_eq!(check(source).unwrap_err().code, "E001");
-    }
+    assert_eq!(check("main()->bool{true&false}").unwrap_err().code, "E001");
+    // A single `|` opens a lambda parameter list, so it is a parse error here.
+    assert_eq!(check("main()->bool{true|false}").unwrap_err().code, "E002");
     assert_eq!(
         check("main()->bool{false&&unknown}").unwrap_err().code,
         "E101"

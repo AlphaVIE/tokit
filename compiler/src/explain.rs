@@ -25,6 +25,15 @@ impl Facts {
 
 pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
     match &expr.kind {
+        ExprKind::Lambda(_, body) => {
+            facts.operations.insert("closure");
+            visit(body, facts);
+        }
+        ExprKind::Apply(callee, args) => {
+            facts.operations.insert("function value call");
+            visit(callee, facts);
+            args.iter().for_each(|arg| visit(arg, facts));
+        }
         ExprKind::Int(_)
         | ExprKind::I64(_)
         | ExprKind::F64(_)
@@ -89,7 +98,16 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.effects.insert("env.args");
             } else if matches!(
                 name.as_str(),
-                builtins::RANGE | builtins::SORT | builtins::REVERSE | builtins::SLICE
+                builtins::RANGE
+                    | builtins::SORT
+                    | builtins::REVERSE
+                    | builtins::SLICE
+                    | builtins::MAP_FN
+                    | builtins::FILTER
+                    | builtins::ANY
+                    | builtins::ALL
+                    | builtins::FOLD
+                    | builtins::SORT_BY
             ) {
                 facts.operations.insert("array operation");
             } else if matches!(

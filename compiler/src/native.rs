@@ -99,6 +99,15 @@ fn rust_type(ty: &Type) -> String {
         Type::Array(element) => format!("Vec<{}>", rust_type(element)),
         Type::Option(element) => format!("Option<{}>", rust_type(element)),
         Type::Task(result) => format!("__TokTask<{}>", rust_type(result)),
+        Type::Fn(params, ret) => format!(
+            "std::sync::Arc<dyn Fn({}) -> {} + Send + Sync>",
+            params
+                .iter()
+                .map(rust_type_fallback)
+                .collect::<Vec<_>>()
+                .join(","),
+            rust_type_fallback(ret)
+        ),
         Type::Result(ok, err) => format!("Result<{},{}>", rust_type(ok), rust_type(err)),
         Type::Never => "!".to_owned(),
         Type::EmptyArray => "Vec<()>".to_owned(),
@@ -168,6 +177,7 @@ fn location(source: &SourceMap, span: Span) -> (usize, usize, usize) {
 struct EmitContext<'a> {
     types: &'a HashMap<Span, Type>,
     borrowed_params: HashMap<String, Vec<bool>>,
+    records: Vec<String>,
 }
 
 impl EmitContext<'_> {
@@ -207,6 +217,44 @@ fn emit_array_borrow(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -
 
 fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String {
     match &expr.kind {
+        ExprKind::Apply(callee, args) => format!(
+            "({})({})",
+            emit_expr(callee, source, types),
+            args.iter()
+                .map(|arg| emit_expr(arg, source, types))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        ExprKind::Lambda(params, body) => {
+            let Some(Type::Fn(param_types, ret)) = types.get(&expr.span) else {
+                unreachable!("checked lambda has a function type")
+            };
+            // Copy captured locals so the closure owns them; names that refer to
+            // functions, records, or builtins are not locals.
+            let captures = body
+                .free_names()
+                .into_iter()
+                .filter(|name| !params.iter().any(|(param, _)| param == name))
+                .filter(|name| {
+                    !types.borrowed_params.contains_key(name)
+                        && !types.records.contains(name)
+                        && !builtins::is_call(name)
+                })
+                .map(|name| format!("let {0} = {0}.clone(); ", user_name(&name)))
+                .collect::<String>();
+            let signature = params
+                .iter()
+                .zip(param_types)
+                .map(|((name, _), ty)| format!("{}: {}", user_name(name), rust_type_fallback(ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "(std::sync::Arc::new({{ {captures}move |{signature}| -> {} {{ {} }} }}) as {})",
+                rust_type_fallback(ret),
+                emit_expr(body, source, types),
+                rust_type(&Type::Fn(param_types.clone(), ret.clone()))
+            )
+        }
         ExprKind::Int(value) => format!("{value}i32"),
         ExprKind::I64(value) => format!("{value}i64"),
         ExprKind::F64(bits) => format!("f64::from_bits({bits}u64)"),
@@ -295,6 +343,12 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                     "__tok_arr_contains".to_owned()
                 }
                 builtins::RANGE => "__tok_range".to_owned(),
+                builtins::MAP_FN => "__tok_arr_map".to_owned(),
+                builtins::FILTER => "__tok_arr_filter".to_owned(),
+                builtins::ANY => "__tok_arr_any".to_owned(),
+                builtins::ALL => "__tok_arr_all".to_owned(),
+                builtins::FOLD => "__tok_arr_fold".to_owned(),
+                builtins::SORT_BY => "__tok_arr_sort_by".to_owned(),
                 builtins::SORT => "__tok_arr_sort".to_owned(),
                 builtins::REVERSE => "__tok_arr_reverse".to_owned(),
                 builtins::TO_STRING => "__tok_string".to_owned(),
@@ -330,6 +384,10 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::BYTES_TO_I32 => "__tok_bytes_to_i32".to_owned(),
                 builtins::LEN => "__tok_len".to_owned(),
                 builtins::JOIN => "__tok_join".to_owned(),
+                // A path cannot be shadowed by a local function value.
+                _ if types.borrowed_params.contains_key(name) || types.records.contains(name) => {
+                    format!("crate::{}", user_name(name))
+                }
                 _ => user_name(name),
             };
             if name == builtins::SLICE {
@@ -990,6 +1048,11 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
                     .collect();
                 (function.name.clone(), modes)
             })
+            .collect(),
+        records: program
+            .records
+            .iter()
+            .map(|record| record.name.clone())
             .collect(),
     };
     let lowering = ir::LoweringContext::new(program);

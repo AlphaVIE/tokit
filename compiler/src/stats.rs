@@ -51,6 +51,15 @@ fn count_type(ty: &Type, nodes: &mut usize) {
 fn count_expr(expr: &Expr, nodes: &mut usize, ops: &mut usize) {
     *nodes += 1;
     match &expr.kind {
+        ExprKind::Lambda(params, body) => {
+            *nodes += params.len();
+            count_expr(body, nodes, ops);
+        }
+        ExprKind::Apply(callee, args) => {
+            *ops += 1;
+            count_expr(callee, nodes, ops);
+            args.iter().for_each(|arg| count_expr(arg, nodes, ops));
+        }
         ExprKind::Int(_)
         | ExprKind::I64(_)
         | ExprKind::F64(_)

@@ -321,6 +321,100 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         },
     );
     signatures.insert(
+        builtins::MAP_FN.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned(), "U".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Fn(
+                    vec![Type::Param("T".to_owned())],
+                    Box::new(Type::Param("U".to_owned())),
+                ),
+            ],
+            ret: Type::Array(Box::new(Type::Param("U".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::FILTER.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Fn(vec![Type::Param("T".to_owned())], Box::new(Type::Bool)),
+            ],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::ANY.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Fn(vec![Type::Param("T".to_owned())], Box::new(Type::Bool)),
+            ],
+            ret: Type::Bool,
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::ALL.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Fn(vec![Type::Param("T".to_owned())], Box::new(Type::Bool)),
+            ],
+            ret: Type::Bool,
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::FOLD.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned(), "U".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Param("U".to_owned()),
+                Type::Fn(
+                    vec![Type::Param("U".to_owned()), Type::Param("T".to_owned())],
+                    Box::new(Type::Param("U".to_owned())),
+                ),
+            ],
+            ret: Type::Param("U".to_owned()),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::SORT_BY.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned(), "K".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::Fn(
+                    vec![Type::Param("T".to_owned())],
+                    Box::new(Type::Param("K".to_owned())),
+                ),
+            ],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
         builtins::JOIN.to_owned(),
         Signature {
             type_params: vec!["T".to_owned()],
@@ -354,6 +448,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "map"
+                | "filter"
+                | "any"
+                | "all"
+                | "fold"
+                | "sort_by"
                 | "range"
                 | "sort"
                 | "reverse"
@@ -417,6 +517,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "map"
+                | "filter"
+                | "any"
+                | "all"
+                | "fold"
+                | "sort_by"
                 | "range"
                 | "sort"
                 | "reverse"
@@ -701,6 +807,12 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::MAP_FN
+                        | builtins::FILTER
+                        | builtins::ANY
+                        | builtins::ALL
+                        | builtins::FOLD
+                        | builtins::SORT_BY
                         | builtins::RANGE
                         | builtins::SORT
                         | builtins::REVERSE
@@ -746,6 +858,8 @@ fn expression_is_spawn_safe(
                     .iter()
                     .all(|(_, body)| expression_is_spawn_safe(body, program, visiting))
         }
+        ExprKind::Lambda(_, body) => expression_is_spawn_safe(body, program, visiting),
+        ExprKind::Apply(..) => false,
         ExprKind::Block(stmts, tail) => {
             stmts.iter().all(|stmt| match stmt {
                 Stmt::Assign { path, value, .. } => {
@@ -825,6 +939,12 @@ fn validate_type(
             Ok(())
         }
         Type::Array(element) => validate_type(element, arities, span),
+        Type::Fn(params, ret) => {
+            for param in params {
+                validate_type(param, arities, span)?;
+            }
+            validate_type(ret, arities, span)
+        }
         Type::Option(element) => validate_type(element, arities, span),
         Type::Task(result) => validate_type(result, arities, span),
         Type::Result(ok, err) => {
@@ -912,6 +1032,9 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
         (Type::Option(expected), Type::Option(actual)) => compatible(expected, actual),
         (Type::Task(expected), Type::Task(actual)) => compatible(expected, actual),
+        (Type::Fn(expected_params, expected_ret), Type::Fn(actual_params, actual_ret)) => {
+            expected_params == actual_params && compatible(expected_ret, actual_ret)
+        }
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
         {
@@ -929,6 +1052,9 @@ fn binding_type_is_known(ty: &Type) -> bool {
         Type::Never | Type::EmptyArray => false,
         Type::Array(element) | Type::Option(element) | Type::Task(element) => {
             binding_type_is_known(element)
+        }
+        Type::Fn(params, ret) => {
+            params.iter().all(binding_type_is_known) && binding_type_is_known(ret)
         }
         Type::Result(ok, err) => binding_type_is_known(ok) && binding_type_is_known(err),
         Type::Applied(_, args) => args.iter().all(binding_type_is_known),
@@ -954,6 +1080,14 @@ fn join(left: &Type, right: &Type) -> Option<Type> {
             Some(Type::Option(Box::new(join(left, right)?)))
         }
         (Type::Task(left), Type::Task(right)) => Some(Type::Task(Box::new(join(left, right)?))),
+        (Type::Fn(left_params, left_ret), Type::Fn(right_params, right_ret))
+            if left_params == right_params =>
+        {
+            Some(Type::Fn(
+                left_params.clone(),
+                Box::new(join(left_ret, right_ret)?),
+            ))
+        }
         (Type::Applied(a_name, a_args), Type::Applied(b_name, b_args))
             if a_name == b_name && a_args.len() == b_args.len() =>
         {
@@ -992,6 +1126,13 @@ fn substitute(ty: &Type, inferred: &HashMap<String, Type>) -> Type {
         Type::Array(element) => Type::Array(Box::new(substitute(element, inferred))),
         Type::Option(element) => Type::Option(Box::new(substitute(element, inferred))),
         Type::Task(result) => Type::Task(Box::new(substitute(result, inferred))),
+        Type::Fn(params, ret) => Type::Fn(
+            params
+                .iter()
+                .map(|param| substitute(param, inferred))
+                .collect(),
+            Box::new(substitute(ret, inferred)),
+        ),
         Type::Result(ok, err) => Type::Result(
             Box::new(substitute(ok, inferred)),
             Box::new(substitute(err, inferred)),
@@ -1033,6 +1174,14 @@ fn infer_params(
         (Type::Array(a), Type::Array(b)) => infer_params(a, b, inferred, span),
         (Type::Option(a), Type::Option(b)) => infer_params(a, b, inferred, span),
         (Type::Task(a), Type::Task(b)) => infer_params(a, b, inferred, span),
+        (Type::Fn(a_params, a_ret), Type::Fn(b_params, b_ret))
+            if a_params.len() == b_params.len() =>
+        {
+            for (a, b) in a_params.iter().zip(b_params) {
+                infer_params(a, b, inferred, span)?;
+            }
+            infer_params(a_ret, b_ret, inferred, span)
+        }
         (Type::Result(a_ok, a_err), Type::Result(b_ok, b_err)) => {
             infer_params(a_ok, b_ok, inferred, span)?;
             infer_params(a_err, b_err, inferred, span)
@@ -1111,6 +1260,34 @@ fn infer(
     types: &mut HashMap<Span, Type>,
 ) -> Result<Type, Diagnostic> {
     match &expr.kind {
+        ExprKind::Lambda(..) => type_lambda(expr, None, env, signatures, types),
+        ExprKind::Apply(callee, args) => {
+            let callee_type = type_of(callee, env, signatures, return_type, types)?;
+            let Type::Fn(params, ret) = callee_type else {
+                return Err(Diagnostic::new(
+                    "E102",
+                    callee.span,
+                    format!("only function values can be called, got {callee_type}"),
+                ));
+            };
+            if params.len() != args.len() {
+                return Err(Diagnostic::new(
+                    "E105",
+                    expr.span,
+                    format!(
+                        "function value expects {} arguments, got {}",
+                        params.len(),
+                        args.len()
+                    ),
+                ));
+            }
+            for (arg, expected) in args.iter().zip(&params) {
+                let actual =
+                    type_expected(arg, Some(expected), env, signatures, return_type, types)?;
+                require(expected, &actual, arg.span, "argument")?;
+            }
+            Ok(*ret)
+        }
         ExprKind::Int(_) => Ok(Type::I32),
         ExprKind::I64(_) => Ok(Type::I64),
         ExprKind::F64(_) => Ok(Type::F64),
@@ -1389,6 +1566,38 @@ fn infer(
             require(&Type::String, &separator, args[1].span, "argument")?;
             Ok(Type::String)
         }
+        // Functions, records, and builtins take precedence over local values.
+        ExprKind::Call(name, args)
+            if !signatures.contains_key(name)
+                && name != builtins::MAP
+                && !(name == builtins::JOIN && args.len() == 2)
+                && env.contains_key(name) =>
+        {
+            let Type::Fn(params, ret) = env[name].ty.clone() else {
+                return Err(Diagnostic::new(
+                    "E101",
+                    expr.span,
+                    format!("{name} is not a function value"),
+                ));
+            };
+            if params.len() != args.len() {
+                return Err(Diagnostic::new(
+                    "E105",
+                    expr.span,
+                    format!(
+                        "{name} expects {} arguments, got {}",
+                        params.len(),
+                        args.len()
+                    ),
+                ));
+            }
+            for (arg, expected) in args.iter().zip(&params) {
+                let actual =
+                    type_expected(arg, Some(expected), env, signatures, return_type, types)?;
+                require(expected, &actual, arg.span, "argument")?;
+            }
+            Ok(*ret)
+        }
         ExprKind::Call(name, args) => {
             let signature = signatures.get(name).ok_or_else(|| {
                 Diagnostic::new("E101", expr.span, format!("unknown function {name}"))
@@ -1411,10 +1620,42 @@ fn infer(
                     ),
                 ));
             }
-            let actuals = args
-                .iter()
-                .map(|arg| type_of(arg, env, signatures, return_type, types))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut actuals = Vec::with_capacity(args.len());
+            let mut deferred = Vec::new();
+            for (index, arg) in args.iter().enumerate() {
+                if needs_expected_type(arg) {
+                    deferred.push(index);
+                    actuals.push(Type::Never);
+                } else {
+                    actuals.push(type_of(arg, env, signatures, return_type, types)?);
+                }
+            }
+            if !deferred.is_empty() {
+                let mut known = HashMap::new();
+                for (index, (expected, actual)) in signature.params.iter().zip(&actuals).enumerate()
+                {
+                    if !deferred.contains(&index) {
+                        infer_params(expected, actual, &mut known, args[index].span)?;
+                    }
+                }
+                for index in deferred {
+                    let expected = substitute(&signature.params[index], &known);
+                    actuals[index] = type_expected(
+                        &args[index],
+                        Some(&expected),
+                        env,
+                        signatures,
+                        return_type,
+                        types,
+                    )?;
+                    infer_params(
+                        &signature.params[index],
+                        &actuals[index],
+                        &mut known,
+                        args[index].span,
+                    )?;
+                }
+            }
             if name == builtins::LEN && actuals == [Type::Bytes] {
                 return Ok(Type::I32);
             }
@@ -1489,6 +1730,16 @@ fn infer(
                     "argument",
                 )?;
             }
+            if name == builtins::SORT_BY
+                && let Some(key) = inferred.get("K")
+                && !builtins::orderable(key)
+            {
+                return Err(Diagnostic::new(
+                    "E104",
+                    args[1].span,
+                    format!("sort_by cannot order {key} keys"),
+                ));
+            }
             Ok(substitute(&signature.ret, &inferred))
         }
         ExprKind::Spawn(call) => {
@@ -1500,10 +1751,13 @@ fn infer(
                 ));
             };
             let result = type_of(call, env, signatures, return_type, types)?;
-            if !signatures
-                .get(name)
-                .is_some_and(|signature| signature.spawn_safe)
-            {
+            if !signatures.get(name).is_some_and(|signature| {
+                signature.spawn_safe
+                    && !signature
+                        .params
+                        .iter()
+                        .any(|param| carries_function(param, signatures, &mut HashSet::new()))
+            }) {
                 return Err(Diagnostic::new(
                     "E117",
                     expr.span,
@@ -1647,7 +1901,14 @@ fn infer(
                                 format!("duplicate binding {name}"),
                             ));
                         }
-                        let actual = type_of(value, &scope, signatures, return_type, types)?;
+                        let actual = type_expected(
+                            value,
+                            ty.as_ref(),
+                            &scope,
+                            signatures,
+                            return_type,
+                            types,
+                        )?;
                         let mut arities: HashMap<String, usize> = signatures
                             .iter()
                             .filter_map(|(name, signature)| {
@@ -1742,7 +2003,14 @@ fn infer(
                                 }
                             };
                         }
-                        let actual = type_of(value, &scope, signatures, return_type, types)?;
+                        let actual = type_expected(
+                            value,
+                            Some(&target),
+                            &scope,
+                            signatures,
+                            return_type,
+                            types,
+                        )?;
                         require(&target, &actual, value.span, "assignment")?;
                         (actual, *span)
                     }
@@ -1877,4 +2145,268 @@ fn field_type(
         .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
         .map(|(_, ty)| substitute(ty, &inferred))
         .ok_or_else(|| Diagnostic::new("E113", span, format!("unknown field {field} on {name}")))
+}
+
+/// A lambda whose parameter types come from its context.
+fn needs_expected_type(expr: &Expr) -> bool {
+    matches!(&expr.kind, ExprKind::Lambda(params, _) if params.iter().any(|(_, ty)| ty.is_none()))
+}
+
+/// Type an expression, letting a lambda take parameter types from `expected`.
+fn type_expected(
+    expr: &Expr,
+    expected: Option<&Type>,
+    env: &HashMap<String, Binding>,
+    signatures: &HashMap<String, Signature>,
+    return_type: &Type,
+    types: &mut HashMap<Span, Type>,
+) -> Result<Type, Diagnostic> {
+    if matches!(expr.kind, ExprKind::Lambda(..)) {
+        type_lambda(expr, expected, env, signatures, types)
+    } else {
+        type_of(expr, env, signatures, return_type, types)
+    }
+}
+
+fn type_lambda(
+    expr: &Expr,
+    expected: Option<&Type>,
+    env: &HashMap<String, Binding>,
+    signatures: &HashMap<String, Signature>,
+    types: &mut HashMap<Span, Type>,
+) -> Result<Type, Diagnostic> {
+    let ExprKind::Lambda(params, body) = &expr.kind else {
+        unreachable!("type_lambda requires a lambda")
+    };
+    let expected_params = match expected {
+        Some(Type::Fn(expected_params, _)) if expected_params.len() == params.len() => {
+            Some(expected_params)
+        }
+        _ => None,
+    };
+    if let Some(span) = escaping_control(body) {
+        return Err(Diagnostic::new(
+            "E111",
+            span,
+            "return and ? cannot leave a lambda; the lambda's value is its body",
+        ));
+    }
+    let mut arities: HashMap<String, usize> = signatures
+        .iter()
+        .filter_map(|(name, signature)| {
+            (signature.fields.is_some() || signature.variants.is_some())
+                .then_some((name.clone(), signature.type_params.len()))
+        })
+        .collect();
+    arities.insert(builtins::MAP.to_owned(), 2);
+    // Captured bindings are copies and cannot be reassigned inside the lambda.
+    let mut scope: HashMap<String, Binding> = env
+        .iter()
+        .map(|(name, binding)| {
+            (
+                name.clone(),
+                Binding {
+                    ty: binding.ty.clone(),
+                    mutable: false,
+                },
+            )
+        })
+        .collect();
+    let mut param_types = Vec::with_capacity(params.len());
+    for (index, (name, annotated)) in params.iter().enumerate() {
+        let contextual = expected_params
+            .map(|types| &types[index])
+            .filter(|ty| binding_type_is_known(ty));
+        let ty = match (annotated, contextual) {
+            (Some(ty), contextual) => {
+                validate_type(ty, &arities, expr.span)?;
+                if let Some(contextual) = contextual {
+                    require(contextual, ty, expr.span, "lambda parameter")?;
+                }
+                ty.clone()
+            }
+            (None, Some(ty)) => ty.clone(),
+            (None, None) => {
+                return Err(Diagnostic::new(
+                    "E115",
+                    expr.span,
+                    format!("lambda parameter {name} needs a type annotation"),
+                ));
+            }
+        };
+        if params[..index].iter().any(|(other, _)| other == name) {
+            return Err(Diagnostic::new(
+                "E106",
+                expr.span,
+                format!("duplicate lambda parameter {name}"),
+            ));
+        }
+        scope.insert(
+            name.clone(),
+            Binding {
+                ty: ty.clone(),
+                mutable: false,
+            },
+        );
+        param_types.push(ty);
+    }
+    let ret = type_of(body, &scope, signatures, &Type::Never, types)?;
+    let ty = Type::Fn(param_types, Box::new(ret));
+    types.insert(expr.span, ty.clone());
+    Ok(ty)
+}
+
+/// The span of a `return` or `?` that would leave a lambda body.
+fn escaping_control(expr: &Expr) -> Option<Span> {
+    let found = std::cell::Cell::new(None);
+    visit_own_body(
+        expr,
+        &mut |node| {
+            if found.get().is_none() && matches!(node.kind, ExprKind::Try(_)) {
+                found.set(Some(node.span));
+            }
+        },
+        &mut |stmt| {
+            if found.get().is_none()
+                && let Stmt::Return { span, .. } = stmt
+            {
+                found.set(Some(*span));
+            }
+        },
+    );
+    found.get()
+}
+
+/// Visit expressions and statements of a body, not entering nested lambdas.
+fn visit_own_body(expr: &Expr, on_expr: &mut dyn FnMut(&Expr), on_stmt: &mut dyn FnMut(&Stmt)) {
+    on_expr(expr);
+    match &expr.kind {
+        ExprKind::Int(_)
+        | ExprKind::I64(_)
+        | ExprKind::F64(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Var(_)
+        | ExprKind::None
+        | ExprKind::Lambda(..) => {}
+        ExprKind::Array(items) | ExprKind::Call(_, items) => {
+            items
+                .iter()
+                .for_each(|item| visit_own_body(item, on_expr, on_stmt));
+        }
+        ExprKind::Apply(callee, args) => {
+            visit_own_body(callee, on_expr, on_stmt);
+            args.iter()
+                .for_each(|arg| visit_own_body(arg, on_expr, on_stmt));
+        }
+        ExprKind::Index(left, right) | ExprKind::Binary(left, _, right) => {
+            visit_own_body(left, on_expr, on_stmt);
+            visit_own_body(right, on_expr, on_stmt);
+        }
+        ExprKind::Field(inner, _)
+        | ExprKind::Ok(inner)
+        | ExprKind::Err(inner)
+        | ExprKind::Some(inner)
+        | ExprKind::Try(inner)
+        | ExprKind::Not(inner)
+        | ExprKind::Neg(inner)
+        | ExprKind::Spawn(inner) => visit_own_body(inner, on_expr, on_stmt),
+        ExprKind::Variant(_, _, payload) => {
+            if let Some(payload) = payload {
+                visit_own_body(payload, on_expr, on_stmt);
+            }
+        }
+        ExprKind::If(condition, yes, no) => {
+            visit_own_body(condition, on_expr, on_stmt);
+            visit_own_body(yes, on_expr, on_stmt);
+            visit_own_body(no, on_expr, on_stmt);
+        }
+        ExprKind::Match(value, arms) => {
+            visit_own_body(value, on_expr, on_stmt);
+            arms.iter()
+                .for_each(|(_, body)| visit_own_body(body, on_expr, on_stmt));
+        }
+        ExprKind::Block(stmts, tail) => {
+            for stmt in stmts {
+                on_stmt(stmt);
+                match stmt {
+                    Stmt::Let { value, .. }
+                    | Stmt::Push { value, .. }
+                    | Stmt::Return { value, .. }
+                    | Stmt::Expr(value) => visit_own_body(value, on_expr, on_stmt),
+                    Stmt::Assign { path, value, .. } => {
+                        for step in path {
+                            if let PlaceStep::Index(index, _) = step {
+                                visit_own_body(index, on_expr, on_stmt);
+                            }
+                        }
+                        visit_own_body(value, on_expr, on_stmt);
+                    }
+                    Stmt::For { iterable, body, .. } => {
+                        visit_own_body(iterable, on_expr, on_stmt);
+                        visit_own_body(body, on_expr, on_stmt);
+                    }
+                    Stmt::While {
+                        condition, body, ..
+                    } => {
+                        visit_own_body(condition, on_expr, on_stmt);
+                        visit_own_body(body, on_expr, on_stmt);
+                    }
+                    Stmt::Break { .. } | Stmt::Continue { .. } => {}
+                }
+            }
+            if let Some(tail) = tail {
+                visit_own_body(tail, on_expr, on_stmt);
+            }
+        }
+    }
+}
+
+/// Whether a value of this type can carry a function, which a task must not receive.
+fn carries_function(
+    ty: &Type,
+    signatures: &HashMap<String, Signature>,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Fn(..) => true,
+        Type::Array(inner) | Type::Option(inner) | Type::Task(inner) => {
+            carries_function(inner, signatures, visiting)
+        }
+        Type::Result(ok, err) => {
+            carries_function(ok, signatures, visiting)
+                || carries_function(err, signatures, visiting)
+        }
+        Type::Named(name) | Type::Applied(name, _) => {
+            let args = match ty {
+                Type::Applied(_, args) => args.as_slice(),
+                _ => &[],
+            };
+            if args
+                .iter()
+                .any(|arg| carries_function(arg, signatures, visiting))
+            {
+                return true;
+            }
+            if !visiting.insert(name.clone()) {
+                return false;
+            }
+            let Some(signature) = signatures.get(name) else {
+                return false;
+            };
+            let fields = signature
+                .fields
+                .iter()
+                .flatten()
+                .any(|(_, field)| carries_function(field, signatures, visiting));
+            let payloads = signature
+                .variants
+                .iter()
+                .flatten()
+                .filter_map(|variant| variant.payload.as_ref())
+                .any(|payload| carries_function(payload, signatures, visiting));
+            fields || payloads
+        }
+        _ => false,
+    }
 }

@@ -15,3 +15,14 @@ fn __tok_arr_slice<T: Clone>(items: &[T], from: i32, to: i32, source_id: usize, 
         _ => __tok_runtime_fail("E205", source_id, line, column, "slice bounds out of range"),
     }
 }
+type __TokFn1<T, U> = std::sync::Arc<dyn Fn(T) -> U + Send + Sync>;
+fn __tok_arr_map<T: Clone, U>(items: &[T], f: __TokFn1<T, U>) -> Vec<U> { items.iter().cloned().map(|item| f(item)).collect() }
+fn __tok_arr_filter<T: Clone>(items: &[T], f: __TokFn1<T, bool>) -> Vec<T> { items.iter().filter(|item| f((*item).clone())).cloned().collect() }
+fn __tok_arr_any<T: Clone>(items: &[T], f: __TokFn1<T, bool>) -> bool { items.iter().any(|item| f(item.clone())) }
+fn __tok_arr_all<T: Clone>(items: &[T], f: __TokFn1<T, bool>) -> bool { items.iter().all(|item| f(item.clone())) }
+fn __tok_arr_fold<T: Clone, U>(items: &[T], init: U, f: std::sync::Arc<dyn Fn(U, T) -> U + Send + Sync>) -> U { items.iter().cloned().fold(init, |total, item| f(total, item)) }
+fn __tok_arr_sort_by<T: Clone, K: __TokOrder>(items: &[T], f: __TokFn1<T, K>) -> Vec<T> {
+    let mut keyed = items.iter().cloned().map(|item| (f(item.clone()), item)).collect::<Vec<_>>();
+    keyed.sort_by(|left, right| left.0.tok_cmp(&right.0));
+    keyed.into_iter().map(|(_, item)| item).collect()
+}

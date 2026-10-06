@@ -54,6 +54,7 @@ pub enum Kind {
     Bang,
     AndAnd,
     OrOr,
+    Pipe,
     Lt,
     Le,
     Gt,
@@ -254,6 +255,7 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
                     i += 1;
                     Kind::OrOr
                 }
+                b'|' => Kind::Pipe,
                 b'<' if bytes.get(i) == Some(&b'=') => {
                     i += 1;
                     Kind::Le
