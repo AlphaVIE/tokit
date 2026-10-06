@@ -51,6 +51,7 @@ fn run_command(args: &[String]) {
     let mut json = false;
     let mut read_root = None;
     let mut write_root = None;
+    let mut net = None;
     while let Some(flag) = args.get(index) {
         match flag.as_str() {
             "--json" if !json => {
@@ -65,12 +66,16 @@ fn run_command(args: &[String]) {
                 write_root = args.get(index + 1).map(String::as_str);
                 index += 2;
             }
+            "--allow-net" if net.is_none() && args.get(index + 1).is_some() => {
+                net = args.get(index + 1).map(String::as_str);
+                index += 2;
+            }
             _ => break,
         }
     }
     let Some(path) = args.get(index) else {
         eprintln!(
-            "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...]"
+            "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
         );
         process::exit(2);
     };
@@ -99,10 +104,13 @@ fn run_command(args: &[String]) {
             process::exit(1);
         }
     };
-    let result = tokit_compiler::interpreter::run_with_capabilities(
+    let result = tokit_compiler::interpreter::run_with_grants(
         &loaded.program,
-        read_root.map(Path::new),
-        write_root.map(Path::new),
+        tokit_compiler::interpreter::Grants {
+            read: read_root.map(Path::new),
+            write: write_root.map(Path::new),
+            net,
+        },
         program_args,
     );
     match result {

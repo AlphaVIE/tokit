@@ -59,7 +59,10 @@ impl UseKind {
     fn builtin(self, name: &str) -> bool {
         match self {
             Self::Call => builtins::is_call(name),
-            Self::Type => matches!(name, "IoError" | "TaskError" | "ParseError" | "Map"),
+            Self::Type => matches!(
+                name,
+                "IoError" | "TaskError" | "ParseError" | "Map" | "Request" | "Response"
+            ),
             Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
     }
@@ -88,6 +91,10 @@ fn reserved(name: &str) -> bool {
             | "lines"
             | "args"
             | "print"
+            | "serve"
+            | "http_request"
+            | "Request"
+            | "Response"
             | "list_dir"
             | "exists"
             | "make_dir"

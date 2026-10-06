@@ -7,6 +7,7 @@ pub mod diagnostic;
 pub mod explain;
 pub mod filesystem;
 pub mod format;
+mod http;
 pub mod interpreter;
 pub mod ir;
 pub mod lexer;

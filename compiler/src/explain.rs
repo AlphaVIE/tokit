@@ -155,6 +155,12 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if name == builtins::SERVE {
+                facts.operations.insert("HTTP server");
+                facts.effects.insert("net.listen");
+            } else if name == builtins::HTTP_REQUEST {
+                facts.operations.insert("HTTP request");
+                facts.effects.insert("net.connect");
             } else if name == builtins::LIST_DIR || name == builtins::EXISTS {
                 facts.operations.insert("filesystem query");
                 facts.effects.insert("fs.read");

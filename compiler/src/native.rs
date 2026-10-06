@@ -25,6 +25,7 @@ const PRELUDE_STRINGS: &str = include_str!("native_runtime/strings.rs.txt");
 const PRELUDE_MAPS: &str = include_str!("native_runtime/maps.rs.txt");
 const PRELUDE_ARRAYS: &str = include_str!("native_runtime/arrays.rs.txt");
 const PRELUDE_MATH: &str = include_str!("native_runtime/math.rs.txt");
+const PRELUDE_HTTP: &str = include_str!("native_runtime/http.rs.txt");
 
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
@@ -34,6 +35,7 @@ fn runtime_prelude(body: &str) -> String {
         || body.contains("__TokBytes")
         || body.contains("__tok_byte_")
         || body.contains("__tok_into_bytes");
+    let uses_net = body.contains("__tok_net_");
     let mut prelude = String::from(PRELUDE_CORE);
     if body.contains("i64") {
         prelude.push_str(PRELUDE_I64);
@@ -41,7 +43,7 @@ fn runtime_prelude(body: &str) -> String {
     if uses_bytes {
         prelude.push_str(PRELUDE_BYTES);
     }
-    if uses_io || body.contains("__TokIoError") || body.contains("__tok_stdin_all") {
+    if uses_io || uses_net || body.contains("__TokIoError") || body.contains("__tok_stdin_all") {
         prelude.push_str(PRELUDE_IO_ERROR);
     }
     if body.contains("__TokParseError")
@@ -57,8 +59,12 @@ fn runtime_prelude(body: &str) -> String {
     if body.contains("__tok_str") {
         prelude.push_str(PRELUDE_STRINGS);
     }
-    if body.contains("BTreeMap") {
+    if body.contains("BTreeMap") || uses_net {
         prelude.push_str(PRELUDE_MAPS);
+    }
+    if uses_net {
+        prelude.push_str(PRELUDE_HTTP);
+        prelude.push_str(&http_adapters());
     }
     if body.contains("__tok_math_") {
         prelude.push_str(PRELUDE_MATH);
@@ -200,6 +206,52 @@ fn borrowed_param(ty: &Type) -> bool {
     )
 }
 
+fn mentions_http_record(ty: &Type) -> bool {
+    match ty {
+        Type::Named(name) => name == builtins::REQUEST || name == builtins::RESPONSE,
+        Type::Applied(_, args) => args.iter().any(mentions_http_record),
+        Type::Array(inner) | Type::Option(inner) | Type::Task(inner) => mentions_http_record(inner),
+        Type::Result(ok, err) => mentions_http_record(ok) || mentions_http_record(err),
+        Type::Fn(params, ret) => {
+            params.iter().any(mentions_http_record) || mentions_http_record(ret)
+        }
+        _ => false,
+    }
+}
+
+/// Adapters between the shared HTTP code and the program's record types.
+fn http_adapters() -> String {
+    let request = user_name(builtins::REQUEST);
+    let response = user_name(builtins::RESPONSE);
+    let field = |name: &str| user_name(name);
+    format!(
+        r#"fn __tok_net_error(variant: &str) -> __TokIoError {{
+    match variant {{ "Denied" => __TokIoError::Denied, "NotFound" => __TokIoError::NotFound, "InvalidUtf8" => __TokIoError::InvalidUtf8, _ => __TokIoError::Other }}
+}}
+fn __tok_net_serve(addr: String, limit: i32, handler: std::sync::Arc<dyn Fn({request}) -> {response} + Send + Sync>) -> Result<(), __TokIoError> {{
+    if !__tok_http_allowed(__TOK_NET_GRANT.get().map(String::as_str), &addr) {{ return Err(__TokIoError::Denied); }}
+    __tok_flush();
+    __tok_http_serve(&addr, limit, &mut |request| {{
+        let response = handler({request} {{ {method}: request.method, {path}: request.path, {query}: request.query, {headers}: request.headers.into_iter().collect(), {body}: request.body }});
+        __tok_flush();
+        Some(__TokHttpResponse {{ status: response.{status}, headers: response.{headers}.into_iter().collect(), body: response.{body} }})
+    }}).map_err(__tok_net_error)
+}}
+fn __tok_net_request(method: String, url: String, headers: std::collections::BTreeMap<String, String>, body: String) -> Result<{response}, __TokIoError> {{
+    let headers = headers.into_iter().collect::<Vec<_>>();
+    let response = __tok_http_request(__TOK_NET_GRANT.get().map(String::as_str), &method, &url, &headers, &body).map_err(__tok_net_error)?;
+    Ok({response} {{ {status}: response.status, {headers}: response.headers.into_iter().collect(), {body}: response.body }})
+}}
+"#,
+        method = field("method"),
+        path = field("path"),
+        query = field("query"),
+        headers = field("headers"),
+        body = field("body"),
+        status = field("status"),
+    )
+}
+
 fn is_map(ty: Option<&Type>) -> bool {
     matches!(ty, Some(Type::Applied(name, _)) if name == builtins::MAP)
 }
@@ -334,6 +386,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PRINT => "__tok_print".to_owned(),
+                builtins::SERVE => "__tok_net_serve".to_owned(),
+                builtins::HTTP_REQUEST => "__tok_net_request".to_owned(),
                 builtins::LIST_DIR => "__tok_read_list_dir".to_owned(),
                 builtins::EXISTS => "__tok_read_exists".to_owned(),
                 builtins::MAKE_DIR => "__tok_write_make_dir".to_owned(),
@@ -1027,7 +1081,13 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         writeln!(out, "impl{render_generics} __TokRender for {name}{generics} {{ fn tok_render(&self) -> String {{ match self {{ {arms} }} }} }}")
             .expect("writing to String cannot fail");
     }
-    for record in &program.records {
+    // Built-in HTTP records are emitted only when the program uses them.
+    let builtin_records = if types.values().any(mentions_http_record) {
+        builtins::http_records()
+    } else {
+        Vec::new()
+    };
+    for record in program.records.iter().chain(&builtin_records) {
         let name = user_name(&record.name);
         let generic_names = record
             .type_params

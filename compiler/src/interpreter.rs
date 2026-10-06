@@ -137,6 +137,16 @@ struct Runtime<'a> {
     args: &'a [String],
     /// Origin of the monotonic `clock_ns` builtin.
     started: std::time::Instant,
+    /// `--allow-net` grant: one `host:port`, or `*`.
+    net: Option<String>,
+}
+
+/// Capability grants for one program run.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Grants<'a> {
+    pub read: Option<&'a Path>,
+    pub write: Option<&'a Path>,
+    pub net: Option<&'a str>,
 }
 
 macro_rules! take_value {
@@ -172,7 +182,21 @@ pub fn run_with_capabilities(
     write_root: Option<&Path>,
     args: &[String],
 ) -> Result<Value, Diagnostic> {
-    run_entry(program, "main", read_root, write_root, args)
+    let grants = Grants {
+        read: read_root,
+        write: write_root,
+        net: None,
+    };
+    run_entry(program, "main", grants, args)
+}
+
+/// Run `main` with every capability grant, including network access.
+pub fn run_with_grants(
+    program: &Program,
+    grants: Grants<'_>,
+    args: &[String],
+) -> Result<Value, Diagnostic> {
+    run_entry(program, "main", grants, args)
 }
 
 /// Execute a checked, parameterless function in a fresh reference runtime.
@@ -186,21 +210,26 @@ pub fn run_named_with_capabilities(
     read_root: Option<&Path>,
     write_root: Option<&Path>,
 ) -> Result<Value, Diagnostic> {
-    run_entry(program, name, read_root, write_root, &[])
+    let grants = Grants {
+        read: read_root,
+        write: write_root,
+        net: None,
+    };
+    run_entry(program, name, grants, &[])
 }
 
 fn run_entry(
     program: &Program,
     name: &str,
-    read_root: Option<&Path>,
-    write_root: Option<&Path>,
+    grants: Grants<'_>,
     args: &[String],
 ) -> Result<Value, Diagnostic> {
     let runtime = Runtime {
-        read: ReadPolicy::from_root(read_root),
-        write: WritePolicy::from_root(write_root),
+        read: ReadPolicy::from_root(grants.read),
+        write: WritePolicy::from_root(grants.write),
         args,
         started: std::time::Instant::now(),
+        net: grants.net.map(str::to_owned),
     };
     let function = program
         .functions
@@ -729,6 +758,9 @@ fn eval_call(
     if let Some(result) = eval_higher_order(name, &values, program, depth, runtime, expr.span) {
         return Ok(Flow::Value(result?));
     }
+    if let Some(result) = eval_http(name, &values, program, depth, runtime, expr.span) {
+        return Ok(Flow::Value(result?));
+    }
     let Some(function) = program
         .functions
         .iter()
@@ -1054,7 +1086,13 @@ fn eval_builtin(
         };
         return Ok(Flow::Value(Value::Ok(value.clone())));
     }
-    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+    let builtin_records = builtins::http_records();
+    if let Some(record) = program
+        .records
+        .iter()
+        .chain(&builtin_records)
+        .find(|record| record.name == *name)
+    {
         return Ok(Flow::Value(Value::Record(
             name.clone(),
             record
@@ -1835,4 +1873,141 @@ fn eval_math_builtin(
         _ => return None,
     };
     Some(value)
+}
+
+fn io_error_value(variant: &str) -> Value {
+    Value::Err(Box::new(Value::Enum(
+        builtins::IO_ERROR.to_owned(),
+        variant.to_owned(),
+        None,
+    )))
+}
+
+fn headers_value(headers: Vec<(String, String)>) -> Value {
+    let mut entries = Vec::new();
+    for (name, value) in headers {
+        map_insert(&mut entries, Value::String(name), Value::String(value));
+    }
+    Value::Map(entries)
+}
+
+fn headers_from(value: &Value) -> Vec<(String, String)> {
+    match value {
+        Value::Map(entries) => entries
+            .iter()
+            .filter_map(|(name, value)| match (name, value) {
+                (Value::String(name), Value::String(value)) => Some((name.clone(), value.clone())),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn record_field<'a>(value: &'a Value, field: &str) -> Option<&'a Value> {
+    match value {
+        Value::Record(_, fields) => fields
+            .iter()
+            .find(|(name, _)| name == field)
+            .map(|(_, value)| value),
+        _ => None,
+    }
+}
+
+fn string_field(value: &Value, field: &str) -> String {
+    match record_field(value, field) {
+        Some(Value::String(text)) => text.clone(),
+        _ => String::new(),
+    }
+}
+
+fn response_value(response: crate::http::__TokHttpResponse) -> Value {
+    Value::Record(
+        builtins::RESPONSE.to_owned(),
+        vec![
+            ("status".to_owned(), Value::I32(response.status)),
+            ("headers".to_owned(), headers_value(response.headers)),
+            ("body".to_owned(), Value::String(response.body)),
+        ],
+    )
+}
+
+/// `serve` and `http_request` through the HTTP code shared with native programs.
+fn eval_http(
+    name: &str,
+    values: &[Value],
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+    span: Span,
+) -> Option<Result<Value, Diagnostic>> {
+    match (name, values) {
+        (
+            builtins::SERVE,
+            [
+                Value::String(addr),
+                Value::I32(limit),
+                Value::Closure(handler),
+            ],
+        ) => {
+            if !crate::http::__tok_http_allowed(runtime.net.as_deref(), addr) {
+                return Some(Ok(io_error_value("Denied")));
+            }
+            let mut failure = None;
+            let served = crate::http::__tok_http_serve(addr, *limit, &mut |request| {
+                let request = Value::Record(
+                    builtins::REQUEST.to_owned(),
+                    vec![
+                        ("method".to_owned(), Value::String(request.method)),
+                        ("path".to_owned(), Value::String(request.path)),
+                        ("query".to_owned(), Value::String(request.query)),
+                        ("headers".to_owned(), headers_value(request.headers)),
+                        ("body".to_owned(), Value::String(request.body)),
+                    ],
+                );
+                match call_closure(handler, vec![request], program, depth, runtime, span) {
+                    Ok(response) => Some(crate::http::__TokHttpResponse {
+                        status: match record_field(&response, "status") {
+                            Some(Value::I32(status)) => *status,
+                            _ => 500,
+                        },
+                        headers: record_field(&response, "headers")
+                            .map(headers_from)
+                            .unwrap_or_default(),
+                        body: string_field(&response, "body"),
+                    }),
+                    Err(error) => {
+                        failure = Some(error);
+                        None
+                    }
+                }
+            });
+            Some(match (failure, served) {
+                (Some(error), _) => Err(error),
+                (None, Ok(())) => Ok(Value::Ok(Box::new(Value::Unit))),
+                (None, Err(variant)) => Ok(io_error_value(variant)),
+            })
+        }
+        (
+            builtins::HTTP_REQUEST,
+            [
+                Value::String(method),
+                Value::String(url),
+                headers,
+                Value::String(body),
+            ],
+        ) => Some(Ok(
+            match crate::http::__tok_http_request(
+                runtime.net.as_deref(),
+                method,
+                url,
+                &headers_from(headers),
+                body,
+            ) {
+                Ok(response) => Value::Ok(Box::new(response_value(response))),
+                Err(variant) => io_error_value(variant),
+            },
+        )),
+        _ => None,
+    }
 }
