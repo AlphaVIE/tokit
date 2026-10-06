@@ -7,6 +7,12 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const MAP: &str = "Map";
+pub const GET: &str = "get";
+pub const GET_OR: &str = "get_or";
+pub const KEYS: &str = "keys";
+pub const VALUES: &str = "values";
+pub const REMOVE: &str = "remove";
 pub const TO_STRING: &str = "String";
 pub const CHARS: &str = "chars";
 pub const SPLIT: &str = "split";
@@ -120,5 +126,17 @@ pub fn parse_i64_result() -> Type {
     Type::Result(
         Box::new(Type::I64),
         Box::new(Type::Named(PARSE_ERROR.to_owned())),
+    )
+}
+
+pub fn map_type(key: Type, value: Type) -> Type {
+    Type::Applied(MAP.to_owned(), vec![key, value])
+}
+
+/// Map keys need a total order shared by both backends.
+pub fn map_key(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::I32 | Type::I64 | Type::String | Type::Bool | Type::Never
     )
 }

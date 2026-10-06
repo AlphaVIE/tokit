@@ -87,6 +87,16 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             } else if name == builtins::ARGS {
                 facts.operations.insert("program arguments");
                 facts.effects.insert("env.args");
+            } else if matches!(
+                name.as_str(),
+                builtins::MAP
+                    | builtins::GET
+                    | builtins::GET_OR
+                    | builtins::KEYS
+                    | builtins::VALUES
+                    | builtins::REMOVE
+            ) {
+                facts.operations.insert("map operation");
             } else if name == builtins::TO_STRING {
                 facts.operations.insert("string conversion");
             } else if matches!(

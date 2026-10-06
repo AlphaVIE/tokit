@@ -50,6 +50,22 @@ impl Parser {
                 .get(self.pos + 3)
                 .is_some_and(|token| matches!(&token.kind, Kind::LParen))
     }
+    /// Consume the `>` closing a type argument list. A following `=` may have
+    /// been lexed together with it, as in `x:Option<I>=None`.
+    fn close_angle(&mut self) -> Result<Span, Diagnostic> {
+        let token = self.current().clone();
+        if token.kind == Kind::Ge {
+            let split = token.span.start + 1;
+            self.tokens[self.pos].kind = Kind::Eq;
+            self.tokens[self.pos].span.start = split;
+            return Ok(Span::in_source(
+                token.span.source_id,
+                token.span.start,
+                split,
+            ));
+        }
+        self.expect(Kind::Gt).map(|token| token.span)
+    }
     fn at(&self, kind: &Kind) -> bool {
         std::mem::discriminant(&self.current().kind) == std::mem::discriminant(kind)
     }
@@ -146,19 +162,19 @@ impl Parser {
                 let ok = self.ty()?;
                 self.expect(Kind::Comma)?;
                 let err = self.ty()?;
-                self.expect(Kind::Gt)?;
+                self.close_angle()?;
                 Ok(Type::Result(Box::new(ok), Box::new(err)))
             }
             "Option" => {
                 self.expect(Kind::Lt)?;
                 let element = self.ty()?;
-                self.expect(Kind::Gt)?;
+                self.close_angle()?;
                 Ok(Type::Option(Box::new(element)))
             }
             "Task" => {
                 self.expect(Kind::Lt)?;
                 let result = self.ty()?;
-                self.expect(Kind::Gt)?;
+                self.close_angle()?;
                 Ok(Type::Task(Box::new(result)))
             }
             _ if self.type_params.contains(&name) => Ok(Type::Param(name)),
@@ -172,7 +188,7 @@ impl Parser {
                     }
                     self.bump();
                 }
-                self.expect(Kind::Gt)?;
+                self.close_angle()?;
                 Ok(Type::Applied(name, args))
             }
             _ => Ok(Type::Named(name)),
@@ -192,7 +208,7 @@ impl Parser {
             }
             self.bump();
         }
-        self.expect(Kind::Gt)?;
+        self.close_angle()?;
         Ok(params)
     }
 

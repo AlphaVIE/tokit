@@ -56,6 +56,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             },
         );
     }
+    arities.insert(builtins::MAP.to_owned(), 2);
+    record_names.insert(builtins::MAP.to_owned());
     for (name, params, ret) in [
         (
             builtins::READ_TEXT,
@@ -206,6 +208,77 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         },
     );
     signatures.insert(
+        builtins::GET.to_owned(),
+        Signature {
+            type_params: vec!["K".to_owned(), "V".to_owned()],
+            params: vec![
+                builtins::map_type(Type::Param("K".to_owned()), Type::Param("V".to_owned())),
+                Type::Param("K".to_owned()),
+            ],
+            ret: Type::Option(Box::new(Type::Param("V".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::GET_OR.to_owned(),
+        Signature {
+            type_params: vec!["K".to_owned(), "V".to_owned()],
+            params: vec![
+                builtins::map_type(Type::Param("K".to_owned()), Type::Param("V".to_owned())),
+                Type::Param("K".to_owned()),
+                Type::Param("V".to_owned()),
+            ],
+            ret: Type::Param("V".to_owned()),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::KEYS.to_owned(),
+        Signature {
+            type_params: vec!["K".to_owned(), "V".to_owned()],
+            params: vec![builtins::map_type(
+                Type::Param("K".to_owned()),
+                Type::Param("V".to_owned()),
+            )],
+            ret: Type::Array(Box::new(Type::Param("K".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::VALUES.to_owned(),
+        Signature {
+            type_params: vec!["K".to_owned(), "V".to_owned()],
+            params: vec![builtins::map_type(
+                Type::Param("K".to_owned()),
+                Type::Param("V".to_owned()),
+            )],
+            ret: Type::Array(Box::new(Type::Param("V".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::REMOVE.to_owned(),
+        Signature {
+            type_params: vec!["K".to_owned(), "V".to_owned()],
+            params: vec![
+                builtins::map_type(Type::Param("K".to_owned()), Type::Param("V".to_owned())),
+                Type::Param("K".to_owned()),
+            ],
+            ret: builtins::map_type(Type::Param("K".to_owned()), Type::Param("V".to_owned())),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
         builtins::JOIN.to_owned(),
         Signature {
             type_params: vec!["T".to_owned()],
@@ -239,6 +312,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "Map"
+                | "get"
+                | "get_or"
+                | "keys"
+                | "values"
+                | "remove"
                 | "chars"
                 | "split"
                 | "trim"
@@ -292,6 +371,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "Map"
+                | "get"
+                | "get_or"
+                | "keys"
+                | "values"
+                | "remove"
                 | "chars"
                 | "split"
                 | "trim"
@@ -566,6 +651,12 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::MAP
+                        | builtins::GET
+                        | builtins::GET_OR
+                        | builtins::KEYS
+                        | builtins::VALUES
+                        | builtins::REMOVE
                         | builtins::TO_STRING
                         | builtins::CHARS
                         | builtins::SPLIT
@@ -662,6 +753,16 @@ fn validate_type(
                     "E103",
                     span,
                     format!("invalid type arguments for {name}"),
+                ));
+            }
+            if name == builtins::MAP && !builtins::map_key(&args[0]) {
+                return Err(Diagnostic::new(
+                    "E103",
+                    span,
+                    format!(
+                        "map keys must be i32, i64, String, or bool, not {}",
+                        args[0]
+                    ),
                 ));
             }
             for arg in args {
@@ -1039,6 +1140,13 @@ fn infer(
             if array_type == Type::Never || index_type == Type::Never {
                 return Ok(Type::Never);
             }
+            if matches!(&array_type, Type::Applied(map, _) if map == builtins::MAP) {
+                return Err(Diagnostic::new(
+                    "E110",
+                    array.span,
+                    "read map entries with get(map,key) or get_or(map,key,default)",
+                ));
+            }
             require(&Type::I32, &index_type, index.span, "array index")?;
             match array_type {
                 Type::Array(element) => Ok(*element),
@@ -1183,6 +1291,16 @@ fn infer(
                 )),
             }
         }
+        ExprKind::Call(name, args) if name == builtins::MAP => {
+            if !args.is_empty() {
+                return Err(Diagnostic::new(
+                    "E105",
+                    expr.span,
+                    format!("Map expects 0 arguments, got {}", args.len()),
+                ));
+            }
+            Ok(builtins::map_type(Type::Never, Type::Never))
+        }
         ExprKind::Call(name, args) if name == builtins::JOIN && args.len() == 2 => {
             let parts = type_of(&args[0], env, signatures, return_type, types)?;
             let separator = type_of(&args[1], env, signatures, return_type, types)?;
@@ -1223,6 +1341,17 @@ fn infer(
                 .collect::<Result<Vec<_>, _>>()?;
             if name == builtins::LEN && actuals == [Type::Bytes] {
                 return Ok(Type::I32);
+            }
+            if let Some(Type::Applied(map, entry)) = actuals.first()
+                && map == builtins::MAP
+            {
+                if name == builtins::LEN {
+                    return Ok(Type::I32);
+                }
+                if name == builtins::CONTAINS {
+                    require(&entry[0], &actuals[1], args[1].span, "argument")?;
+                    return Ok(Type::Bool);
+                }
             }
             if actuals == [Type::F64] {
                 if name == builtins::NARROW_I32 {
@@ -1420,13 +1549,14 @@ fn infer(
                             ));
                         }
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
-                        let arities: HashMap<String, usize> = signatures
+                        let mut arities: HashMap<String, usize> = signatures
                             .iter()
                             .filter_map(|(name, signature)| {
                                 (signature.fields.is_some() || signature.variants.is_some())
                                     .then_some((name.clone(), signature.type_params.len()))
                             })
                             .collect();
+                        arities.insert(builtins::MAP.to_owned(), 2);
                         let binding_ty = if let Some(ty) = ty {
                             validate_type(ty, &arities, *span)?;
                             require(ty, &actual, value.span, "binding")?;
@@ -1473,17 +1603,37 @@ fn infer(
                                 PlaceStep::Index(index, step_span) => {
                                     let index_type =
                                         type_of(index, &scope, signatures, return_type, types)?;
-                                    require(&Type::I32, &index_type, index.span, "array index")?;
                                     types.insert(*step_span, container.clone());
-                                    match container {
-                                        Type::Array(element) => *element,
-                                        Type::Bytes => Type::I32,
-                                        _ => {
+                                    if let Type::Applied(map, entry) = &container
+                                        && map == builtins::MAP
+                                    {
+                                        if !std::ptr::eq(step, path.last().expect("non-empty path"))
+                                        {
                                             return Err(Diagnostic::new(
                                                 "E110",
                                                 *step_span,
-                                                "indexed assignment requires an array or Bytes",
+                                                "a map entry must be the last assignment step",
                                             ));
+                                        }
+                                        require(&entry[0], &index_type, index.span, "map key")?;
+                                        entry[1].clone()
+                                    } else {
+                                        require(
+                                            &Type::I32,
+                                            &index_type,
+                                            index.span,
+                                            "array index",
+                                        )?;
+                                        match container {
+                                            Type::Array(element) => *element,
+                                            Type::Bytes => Type::I32,
+                                            _ => {
+                                                return Err(Diagnostic::new(
+                                                    "E110",
+                                                    *step_span,
+                                                    "indexed assignment requires an array, Bytes, or Map",
+                                                ));
+                                            }
                                         }
                                     }
                                 }

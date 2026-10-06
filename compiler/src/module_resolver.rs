@@ -66,6 +66,12 @@ impl UseKind {
                     | "lines"
                     | "args"
                     | "print"
+                    | "Map"
+                    | "get"
+                    | "get_or"
+                    | "keys"
+                    | "values"
+                    | "remove"
                     | "String"
                     | "chars"
                     | "split"
@@ -94,7 +100,8 @@ impl UseKind {
                     | "bytes_to_i32"
                     | "join"
             ),
-            Self::Type | Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
+            Self::Type => matches!(name, "IoError" | "TaskError" | "ParseError" | "Map"),
+            Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
     }
 }
@@ -122,6 +129,12 @@ fn reserved(name: &str) -> bool {
             | "lines"
             | "args"
             | "print"
+            | "Map"
+            | "get"
+            | "get_or"
+            | "keys"
+            | "values"
+            | "remove"
             | "chars"
             | "split"
             | "trim"

@@ -1,0 +1,13 @@
+impl<K: __TokRender, V: __TokRender> __TokRender for std::collections::BTreeMap<K, V> {
+    fn tok_render(&self) -> String {
+        let entries = self.iter().map(|(key, value)| format!("{}:{}", key.tok_render(), value.tok_render())).collect::<Vec<_>>();
+        format!("{{{}}}", entries.join(","))
+    }
+}
+fn __tok_map_get<K: Ord, V: Clone>(map: &std::collections::BTreeMap<K, V>, key: K) -> Option<V> { map.get(&key).cloned() }
+fn __tok_map_get_or<K: Ord, V: Clone>(map: &std::collections::BTreeMap<K, V>, key: K, fallback: V) -> V { map.get(&key).cloned().unwrap_or(fallback) }
+fn __tok_map_contains<K: Ord, V>(map: &std::collections::BTreeMap<K, V>, key: K) -> bool { map.contains_key(&key) }
+fn __tok_map_keys<K: Clone, V>(map: &std::collections::BTreeMap<K, V>) -> Vec<K> { map.keys().cloned().collect() }
+fn __tok_map_values<K, V: Clone>(map: &std::collections::BTreeMap<K, V>) -> Vec<V> { map.values().cloned().collect() }
+fn __tok_map_remove<K: Ord + Clone, V: Clone>(map: &std::collections::BTreeMap<K, V>, key: K) -> std::collections::BTreeMap<K, V> { let mut copy = map.clone(); copy.remove(&key); copy }
+fn __tok_map_len<K, V>(map: &std::collections::BTreeMap<K, V>) -> i32 { i32::try_from(map.len()).unwrap_or(i32::MAX) }

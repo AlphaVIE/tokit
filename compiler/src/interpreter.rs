@@ -20,6 +20,8 @@ pub enum Value {
     Bytes(Arc<Vec<u8>>),
     Array(Vec<Value>),
     Record(String, Vec<(String, Value)>),
+    /// Entries sorted by key; keys are i32, i64, String, or bool.
+    Map(Vec<(Value, Value)>),
     Enum(String, String, Option<Box<Value>>),
     Ok(Box<Value>),
     Err(Box<Value>),
@@ -47,6 +49,16 @@ impl std::fmt::Display for Value {
                     write!(f, "{value}")?;
                 }
                 f.write_str("]")
+            }
+            Self::Map(entries) => {
+                f.write_str("{")?;
+                for (index, (key, value)) in entries.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{key}:{value}")?;
+                }
+                f.write_str("}")
             }
             Self::Record(name, fields) => {
                 write!(f, "{name}(")?;
@@ -366,6 +378,7 @@ fn array_length(value: &Value, span: Span) -> Result<Value, Diagnostic> {
     let length = match value {
         Value::Array(items) => items.len(),
         Value::Bytes(items) => items.len(),
+        Value::Map(entries) => entries.len(),
         _ => return Err(Diagnostic::new("E204", span, "invalid len call")),
     };
     let length = i32::try_from(length)
@@ -748,6 +761,9 @@ fn eval_builtin(
             runtime.args.iter().cloned().map(Value::String).collect(),
         )));
     }
+    if let Some(value) = eval_map_builtin(name, &values) {
+        return Ok(Flow::Value(value));
+    }
     if let Some(value) = eval_string_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
@@ -993,16 +1009,7 @@ fn eval_block(
                 let mut indices = Vec::new();
                 for step in path {
                     if let PlaceStep::Index(index, _) = step {
-                        match take_value!(eval(index, &scope, program, depth, runtime)) {
-                            Value::I32(index) => indices.push(index),
-                            _ => {
-                                return Err(Diagnostic::new(
-                                    "E204",
-                                    *span,
-                                    "invalid runtime index",
-                                ));
-                            }
-                        }
+                        indices.push(take_value!(eval(index, &scope, program, depth, runtime)));
                     }
                 }
                 let value = take_value!(eval(value, &scope, program, depth, runtime));
@@ -1291,24 +1298,31 @@ fn eval_string_builtin(name: &str, values: &[Value]) -> Option<Value> {
 fn store(
     target: &mut Value,
     path: &[PlaceStep],
-    indices: &mut impl Iterator<Item = i32>,
+    keys: &mut impl Iterator<Item = Value>,
     value: Value,
 ) -> Result<(), Diagnostic> {
     let Some((step, rest)) = path.split_first() else {
         *target = value;
         return Ok(());
     };
+    if let (PlaceStep::Index(..), Value::Map(entries)) = (step, &mut *target) {
+        let key = keys
+            .next()
+            .ok_or_else(|| Diagnostic::new("E204", Span::new(0, 0), "missing map key"))?;
+        map_insert(entries, key, value);
+        return Ok(());
+    }
     match (step, target) {
         (PlaceStep::Index(_, span), Value::Array(items)) => {
-            let index = indices.next().unwrap_or(-1);
+            let index = position(keys.next());
             let slot = usize::try_from(index)
                 .ok()
                 .and_then(|at| items.get_mut(at))
                 .ok_or_else(|| Diagnostic::new("E205", *span, "array index out of bounds"))?;
-            store(slot, rest, indices, value)
+            store(slot, rest, keys, value)
         }
         (PlaceStep::Index(_, span), Value::Bytes(bytes)) => {
-            let index = indices.next().unwrap_or(-1);
+            let index = position(keys.next());
             let at = usize::try_from(index)
                 .ok()
                 .filter(|at| *at < bytes.len())
@@ -1327,12 +1341,74 @@ fn store(
                 .find(|(name, _)| name == field)
                 .map(|(_, slot)| slot)
                 .ok_or_else(|| Diagnostic::new("E204", *span, "unknown runtime field"))?;
-            store(slot, rest, indices, value)
+            store(slot, rest, keys, value)
         }
         (PlaceStep::Index(_, span) | PlaceStep::Field(_, span), _) => Err(Diagnostic::new(
             "E204",
             *span,
             "invalid runtime assignment target",
         )),
+    }
+}
+
+/// The same total order as the native `BTreeMap` keys.
+fn key_order(left: &Value, right: &Value) -> std::cmp::Ordering {
+    match (left, right) {
+        (Value::I32(a), Value::I32(b)) => a.cmp(b),
+        (Value::I64(a), Value::I64(b)) => a.cmp(b),
+        (Value::String(a), Value::String(b)) => a.cmp(b),
+        (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
+        _ => std::cmp::Ordering::Equal,
+    }
+}
+
+fn map_find(entries: &[(Value, Value)], key: &Value) -> Result<usize, usize> {
+    entries.binary_search_by(|(candidate, _)| key_order(candidate, key))
+}
+
+fn map_insert(entries: &mut Vec<(Value, Value)>, key: Value, value: Value) {
+    match map_find(entries, &key) {
+        Ok(at) => entries[at].1 = value,
+        Err(at) => entries.insert(at, (key, value)),
+    }
+}
+
+/// Pure map builtins; `len` is handled with arrays.
+fn eval_map_builtin(name: &str, values: &[Value]) -> Option<Value> {
+    Some(match (name, values) {
+        (builtins::MAP, []) => Value::Map(Vec::new()),
+        (builtins::GET, [Value::Map(entries), key]) => match map_find(entries, key) {
+            Ok(at) => Value::Some(Box::new(entries[at].1.clone())),
+            Err(_) => Value::None,
+        },
+        (builtins::GET_OR, [Value::Map(entries), key, fallback]) => match map_find(entries, key) {
+            Ok(at) => entries[at].1.clone(),
+            Err(_) => fallback.clone(),
+        },
+        (builtins::CONTAINS, [Value::Map(entries), key]) => {
+            Value::Bool(map_find(entries, key).is_ok())
+        }
+        (builtins::KEYS, [Value::Map(entries)]) => {
+            Value::Array(entries.iter().map(|(key, _)| key.clone()).collect())
+        }
+        (builtins::VALUES, [Value::Map(entries)]) => {
+            Value::Array(entries.iter().map(|(_, value)| value.clone()).collect())
+        }
+        (builtins::REMOVE, [Value::Map(entries), key]) => {
+            let mut entries = entries.clone();
+            if let Ok(at) = map_find(&entries, key) {
+                entries.remove(at);
+            }
+            Value::Map(entries)
+        }
+        _ => return None,
+    })
+}
+
+/// An array position from an evaluated index; non-integers never match.
+fn position(index: Option<Value>) -> i32 {
+    match index {
+        Some(Value::I32(index)) => index,
+        _ => -1,
     }
 }
