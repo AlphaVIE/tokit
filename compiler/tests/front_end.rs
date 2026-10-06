@@ -411,3 +411,16 @@ fn propagation_crosses_loop_scope_and_result_arrays_unify() {
         ])
     );
 }
+
+#[test]
+fn unit_value_is_written_as_empty_parentheses() {
+    let source = "f()->Result<Unit,String>{Ok(())} main()->[Result<Unit,String>]{[f(),Ok({})]}";
+    assert_eq!(
+        tokit_compiler::run(source).unwrap().to_string(),
+        "[Ok(()),Ok(())]"
+    );
+    assert_eq!(
+        tokit_compiler::check("main()->I{()}").unwrap_err().code,
+        "E102"
+    );
+}

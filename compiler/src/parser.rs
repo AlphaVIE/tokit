@@ -861,6 +861,14 @@ impl Parser {
                     span: token.span.join(end),
                 })
             }
+            Kind::LParen if self.at(&Kind::RParen) => {
+                // `()` is the unit value, the same as an empty block.
+                let end = self.bump().span;
+                Ok(Expr {
+                    kind: ExprKind::Block(Vec::new(), None),
+                    span: token.span.join(end),
+                })
+            }
             Kind::LParen => {
                 let mut value = self.expr(0)?;
                 let end = self.expect(Kind::RParen)?.span;
