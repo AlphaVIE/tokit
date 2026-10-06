@@ -11,6 +11,8 @@ pub const PARSE_I32: &str = "parse_i32";
 pub const PARSE_I64: &str = "parse_i64";
 pub const WIDEN_I64: &str = "i64";
 pub const NARROW_I32: &str = "i32";
+pub const TO_F64: &str = "f64";
+pub const PARSE_F64: &str = "parse_f64";
 pub const UTF8_BYTES: &str = "utf8_bytes";
 pub const UTF8_DECODE: &str = "utf8_decode";
 pub const UTF8_ENCODE: &str = "utf8_encode";
@@ -89,6 +91,13 @@ pub fn parse_error_decl() -> EnumDecl {
 pub fn parse_i32_result() -> Type {
     Type::Result(
         Box::new(Type::I32),
+        Box::new(Type::Named(PARSE_ERROR.to_owned())),
+    )
+}
+
+pub fn parse_f64_result() -> Type {
+    Type::Result(
+        Box::new(Type::F64),
         Box::new(Type::Named(PARSE_ERROR.to_owned())),
     )
 }

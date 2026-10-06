@@ -85,3 +85,77 @@ fn scalar_float_functions_lower_to_verified_ir() {
             .any(|instruction| matches!(instruction.kind, InstructionKind::FloatNeg(_)))
     );
 }
+
+#[test]
+fn numeric_conversions_and_float_parsing_agree_between_backends() {
+    let native_available = Command::new("rustc").arg("--version").output().is_ok();
+    for (source, expected) in [
+        ("main()->F{f64(7)/2.0}", "3.5"),
+        ("main()->F{f64(9007199254740993i64)}", "9007199254740992.0"),
+        ("main()->Option<I>{i32(-2.9)}", "Some(-2)"),
+        ("main()->Option<I>{i32(2147483647.9)}", "Some(2147483647)"),
+        ("main()->Option<I>{i32(2147483648.0)}", "None"),
+        ("main()->Option<I>{i32(0.0/0.0)}", "None"),
+        (
+            "main()->Option<L>{i64(-9.2e18)}",
+            "Some(-9200000000000000000)",
+        ),
+        ("main()->Option<L>{i64(9.3e18)}", "None"),
+        ("main()->Option<L>{i64(1.0/0.0)}", "None"),
+        ("main()->L{i64(3)}", "3"),
+        (
+            "main()->Result<F,ParseError>{parse_f64(\"-1.5e2\")}",
+            "Ok(-150.0)",
+        ),
+        ("main()->Result<F,ParseError>{parse_f64(\"+7\")}", "Ok(7.0)"),
+        (
+            "main()->Result<F,ParseError>{parse_f64(\"1e400\")}",
+            "Err(ParseError::OutOfRange)",
+        ),
+        (
+            "main()->[Result<F,ParseError>]{[parse_f64(\"inf\"),parse_f64(\".5\"),parse_f64(\"5.\"),parse_f64(\" 1\"),parse_f64(\"1e\"),parse_f64(\"\")]}",
+            "[Err(ParseError::Invalid),Err(ParseError::Invalid),Err(ParseError::Invalid),Err(ParseError::Invalid),Err(ParseError::Invalid),Err(ParseError::Invalid)]",
+        ),
+        (
+            "mean(a:I,b:L)->F{(f64(a)+f64(b))/2.0} main()->F{mean(1,2i64)}",
+            "1.5",
+        ),
+    ] {
+        assert_eq!(run(source).unwrap().to_string(), expected, "{source}");
+        if native_available {
+            assert_eq!(native_output(source), expected, "{source}");
+        }
+    }
+}
+
+#[test]
+fn numeric_conversions_reject_unsupported_operands() {
+    for source in [
+        "main()->F{f64(1.0)}",
+        "main()->F{f64(true)}",
+        "main()->Option<I>{i32(1)}",
+        "main()->L{i64(1.0)}",
+        "struct f64{x:I} main()->I{1}",
+        "parse_f64(x:I)->I{x} main()->I{1}",
+    ] {
+        assert!(check(source).is_err(), "{source}");
+    }
+}
+
+#[test]
+fn infallible_conversions_lower_to_verified_ir() {
+    let source =
+        "mean(a:I,b:L)->F{(f64(a)+f64(b))/2.0} wide(x:I)->L{i64(x)} main()->F{mean(1,2i64)}";
+    let program = parse(source).unwrap();
+    let types = checker::check_with_types(&program).unwrap();
+    for function in &program.functions[..2] {
+        let lowered = ir::lower_function(function, &program, &types).unwrap();
+        lowered.verify().unwrap();
+        assert!(
+            lowered
+                .instructions
+                .iter()
+                .any(|instruction| matches!(instruction.kind, InstructionKind::Convert(_)))
+        );
+    }
+}

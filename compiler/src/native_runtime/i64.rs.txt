@@ -16,3 +16,5 @@ fn __tok_div_i64(a: i64, b: i64, source_id: usize, line: usize, column: usize) -
 }
 fn __tok_i64_from_i32(value: i32) -> i64 { i64::from(value) }
 fn __tok_i32_from_i64(value: i64) -> Option<i32> { i32::try_from(value).ok() }
+fn __tok_f64_from_i64(value: i64) -> f64 { value as f64 }
+fn __tok_i64_from_f64(value: f64) -> Option<i64> { let t = value.trunc(); (t >= -9223372036854775808.0 && t < 9223372036854775808.0).then_some(t as i64) }

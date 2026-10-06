@@ -657,20 +657,59 @@ fn eval(
                     }
                 }));
             }
-            if name == builtins::WIDEN_I64 {
-                let [Value::I32(number)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid i64 conversion"));
+            if name == builtins::PARSE_F64 {
+                let [Value::String(text)] = values.as_slice() else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        expr.span,
+                        "invalid float parse call",
+                    ));
                 };
-                return Ok(Flow::Value(Value::I64(i64::from(*number))));
-            }
-            if name == builtins::NARROW_I32 {
-                let [Value::I64(number)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid i32 conversion"));
-                };
-                return Ok(Flow::Value(match i32::try_from(*number) {
-                    Ok(value) => Value::Some(Box::new(Value::I32(value))),
-                    Err(_) => Value::None,
+                return Ok(Flow::Value(match parse_f64(text) {
+                    Ok(number) => Value::Ok(Box::new(Value::F64(number.to_bits()))),
+                    Err(variant) => Value::Err(Box::new(Value::Enum(
+                        builtins::PARSE_ERROR.to_owned(),
+                        variant.to_owned(),
+                        None,
+                    ))),
                 }));
+            }
+            if name == builtins::WIDEN_I64
+                || name == builtins::NARROW_I32
+                || name == builtins::TO_F64
+            {
+                let option = |value: Option<Value>| match value {
+                    Some(value) => Value::Some(Box::new(value)),
+                    None => Value::None,
+                };
+                let converted = match (name.as_str(), values.as_slice()) {
+                    (builtins::WIDEN_I64, [Value::I32(number)]) => Value::I64(i64::from(*number)),
+                    (builtins::WIDEN_I64, [Value::F64(bits)]) => {
+                        option(float_to_i64(f64::from_bits(*bits)).map(Value::I64))
+                    }
+                    (builtins::NARROW_I32, [Value::I64(number)]) => {
+                        option(i32::try_from(*number).ok().map(Value::I32))
+                    }
+                    (builtins::NARROW_I32, [Value::F64(bits)]) => option(
+                        float_to_i64(f64::from_bits(*bits))
+                            .and_then(|number| i32::try_from(number).ok())
+                            .map(Value::I32),
+                    ),
+                    (builtins::TO_F64, [Value::I32(number)]) => {
+                        Value::F64(f64::from(*number).to_bits())
+                    }
+                    (builtins::TO_F64, [Value::I64(number)]) => {
+                        Value::F64((*number as f64).to_bits())
+                    }
+                    _ => {
+                        return Err(Diagnostic::new(
+                            "E204",
+                            expr.span,
+                            "invalid numeric conversion",
+                        ));
+                    }
+                };
+                return Ok(Flow::Value(converted));
             }
             if name == builtins::JOIN {
                 let [Value::Task(value)] = values.as_slice() else {
@@ -956,4 +995,47 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         _ => return Err(Diagnostic::new("E204", span, "invalid runtime operands")),
     };
     number.ok_or_else(|| Diagnostic::new("E201", span, "integer overflow or division by zero"))
+}
+
+/// Truncates toward zero; NaN and values outside `i64` have no integer result.
+fn float_to_i64(value: f64) -> Option<i64> {
+    let truncated = value.trunc();
+    // -2^63 and 2^63 are exact in f64.
+    (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0)
+        .contains(&truncated)
+        .then_some(truncated as i64)
+}
+
+/// Accepts `[+-]digits[.digits][(e|E)[+-]digits]`; non-finite results are out of range.
+fn parse_f64(text: &str) -> Result<f64, &'static str> {
+    let bytes = text.as_bytes();
+    let mut i = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
+    let digits = |i: &mut usize| {
+        let start = *i;
+        while bytes.get(*i).is_some_and(u8::is_ascii_digit) {
+            *i += 1;
+        }
+        *i > start
+    };
+    let mut valid = digits(&mut i);
+    if bytes.get(i) == Some(&b'.') {
+        i += 1;
+        valid &= digits(&mut i);
+    }
+    if matches!(bytes.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        if matches!(bytes.get(i), Some(b'+' | b'-')) {
+            i += 1;
+        }
+        valid &= digits(&mut i);
+    }
+    if !valid || i != bytes.len() {
+        return Err("Invalid");
+    }
+    let number = text.parse::<f64>().map_err(|_| "Invalid")?;
+    if number.is_finite() {
+        Ok(number)
+    } else {
+        Err("OutOfRange")
+    }
 }

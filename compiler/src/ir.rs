@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{self, Expr, ExprKind, Op, Span, Stmt, Type};
+use crate::builtins;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValueId(pub usize);
@@ -54,6 +55,8 @@ pub enum InstructionKind {
     Not(ValueId),
     CheckedNeg(ValueId),
     FloatNeg(ValueId),
+    /// Infallible numeric conversion to the instruction type.
+    Convert(ValueId),
     Binary(BinaryOp, ValueId, ValueId),
     Call(String, Vec<ValueId>),
     Conditional {
@@ -160,6 +163,14 @@ fn verify_instructions(
             InstructionKind::FloatNeg(value) => {
                 if instruction.ty != Type::F64 || operand(value) != Some(&Type::F64) {
                     return Err("float negation operand type mismatch");
+                }
+            }
+            InstructionKind::Convert(value) => {
+                if !matches!(
+                    (operand(value), &instruction.ty),
+                    (Some(Type::I32), Type::I64 | Type::F64) | (Some(Type::I64), Type::F64)
+                ) {
+                    return Err("conversion type mismatch");
                 }
             }
             InstructionKind::Binary(op, left, right) => {
@@ -352,6 +363,12 @@ impl Lowerer<'_> {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;
                 InstructionKind::Binary(BinaryOp::try_from(*op).ok()?, left, right)
+            }
+            ExprKind::Call(name, args)
+                if matches!(name.as_str(), builtins::WIDEN_I64 | builtins::TO_F64)
+                    && args.len() == 1 =>
+            {
+                InstructionKind::Convert(self.expression(&args[0])?)
             }
             ExprKind::Call(name, args) => {
                 let signature = self.signatures.get(name)?.clone();

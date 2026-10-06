@@ -1,3 +1,3 @@
 // Decimal arithmetic uses f64. F is its shorter type spelling.
 midpoint(a:F,b:F)->F{(a+b)/2.0}
-main()->F{midpoint(1.25,2.75)}
+main()->Option<I>{i32(midpoint(f64(1),2.75)*2.0)}

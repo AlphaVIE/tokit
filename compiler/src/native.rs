@@ -43,6 +43,7 @@ fn runtime_prelude(body: &str) -> String {
     if body.contains("__TokParseError")
         || body.contains("__tok_parse_i32")
         || body.contains("__tok_parse_i64")
+        || body.contains("__tok_parse_f64")
     {
         prelude.push_str(PRELUDE_PARSE);
     }
@@ -225,8 +226,15 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PARSE_I32 => "__tok_parse_i32".to_owned(),
                 builtins::PARSE_I64 => "__tok_parse_i64".to_owned(),
-                builtins::WIDEN_I64 => "__tok_i64_from_i32".to_owned(),
-                builtins::NARROW_I32 => "__tok_i32_from_i64".to_owned(),
+                builtins::PARSE_F64 => "__tok_parse_f64".to_owned(),
+                builtins::WIDEN_I64 | builtins::NARROW_I32 | builtins::TO_F64 => {
+                    let from = match types.get(&args[0].span) {
+                        Some(Type::I32) => "i32",
+                        Some(Type::I64) => "i64",
+                        _ => "f64",
+                    };
+                    format!("__tok_{name}_from_{from}")
+                }
                 builtins::UTF8_BYTES => "__tok_utf8_bytes".to_owned(),
                 builtins::UTF8_DECODE => "__tok_utf8_decode".to_owned(),
                 builtins::UTF8_ENCODE => "__tok_utf8_encode".to_owned(),
@@ -521,6 +529,9 @@ fn emit_ir_instructions(
                 format!("{helper}(__tok_v{},{source_id},{line},{column})", value.0)
             }
             InstructionKind::FloatNeg(value) => format!("-__tok_v{}", value.0),
+            InstructionKind::Convert(value) => {
+                format!("(__tok_v{} as {})", value.0, rust_type(&instruction.ty))
+            }
             InstructionKind::Binary(op, left, right) => {
                 let left_name = format!("__tok_v{}", left.0);
                 let right_name = format!("__tok_v{}", right.0);
