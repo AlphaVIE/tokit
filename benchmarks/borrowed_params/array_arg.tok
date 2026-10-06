@@ -1,0 +1,2 @@
+first(xs:[I])->I{xs[0]}
+main()->I{var xs:[I]=[];var i=0;while i<200000{xs.push(i);i=i+1;}var total=0;var n=0;while n<20000{total=total+first(xs);n=n+1;}total}
