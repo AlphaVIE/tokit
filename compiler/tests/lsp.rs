@@ -381,3 +381,118 @@ fn lsp_finds_definitions_and_hovers() {
     );
     assert_eq!(by_id(8), Value::Null);
 }
+
+fn request(id: i64, method: &str, line: u64, character: u64, extra: Value) -> Value {
+    let mut message = at(id, method, line, character);
+    for (key, value) in extra.as_object().unwrap() {
+        message["params"][key] = value.clone();
+    }
+    message
+}
+
+#[test]
+fn lsp_finds_references_and_renames_bindings() {
+    let text = "struct Point{x:I,y:I}\nnorm(p:Point)->I{p.x*p.x}\nmain()->I{let x=Point(3,4);let n=norm(x);let f=|a,b|a+b+n;f(x.x,n)}";
+    let responses = session(
+        text,
+        &[
+            // `x` local on line 2: binding, argument, and field receiver; not the field `.x`.
+            request(
+                1,
+                "textDocument/references",
+                2,
+                14,
+                json!({"context":{"includeDeclaration":true}}),
+            ),
+            request(
+                2,
+                "textDocument/references",
+                2,
+                14,
+                json!({"context":{"includeDeclaration":false}}),
+            ),
+            // Lambda parameter `b` and its one use.
+            request(
+                3,
+                "textDocument/references",
+                2,
+                50,
+                json!({"context":{"includeDeclaration":true}}),
+            ),
+            request(4, "textDocument/rename", 1, 1, json!({"newName":"length"})),
+            request(5, "textDocument/rename", 1, 1, json!({"newName":"let"})),
+            request(6, "textDocument/rename", 1, 1, json!({"newName":"len"})),
+            request(7, "textDocument/rename", 0, 13, json!({"newName":"z"})),
+        ],
+    );
+    let by_id = |id: i64| {
+        responses
+            .iter()
+            .find(|message| message["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    let columns = |result: &Value| {
+        result
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|location| {
+                (
+                    location["range"]["start"]["line"].as_u64().unwrap(),
+                    location["range"]["start"]["character"].as_u64().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(columns(&by_id(1)["result"]), [(2, 14), (2, 38), (2, 60)]);
+    assert_eq!(columns(&by_id(2)["result"]), [(2, 38), (2, 60)]);
+    assert_eq!(columns(&by_id(3)["result"]), [(2, 50), (2, 54)]);
+    let edits = by_id(4)["result"]["changes"]["file:///virtual/navigation.tok"].clone();
+    assert_eq!(columns(&edits), [(1, 0), (2, 33)]);
+    assert!(
+        edits
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|edit| edit["newText"] == "length")
+    );
+    assert_eq!(by_id(5)["error"]["code"], -32602);
+    assert_eq!(by_id(6)["error"]["code"], -32602);
+    // Field declarations are not bindings that can be renamed.
+    assert_eq!(by_id(7)["error"]["code"], -32602);
+}
+
+#[test]
+fn lsp_completes_locals_declarations_builtins_and_fields() {
+    // The document does not parse: completion must still work while typing.
+    let text = "struct Point{x:I,y:I}\nnorm(p:Point)->I{p.x}\nmain()->I{let total=1;let q=Point(1,2);q.\n  tot";
+    let responses = session(
+        text,
+        &[
+            at(1, "textDocument/completion", 2, 41),
+            at(2, "textDocument/completion", 3, 5),
+        ],
+    );
+    let labels = |id: i64| {
+        responses
+            .iter()
+            .find(|message| message["id"] == id)
+            .unwrap()["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["label"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(labels(1), ["x", "y"]);
+    let general = labels(2);
+    assert_eq!(&general[..2], ["q", "total"]);
+    for expected in ["Point", "norm", "main", "len", "map", "while"] {
+        assert!(general.iter().any(|label| label == expected), "{expected}");
+    }
+    assert!(
+        !general.iter().any(|label| label == "p"),
+        "other function's parameter"
+    );
+}

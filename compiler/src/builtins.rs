@@ -217,105 +217,106 @@ pub fn equatable(ty: &Type) -> bool {
 }
 
 /// Every builtin that is invoked with call syntax.
+pub const CALLS: &[&str] = &[
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "bit_not",
+    "shl",
+    "shr",
+    "sha256",
+    "md5",
+    "hmac_sha256",
+    "pbkdf2_sha256",
+    "base64_encode",
+    "base64_decode",
+    "hex",
+    "random_bytes",
+    "tcp_connect",
+    "tcp_send",
+    "tcp_recv",
+    "tcp_close",
+    "serve",
+    "http_request",
+    "Request",
+    "Response",
+    "list_dir",
+    "exists",
+    "make_dir",
+    "remove_file",
+    "env",
+    "now_ms",
+    "clock_ns",
+    "sleep_ms",
+    "abs",
+    "min",
+    "max",
+    "pow",
+    "sqrt",
+    "floor",
+    "ceil",
+    "round",
+    "exp",
+    "ln",
+    "sin",
+    "cos",
+    "tan",
+    "atan2",
+    "pi",
+    "read_text",
+    "read_bytes",
+    "write_text",
+    "write_bytes",
+    "lines",
+    "args",
+    "print",
+    "map",
+    "filter",
+    "any",
+    "all",
+    "fold",
+    "sort_by",
+    "range",
+    "sort",
+    "reverse",
+    "slice",
+    "Map",
+    "get",
+    "get_or",
+    "keys",
+    "values",
+    "remove",
+    "String",
+    "chars",
+    "split",
+    "trim",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "replace",
+    "lower",
+    "upper",
+    "read_line",
+    "read_stdin",
+    "exit",
+    "len",
+    "parse_i32",
+    "parse_i64",
+    "parse_f64",
+    "i32",
+    "i64",
+    "f64",
+    "utf8_bytes",
+    "utf8_decode",
+    "utf8_encode",
+    "utf8_decode_bytes",
+    "bytes_from_i32",
+    "bytes_to_i32",
+    "join",
+];
+
 pub fn is_call(name: &str) -> bool {
-    matches!(
-        name,
-        "bit_and"
-            | "bit_or"
-            | "bit_xor"
-            | "bit_not"
-            | "shl"
-            | "shr"
-            | "sha256"
-            | "md5"
-            | "hmac_sha256"
-            | "pbkdf2_sha256"
-            | "base64_encode"
-            | "base64_decode"
-            | "hex"
-            | "random_bytes"
-            | "tcp_connect"
-            | "tcp_send"
-            | "tcp_recv"
-            | "tcp_close"
-            | "serve"
-            | "http_request"
-            | "Request"
-            | "Response"
-            | "list_dir"
-            | "exists"
-            | "make_dir"
-            | "remove_file"
-            | "env"
-            | "now_ms"
-            | "clock_ns"
-            | "sleep_ms"
-            | "abs"
-            | "min"
-            | "max"
-            | "pow"
-            | "sqrt"
-            | "floor"
-            | "ceil"
-            | "round"
-            | "exp"
-            | "ln"
-            | "sin"
-            | "cos"
-            | "tan"
-            | "atan2"
-            | "pi"
-            | "read_text"
-            | "read_bytes"
-            | "write_text"
-            | "write_bytes"
-            | "lines"
-            | "args"
-            | "print"
-            | "map"
-            | "filter"
-            | "any"
-            | "all"
-            | "fold"
-            | "sort_by"
-            | "range"
-            | "sort"
-            | "reverse"
-            | "slice"
-            | "Map"
-            | "get"
-            | "get_or"
-            | "keys"
-            | "values"
-            | "remove"
-            | "String"
-            | "chars"
-            | "split"
-            | "trim"
-            | "contains"
-            | "starts_with"
-            | "ends_with"
-            | "replace"
-            | "lower"
-            | "upper"
-            | "read_line"
-            | "read_stdin"
-            | "exit"
-            | "len"
-            | "parse_i32"
-            | "parse_i64"
-            | "parse_f64"
-            | "i32"
-            | "i64"
-            | "f64"
-            | "utf8_bytes"
-            | "utf8_decode"
-            | "utf8_encode"
-            | "utf8_decode_bytes"
-            | "bytes_from_i32"
-            | "bytes_to_i32"
-            | "join"
-    )
+    CALLS.contains(&name)
 }
 
 /// The built-in HTTP message records, in constructor field order.
