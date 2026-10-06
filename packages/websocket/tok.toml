@@ -1,0 +1,7 @@
+[package]
+name = "websocket"
+version = "0.1.0"
+entry = "websocket.tok"
+description = "WebSocket (RFC 6455) server upgrade and client: text/binary messages, fragmentation, ping/pong, close"
+
+[dependencies]

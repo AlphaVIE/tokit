@@ -1,0 +1,17 @@
+compiler = "tokit-compiler/0.0.1"
+format = 2
+manifest_sha256 = "603a85c946a93e8f600821c1409696a4c37941b6550de0cb90f77bc829314bac"
+target = "portable-source"
+
+[[package]]
+dependencies = []
+entry = "websocket.tok"
+id = "websocket"
+manifest_sha256 = "53d953d85a6241ac5f80fdd4385f2d3c2f1fa9f5f54689cc092f00a80eb2a8ed"
+name = "websocket"
+path = "../../packages/websocket"
+sha256 = "6c783e8cd025176dffe3b39a48b5c428d4b16fa2f8b28639b212a909fafed267"
+sources = ["pkg/websocket/websocket.tok"]
+
+[roots]
+websocket = "websocket"
