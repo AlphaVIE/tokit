@@ -79,12 +79,18 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 - Effects: `print(s)`, `read_line()->Option<String>`, `read_stdin()->Result<String,IoError>`, `args()->[String]`, `exit(code)`, `env(name)->Option<String>`, `now_ms()`, `clock_ns()`, `sleep_ms(ms)`.
 - Files (need `--allow-read`/`--allow-write`): `read_text`, `write_text`, `read_bytes`, `write_bytes`, `list_dir`, `exists`, `make_dir`, `remove_file`.
 - HTTP (needs `--allow-net`): `serve(addr,limit,|r|Response(200,Map(),"ok"))`, `http_request(method,url,headers,body)`; records `Request{method,path,query,headers,body}`, `Response{status,headers,body}`.
+- TCP (needs `--allow-net`): `tcp_connect(addr)->Result<Conn,IoError>`, `tcp_send(c,bytes)`, `tcp_recv(c,max)->Result<Bytes,IoError>` (empty at end of stream), `tcp_close(c)`. No TLS.
+- Bytes and crypto: `sha256`, `md5`, `hmac_sha256(key,data)`, `pbkdf2_sha256(pw,salt,iterations)`, `base64_encode`, `base64_decode->Option<Bytes>`, `hex`, `random_bytes(n)`.
+- Bits (no `|`/`&` operators): `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(x,n)`, `shr(x,n)` on `I` or `L`.
+- Unit value: `()`, e.g. `Ok(())` in a `Result<Unit,E>` function.
 - Tasks: `let t=spawn f(x);` then `join(t)->Result<T,TaskError>`; spawned functions must be pure.
 
 ## Workflow and diagnostics
 
 1. `tok check --json file.tok` returns `{"ok":true}` or an error with `code`, `line`, `column`, `message`.
 2. `tok run file.tok -- args`, `tok test file.tok`, `tok build file.tok -o app`, `tok compact --write file.tok`.
+3. Packages: `tok new app`, `tok add json` (also `http`, `redis`, `postgres`; `tok search` lists them), then `import json="pkg:json";` and call `json.parse(text)`.
+4. Inspect and polish: `tok lint file.tok` (unused names, `var` never changed, dead private functions), `tok expand file.tok` (readable layout), `tok explain --pseudo file.tok`, `tok doc file.tok`, `tok bench file.tok` (times `bench_*` functions), `tok repl`.
 
 Frequent codes: `E002` syntax, `E101` unknown name, `E102` type mismatch (message shows expected and actual), `E104` invalid operands, `E105` wrong argument count, `E106` duplicate or reserved name, `E109` assigning an immutable binding, `E110` invalid indexing, `E113` unknown field, `E115` add a type annotation, `E116` non-exhaustive or invalid `match`, `E117` effect in a spawned function, `E201` integer overflow or division by zero at runtime, `E205` index out of bounds.
 
