@@ -107,6 +107,26 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (builtins::SHA256, vec![Type::Bytes], Type::Bytes),
+        (builtins::MD5, vec![Type::Bytes], Type::Bytes),
+        (
+            builtins::HMAC_SHA256,
+            vec![Type::Bytes, Type::Bytes],
+            Type::Bytes,
+        ),
+        (
+            builtins::PBKDF2_SHA256,
+            vec![Type::Bytes, Type::Bytes, Type::I32],
+            Type::Bytes,
+        ),
+        (builtins::BASE64_ENCODE, vec![Type::Bytes], Type::String),
+        (
+            builtins::BASE64_DECODE,
+            vec![Type::String],
+            Type::Option(Box::new(Type::Bytes)),
+        ),
+        (builtins::HEX, vec![Type::Bytes], Type::String),
+        (builtins::RANDOM_BYTES, vec![Type::I32], Type::Bytes),
         (
             builtins::TCP_CONNECT,
             vec![Type::String],
@@ -558,6 +578,14 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "sha256"
+                | "md5"
+                | "hmac_sha256"
+                | "pbkdf2_sha256"
+                | "base64_encode"
+                | "base64_decode"
+                | "hex"
+                | "random_bytes"
                 | "Conn"
                 | "tcp_connect"
                 | "tcp_send"
@@ -659,6 +687,14 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "sha256"
+                | "md5"
+                | "hmac_sha256"
+                | "pbkdf2_sha256"
+                | "base64_encode"
+                | "base64_decode"
+                | "hex"
+                | "random_bytes"
                 | "Conn"
                 | "tcp_connect"
                 | "tcp_send"
@@ -996,6 +1032,7 @@ fn expression_is_spawn_safe(
                 && name != builtins::ARGS
                 && name != builtins::PRINT
                 && name != builtins::SERVE
+                && name != builtins::RANDOM_BYTES
                 && name != builtins::TCP_CONNECT
                 && name != builtins::TCP_SEND
                 && name != builtins::TCP_RECV
@@ -1021,6 +1058,13 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::SHA256
+                        | builtins::MD5
+                        | builtins::HMAC_SHA256
+                        | builtins::PBKDF2_SHA256
+                        | builtins::BASE64_ENCODE
+                        | builtins::BASE64_DECODE
+                        | builtins::HEX
                         | builtins::REQUEST
                         | builtins::RESPONSE
                         | builtins::ABS
