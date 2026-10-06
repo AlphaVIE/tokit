@@ -306,6 +306,8 @@ impl Parser {
     fn enum_decl(&mut self) -> Result<EnumDecl, Diagnostic> {
         let start = self.expect(Kind::Enum)?.span;
         let (name, _) = self.ident()?;
+        let type_params = self.generic_params()?;
+        self.type_params = type_params.clone();
         self.expect(Kind::LBrace)?;
         let mut variants = Vec::new();
         if !self.at(&Kind::RBrace) {
@@ -327,9 +329,11 @@ impl Parser {
             }
         }
         let end = self.expect(Kind::RBrace)?.span;
+        self.type_params.clear();
         Ok(EnumDecl {
             name,
             public: false,
+            type_params,
             variants,
             span: start.join(end),
         })

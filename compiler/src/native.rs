@@ -929,6 +929,28 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         .expect("writing to String cannot fail");
     for enum_decl in &program.enums {
         let name = user_name(&enum_decl.name);
+        let generic_names = enum_decl
+            .type_params
+            .iter()
+            .map(|param| user_name(param))
+            .collect::<Vec<_>>();
+        let generics = if generic_names.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", generic_names.join(","))
+        };
+        let render_generics = if generic_names.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<{}>",
+                generic_names
+                    .iter()
+                    .map(|param| format!("{param}: __TokRender"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
         let variants = enum_decl
             .variants
             .iter()
@@ -938,8 +960,11 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             })
             .collect::<Vec<_>>()
             .join(",");
-        writeln!(out, "#[derive(Clone)] enum {name} {{ {variants} }}")
-            .expect("writing to String cannot fail");
+        writeln!(
+            out,
+            "#[derive(Clone)] enum {name}{generics} {{ {variants} }}"
+        )
+        .expect("writing to String cannot fail");
         let arms = enum_decl
             .variants
             .iter()
@@ -961,7 +986,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         } else {
             arms
         };
-        writeln!(out, "impl __TokRender for {name} {{ fn tok_render(&self) -> String {{ match self {{ {arms} }} }} }}")
+        writeln!(out, "impl{render_generics} __TokRender for {name}{generics} {{ fn tok_render(&self) -> String {{ match self {{ {arms} }} }} }}")
             .expect("writing to String cannot fail");
     }
     for record in &program.records {
