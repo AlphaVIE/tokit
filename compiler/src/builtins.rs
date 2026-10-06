@@ -7,6 +7,12 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const BIT_AND: &str = "bit_and";
+pub const BIT_OR: &str = "bit_or";
+pub const BIT_XOR: &str = "bit_xor";
+pub const BIT_NOT: &str = "bit_not";
+pub const SHL: &str = "shl";
+pub const SHR: &str = "shr";
 pub const SHA256: &str = "sha256";
 pub const MD5: &str = "md5";
 pub const HMAC_SHA256: &str = "hmac_sha256";
@@ -214,7 +220,13 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "sha256"
+        "bit_and"
+            | "bit_or"
+            | "bit_xor"
+            | "bit_not"
+            | "shl"
+            | "shr"
+            | "sha256"
             | "md5"
             | "hmac_sha256"
             | "pbkdf2_sha256"

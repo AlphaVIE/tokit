@@ -20,3 +20,15 @@ fn __tok_checked_pow<T: Copy>(base: T, exponent: i32, one: T, mul: fn(T, T) -> O
 fn __tok_math_pow_i32(base: i32, exponent: i32, source_id: usize, line: usize, column: usize) -> i32 { __tok_checked_pow(base, exponent, 1, i32::checked_mul).unwrap_or_else(|| __tok_fail(source_id, line, column)) }
 fn __tok_math_pow_i64(base: i64, exponent: i32, source_id: usize, line: usize, column: usize) -> i64 { __tok_checked_pow(base, exponent, 1, i64::checked_mul).unwrap_or_else(|| __tok_fail(source_id, line, column)) }
 fn __tok_math_pow_f64(base: f64, exponent: f64, _: usize, _: usize, _: usize) -> f64 { base.powf(exponent) }
+fn __tok_math_bit_and_i32(a: i32, b: i32, _: usize, _: usize, _: usize) -> i32 { a & b }
+fn __tok_math_bit_or_i32(a: i32, b: i32, _: usize, _: usize, _: usize) -> i32 { a | b }
+fn __tok_math_bit_xor_i32(a: i32, b: i32, _: usize, _: usize, _: usize) -> i32 { a ^ b }
+fn __tok_math_bit_not_i32(a: i32, _: usize, _: usize, _: usize) -> i32 { !a }
+fn __tok_math_shl_i32(a: i32, n: i32, source_id: usize, line: usize, column: usize) -> i32 { u32::try_from(n).ok().filter(|n| *n < 32).map(|n| a << n).unwrap_or_else(|| __tok_runtime_fail("E201", source_id, line, column, "shift amount outside the integer width")) }
+fn __tok_math_shr_i32(a: i32, n: i32, source_id: usize, line: usize, column: usize) -> i32 { u32::try_from(n).ok().filter(|n| *n < 32).map(|n| a >> n).unwrap_or_else(|| __tok_runtime_fail("E201", source_id, line, column, "shift amount outside the integer width")) }
+fn __tok_math_bit_and_i64(a: i64, b: i64, _: usize, _: usize, _: usize) -> i64 { a & b }
+fn __tok_math_bit_or_i64(a: i64, b: i64, _: usize, _: usize, _: usize) -> i64 { a | b }
+fn __tok_math_bit_xor_i64(a: i64, b: i64, _: usize, _: usize, _: usize) -> i64 { a ^ b }
+fn __tok_math_bit_not_i64(a: i64, _: usize, _: usize, _: usize) -> i64 { !a }
+fn __tok_math_shl_i64(a: i64, n: i32, source_id: usize, line: usize, column: usize) -> i64 { u32::try_from(n).ok().filter(|n| *n < 64).map(|n| a << n).unwrap_or_else(|| __tok_runtime_fail("E201", source_id, line, column, "shift amount outside the integer width")) }
+fn __tok_math_shr_i64(a: i64, n: i32, source_id: usize, line: usize, column: usize) -> i64 { u32::try_from(n).ok().filter(|n| *n < 64).map(|n| a >> n).unwrap_or_else(|| __tok_runtime_fail("E201", source_id, line, column, "shift amount outside the integer width")) }

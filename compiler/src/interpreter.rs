@@ -895,6 +895,9 @@ fn eval_builtin(
     if let Some(value) = eval_crypto_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
+    if let Some(value) = eval_bit_builtin(name, &values, expr.span) {
+        return Ok(Flow::Value(value?));
+    }
     if let Some(value) = eval_math_builtin(name, &values, expr.span) {
         return Ok(Flow::Value(value?));
     }
@@ -2079,6 +2082,39 @@ fn eval_crypto_builtin(name: &str, values: &[Value]) -> Option<Value> {
         },
         (builtins::HEX, [Value::Bytes(data)]) => Value::String(c::__tok_hex(data)),
         (builtins::RANDOM_BYTES, [Value::I32(count)]) => bytes(c::__tok_random_bytes(*count)),
+        _ => return None,
+    })
+}
+
+/// Two's-complement bit operations; shifts outside the width report `E201`.
+fn eval_bit_builtin(name: &str, values: &[Value], span: Span) -> Option<Result<Value, Diagnostic>> {
+    let shift = |amount: i32, bits: u32| {
+        u32::try_from(amount)
+            .ok()
+            .filter(|amount| *amount < bits)
+            .ok_or_else(|| Diagnostic::new("E201", span, "shift amount outside the integer width"))
+    };
+    Some(match (name, values) {
+        (builtins::BIT_AND, [Value::I32(a), Value::I32(b)]) => Ok(Value::I32(a & b)),
+        (builtins::BIT_OR, [Value::I32(a), Value::I32(b)]) => Ok(Value::I32(a | b)),
+        (builtins::BIT_XOR, [Value::I32(a), Value::I32(b)]) => Ok(Value::I32(a ^ b)),
+        (builtins::BIT_NOT, [Value::I32(a)]) => Ok(Value::I32(!a)),
+        (builtins::SHL, [Value::I32(a), Value::I32(n)]) => {
+            shift(*n, 32).map(|n| Value::I32(a << n))
+        }
+        (builtins::SHR, [Value::I32(a), Value::I32(n)]) => {
+            shift(*n, 32).map(|n| Value::I32(a >> n))
+        }
+        (builtins::BIT_AND, [Value::I64(a), Value::I64(b)]) => Ok(Value::I64(a & b)),
+        (builtins::BIT_OR, [Value::I64(a), Value::I64(b)]) => Ok(Value::I64(a | b)),
+        (builtins::BIT_XOR, [Value::I64(a), Value::I64(b)]) => Ok(Value::I64(a ^ b)),
+        (builtins::BIT_NOT, [Value::I64(a)]) => Ok(Value::I64(!a)),
+        (builtins::SHL, [Value::I64(a), Value::I32(n)]) => {
+            shift(*n, 64).map(|n| Value::I64(a << n))
+        }
+        (builtins::SHR, [Value::I64(a), Value::I32(n)]) => {
+            shift(*n, 64).map(|n| Value::I64(a >> n))
+        }
         _ => return None,
     })
 }

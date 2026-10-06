@@ -155,6 +155,16 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if matches!(
+                name.as_str(),
+                builtins::BIT_AND
+                    | builtins::BIT_OR
+                    | builtins::BIT_XOR
+                    | builtins::BIT_NOT
+                    | builtins::SHL
+                    | builtins::SHR
+            ) {
+                facts.operations.insert("bitwise operation");
             } else if name == builtins::RANDOM_BYTES {
                 facts.operations.insert("random bytes");
                 facts.effects.insert("random");
