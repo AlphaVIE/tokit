@@ -1,0 +1,41 @@
+// PostgreSQL client for protocol v3 over TCP (needs --allow-net host:port).
+// Values are exchanged as text; NULL is None.
+pub struct Config{addr:String,user:String,password:String,database:String}pub struct Db{conn:Conn}pub struct Rows{columns:[String],rows:[[Option<String>]],tag:String}pub struct Scram{message:String,server_signature:String}
+struct Msg{kind:I,body:Bytes}
+struct Reader{conn:Conn,buf:Bytes,pos:I}
+struct Read{msg:Msg,reader:Reader}
+struct Field{text:String,next:I}
+// ---- byte helpers
+cat(a:Bytes,b:Bytes)->Bytes{var out=a;for x in b{out.push(x);}out}
+sub(b:Bytes,from:I,to:I)->Bytes{var out=utf8_encode("");for i in range(from,to){out.push(b[i]);}out}
+bytes_or_empty(xs:[I])->Bytes{match bytes_from_i32(xs){Some(b)=>b,None=>utf8_encode("")}}
+int32(n:I)->Bytes{bytes_or_empty([bit_and(shr(n,24),255),bit_and(shr(n,16),255),bit_and(shr(n,8),255),bit_and(n,255)])}
+int16(n:I)->Bytes{bytes_or_empty([bit_and(shr(n,8),255),bit_and(n,255)])}
+read32(b:Bytes,at:I)->I{bit_or(bit_or(shl(b[at],24),shl(b[at+1],16)),bit_or(shl(b[at+2],8),b[at+3]))}
+read16(b:Bytes,at:I)->I{bit_or(shl(b[at],8),b[at+1])}
+cstr(s:String)->Bytes{var b=utf8_encode(s);b.push(0);b}
+// The NUL-terminated string at `at`.
+field(b:Bytes,at:I)->Field{var i=at;while i<len(b)&&b[i]!=0{i=i+1;}Field(match utf8_decode_bytes(sub(b,at,i)){Some(t)=>t,None=>""},i+1)}
+field_all(b:Bytes,from:I)->String{match utf8_decode_bytes(sub(b,from,len(b))){Some(t)=>t,None=>""}}
+message(kind:I,body:Bytes)->Bytes{cat(bytes_or_empty([kind]),cat(int32(len(body)+4),body))}
+// ---- transport
+send(conn:Conn,data:Bytes)->Result<Unit,String>{match tcp_send(conn,data){Ok(u)=>Ok(()),Err(e)=>Err("send failed")}}
+fill(r:Reader,need:I)->Result<Reader,String>{var buf=r.buf;while len(buf)-r.pos<need{match tcp_recv(r.conn,65536){Ok(part)=>{if len(part)==0{return Err("connection closed");}buf=cat(buf,part);},Err(e)=>{return Err("receive failed");}}}Ok(Reader(r.conn,buf,r.pos))}
+next(r:Reader)->Result<Read,String>{let head=fill(r,5)?;let size=read32(head.buf,head.pos+1);let full=fill(head,size+1)?;let end=full.pos+1+size;let body=sub(full.buf,full.pos+5,end);let rest=if end==len(full.buf){Reader(full.conn,utf8_encode(""),0)}else{Reader(full.conn,full.buf,end)};Ok(Read(Msg(full.buf[full.pos],body),rest))}
+// The message (M) and SQLSTATE (C) fields of an ErrorResponse body.
+error_text(body:Bytes)->String{var at=0;var text="";var code="";while at<len(body)&&body[at]!=0{let kind=body[at];let f=field(body,at+1);if kind==77{text=f.text;}if kind==67{code=f.text;}at=f.next;}text+" ("+code+")"}
+// ---- authentication
+after(s:String,prefix:String)->String{join(slice(chars(s),len(chars(prefix)),len(chars(s))),"")}
+// The SCRAM-SHA-256 client-final message and expected server signature (RFC 5802/7677).
+pub scram_final(user:String,password:String,nonce:String,server_first:String)->Result<Scram,String>{var server_nonce="";var salt="";var iterations=0;for part in split(server_first,","){if starts_with(part,"r="){server_nonce=after(part,"r=");}if starts_with(part,"s="){salt=after(part,"s=");}if starts_with(part,"i="){iterations=match parse_i32(after(part,"i=")){Ok(n)=>n,Err(e)=>0};}}if!starts_with(server_nonce,nonce)||iterations<1{return Err("invalid SCRAM server message");}let salt_bytes=match base64_decode(salt){Some(b)=>b,None=>{return Err("invalid SCRAM salt");}};let salted=pbkdf2_sha256(utf8_encode(password),salt_bytes,iterations);let client_key=hmac_sha256(salted,utf8_encode("Client Key"));let without_proof="c=biws,r="+server_nonce;let auth="n="+user+",r="+nonce+","+server_first+","+without_proof;let signature=hmac_sha256(sha256(client_key),utf8_encode(auth));var proof=utf8_encode("");for i in range(0,len(client_key)){proof.push(bit_xor(client_key[i],signature[i]));}let server_key=hmac_sha256(salted,utf8_encode("Server Key"));Ok(Scram(without_proof+",p="+base64_encode(proof),base64_encode(hmac_sha256(server_key,utf8_encode(auth)))))}
+md5_password(user:String,password:String,salt:Bytes)->String{let inner=hex(md5(utf8_encode(password+user)));"md5"+hex(md5(cat(utf8_encode(inner),salt)))}
+// Answer authentication requests until AuthenticationOk.
+authenticate(conn:Conn,cfg:Config)->Result<Reader,String>{var reader=Reader(conn,utf8_encode(""),0);let nonce=base64_encode(random_bytes(18));var expected="";while true{let read=next(reader)?;reader=read.reader;let m=read.msg;if m.kind==69{return Err(error_text(m.body));}if m.kind!=82{return Err("unexpected message during authentication");}let code=read32(m.body,0);if code==0{return Ok(reader);}if code==3{send(conn,message(112,cstr(cfg.password)))?;}else if code==5{send(conn,message(112,cstr(md5_password(cfg.user,cfg.password,sub(m.body,4,8)))))?;}else if code==10{let first="n,,n=,r="+nonce;send(conn,message(112,cat(cstr("SCRAM-SHA-256"),cat(int32(len(utf8_encode(first))),utf8_encode(first)))))?;}else if code==11{let s=scram_final("",cfg.password,nonce,field_all(m.body,4))?;expected="v="+s.server_signature;send(conn,message(112,utf8_encode(s.message)))?;}else if code==12{if field_all(m.body,4)!=expected{return Err("server SCRAM signature mismatch");}}else{return Err("unsupported authentication method "+String(code));}}Err("unreachable")}
+// ---- public API
+pub connect(cfg:Config)->Result<Db,String>{let conn=match tcp_connect(cfg.addr){Ok(c)=>c,Err(e)=>{return Err("cannot connect to "+cfg.addr);}};let params=cat(cat(cat(cstr("user"),cstr(cfg.user)),cat(cstr("database"),cstr(cfg.database))),cat(cat(cstr("client_encoding"),cstr("UTF8")),bytes_or_empty([0])));let body=cat(int32(196608),params);send(conn,cat(int32(len(body)+4),body))?;var reader=authenticate(conn,cfg)?;while true{let read=next(reader)?;reader=read.reader;if read.msg.kind==90{return Ok(Db(conn));}if read.msg.kind==69{return Err(error_text(read.msg.body));}}Err("unreachable")}
+// Collect messages until ReadyForQuery; the last result set wins.
+collect(conn:Conn)->Result<Rows,String>{var reader=Reader(conn,utf8_encode(""),0);var columns:[String]=[];var rows:[[Option<String>]]=[];var tag="";var failure="";while true{let read=next(reader)?;reader=read.reader;let m=read.msg;match m.kind{84=>{columns=[];rows=[];var at=2;for i in range(0,read16(m.body,0)){let f=field(m.body,at);columns.push(f.text);at=f.next+18;}},68=>{var row:[Option<String>]=[];var at=2;for i in range(0,read16(m.body,0)){let size=read32(m.body,at);if size<0{row.push(None);at=at+4;}else{row.push(utf8_decode_bytes(sub(m.body,at+4,at+4+size)));at=at+4+size;}}rows.push(row);},67=>{tag=field(m.body,0).text;},69=>{failure=error_text(m.body);},90=>{if failure!=""{return Err(failure);}return Ok(Rows(columns,rows,tag));},_=>{}}}Err("unreachable")}pub query(db:Db,sql:String)->Result<Rows,String>{send(db.conn,message(81,cstr(sql)))?;collect(db.conn)}
+// Run `sql` with $1, $2, ... bound to `params` as text (extended protocol).
+pub query_with(db:Db,sql:String,params:[String])->Result<Rows,String>{var bind=cat(cat(cstr(""),cstr("")),cat(int16(0),int16(len(params))));for p in params{let b=utf8_encode(p);bind=cat(bind,cat(int32(len(b)),b));}bind=cat(bind,int16(0));let parse=cat(cat(cstr(""),cstr(sql)),int16(0));let describe=cat(bytes_or_empty([80]),cstr(""));let run=cat(cstr(""),int32(0));send(db.conn,cat(cat(message(80,parse),message(66,bind)),cat(cat(message(68,describe),message(69,run)),message(83,utf8_encode("")))))?;collect(db.conn)}pub execute(db:Db,sql:String)->Result<String,String>{Ok(query(db,sql)?.tag)}
+// A SQL string literal; prefer query_with for values.
+pub quote(text:String)->String{"'"+replace(text,"'","''")+"'"}pub close(db:Db)->Unit{let sent=tcp_send(db.conn,message(88,utf8_encode("")));tcp_close(db.conn)}
