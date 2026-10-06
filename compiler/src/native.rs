@@ -31,6 +31,7 @@ const PRELUDE_CRYPTO: &str = include_str!("native_runtime/crypto.rs.txt");
 const CRYPTO_ADAPTERS: &str = r#"fn __tok_c_bytes(data: Vec<u8>) -> __TokBytes { __TokBytes(std::sync::Arc::new(data)) }
 fn __tok_c_sha256(data: __TokBytes) -> __TokBytes { __tok_c_bytes(__tok_sha256(&data.0)) }
 fn __tok_c_md5(data: __TokBytes) -> __TokBytes { __tok_c_bytes(__tok_md5(&data.0)) }
+fn __tok_c_sha1(data: __TokBytes) -> __TokBytes { __tok_c_bytes(__tok_sha1(&data.0)) }
 fn __tok_c_hmac_sha256(key: __TokBytes, data: __TokBytes) -> __TokBytes { __tok_c_bytes(__tok_hmac_sha256(&key.0, &data.0)) }
 fn __tok_c_pbkdf2_sha256(password: __TokBytes, salt: __TokBytes, iterations: i32) -> __TokBytes { __tok_c_bytes(__tok_pbkdf2_sha256(&password.0, &salt.0, iterations)) }
 fn __tok_c_base64_encode(data: __TokBytes) -> String { __tok_base64_encode(&data.0) }
@@ -427,6 +428,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::SERVE => "__tok_net_serve".to_owned(),
                 builtins::SHA256 => "__tok_c_sha256".to_owned(),
                 builtins::MD5 => "__tok_c_md5".to_owned(),
+                builtins::SHA1 => "__tok_c_sha1".to_owned(),
                 builtins::HMAC_SHA256 => "__tok_c_hmac_sha256".to_owned(),
                 builtins::PBKDF2_SHA256 => "__tok_c_pbkdf2_sha256".to_owned(),
                 builtins::BASE64_ENCODE => "__tok_c_base64_encode".to_owned(),

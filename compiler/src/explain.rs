@@ -172,6 +172,7 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 name.as_str(),
                 builtins::SHA256
                     | builtins::MD5
+                    | builtins::SHA1
                     | builtins::HMAC_SHA256
                     | builtins::PBKDF2_SHA256
                     | builtins::BASE64_ENCODE

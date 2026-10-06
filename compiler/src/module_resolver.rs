@@ -99,6 +99,7 @@ fn reserved(name: &str) -> bool {
             | "shr"
             | "sha256"
             | "md5"
+            | "sha1"
             | "hmac_sha256"
             | "pbkdf2_sha256"
             | "base64_encode"

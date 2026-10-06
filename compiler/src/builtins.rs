@@ -15,6 +15,7 @@ pub const SHL: &str = "shl";
 pub const SHR: &str = "shr";
 pub const SHA256: &str = "sha256";
 pub const MD5: &str = "md5";
+pub const SHA1: &str = "sha1";
 pub const HMAC_SHA256: &str = "hmac_sha256";
 pub const PBKDF2_SHA256: &str = "pbkdf2_sha256";
 pub const BASE64_ENCODE: &str = "base64_encode";
@@ -226,6 +227,7 @@ pub const CALLS: &[&str] = &[
     "shr",
     "sha256",
     "md5",
+    "sha1",
     "hmac_sha256",
     "pbkdf2_sha256",
     "base64_encode",
