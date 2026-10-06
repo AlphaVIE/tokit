@@ -29,7 +29,26 @@ pub enum Value {
     None,
     Task(Box<Value>),
     Closure(Arc<Closure>),
+    Conn(Socket),
     Unit,
+}
+
+/// A TCP connection handle; copies share one socket and compare by identity.
+#[derive(Clone)]
+pub struct Socket(crate::http::__TokSocket);
+
+impl PartialEq for Socket {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Socket {}
+
+impl std::fmt::Debug for Socket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Socket")
+    }
 }
 
 /// A lambda value with copies of the locals it reads.
@@ -69,6 +88,7 @@ impl std::fmt::Display for Value {
                 f.write_str("]")
             }
             Self::Closure(_) => f.write_str("<fn>"),
+            Self::Conn(_) => f.write_str("<conn>"),
             Self::Map(entries) => {
                 f.write_str("{")?;
                 for (index, (key, value)) in entries.iter().enumerate() {
@@ -1987,6 +2007,28 @@ fn eval_http(
                 (None, Ok(())) => Ok(Value::Ok(Box::new(Value::Unit))),
                 (None, Err(variant)) => Ok(io_error_value(variant)),
             })
+        }
+        (builtins::TCP_CONNECT, [Value::String(addr)]) => Some(Ok(
+            match crate::http::__tok_tcp_connect(runtime.net.as_deref(), addr) {
+                Ok(socket) => Value::Ok(Box::new(Value::Conn(Socket(socket)))),
+                Err(variant) => io_error_value(variant),
+            },
+        )),
+        (builtins::TCP_SEND, [Value::Conn(socket), Value::Bytes(data)]) => {
+            Some(Ok(match crate::http::__tok_tcp_send(&socket.0, data) {
+                Ok(()) => Value::Ok(Box::new(Value::Unit)),
+                Err(variant) => io_error_value(variant),
+            }))
+        }
+        (builtins::TCP_RECV, [Value::Conn(socket), Value::I32(max)]) => {
+            Some(Ok(match crate::http::__tok_tcp_recv(&socket.0, *max) {
+                Ok(data) => Value::Ok(Box::new(Value::Bytes(Arc::new(data)))),
+                Err(variant) => io_error_value(variant),
+            }))
+        }
+        (builtins::TCP_CLOSE, [Value::Conn(socket)]) => {
+            crate::http::__tok_tcp_close(&socket.0);
+            Some(Ok(Value::Unit))
         }
         (
             builtins::HTTP_REQUEST,

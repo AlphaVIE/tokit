@@ -58,6 +58,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     }
     arities.insert(builtins::MAP.to_owned(), 2);
     record_names.insert(builtins::MAP.to_owned());
+    arities.insert(builtins::CONN.to_owned(), 0);
+    record_names.insert(builtins::CONN.to_owned());
     for record in builtins::http_records() {
         record_names.insert(record.name.clone());
         arities.insert(record.name.clone(), 0);
@@ -105,6 +107,32 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (
+            builtins::TCP_CONNECT,
+            vec![Type::String],
+            Type::Result(
+                Box::new(Type::Named(builtins::CONN.to_owned())),
+                Box::new(Type::Named(builtins::IO_ERROR.to_owned())),
+            ),
+        ),
+        (
+            builtins::TCP_SEND,
+            vec![Type::Named(builtins::CONN.to_owned()), Type::Bytes],
+            builtins::write_text_result(),
+        ),
+        (
+            builtins::TCP_RECV,
+            vec![Type::Named(builtins::CONN.to_owned()), Type::I32],
+            Type::Result(
+                Box::new(Type::Bytes),
+                Box::new(Type::Named(builtins::IO_ERROR.to_owned())),
+            ),
+        ),
+        (
+            builtins::TCP_CLOSE,
+            vec![Type::Named(builtins::CONN.to_owned())],
+            Type::Unit,
+        ),
         (
             builtins::SERVE,
             vec![
@@ -530,6 +558,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "Conn"
+                | "tcp_connect"
+                | "tcp_send"
+                | "tcp_recv"
+                | "tcp_close"
                 | "serve"
                 | "http_request"
                 | "Request"
@@ -626,6 +659,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "Conn"
+                | "tcp_connect"
+                | "tcp_send"
+                | "tcp_recv"
+                | "tcp_close"
                 | "serve"
                 | "http_request"
                 | "Request"
@@ -958,6 +996,10 @@ fn expression_is_spawn_safe(
                 && name != builtins::ARGS
                 && name != builtins::PRINT
                 && name != builtins::SERVE
+                && name != builtins::TCP_CONNECT
+                && name != builtins::TCP_SEND
+                && name != builtins::TCP_RECV
+                && name != builtins::TCP_CLOSE
                 && name != builtins::HTTP_REQUEST
                 && name != builtins::LIST_DIR
                 && name != builtins::EXISTS
@@ -2152,6 +2194,7 @@ fn infer(
                             })
                             .collect();
                         arities.insert(builtins::MAP.to_owned(), 2);
+                        arities.insert(builtins::CONN.to_owned(), 0);
                         let binding_ty = if let Some(ty) = ty {
                             validate_type(ty, &arities, *span)?;
                             require(ty, &actual, value.span, "binding")?;
@@ -2434,6 +2477,7 @@ fn type_lambda(
         })
         .collect();
     arities.insert(builtins::MAP.to_owned(), 2);
+    arities.insert(builtins::CONN.to_owned(), 0);
     // Captured bindings are copies and cannot be reassigned inside the lambda.
     let mut scope: HashMap<String, Binding> = env
         .iter()

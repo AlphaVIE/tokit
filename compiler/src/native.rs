@@ -34,8 +34,10 @@ fn runtime_prelude(body: &str) -> String {
         || uses_utf8
         || body.contains("__TokBytes")
         || body.contains("__tok_byte_")
-        || body.contains("__tok_into_bytes");
-    let uses_net = body.contains("__tok_net_");
+        || body.contains("__tok_into_bytes")
+        || body.contains("__tok_net_")
+        || body.contains("__TokConn");
+    let uses_net = body.contains("__tok_net_") || body.contains("__TokConn");
     let mut prelude = String::from(PRELUDE_CORE);
     if body.contains("i64") {
         prelude.push_str(PRELUDE_I64);
@@ -64,7 +66,10 @@ fn runtime_prelude(body: &str) -> String {
     }
     if uses_net {
         prelude.push_str(PRELUDE_HTTP);
-        prelude.push_str(&http_adapters());
+        prelude.push_str(TCP_ADAPTERS);
+        if body.contains("__tok_net_serve") || body.contains("__tok_net_request") {
+            prelude.push_str(&http_adapters());
+        }
     }
     if body.contains("__tok_math_") {
         prelude.push_str(PRELUDE_MATH);
@@ -93,6 +98,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Named(name) if name == builtins::IO_ERROR => "__TokIoError".to_owned(),
         Type::Named(name) if name == builtins::PARSE_ERROR => "__TokParseError".to_owned(),
         Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
+        Type::Named(name) if name == builtins::CONN => "__TokConn".to_owned(),
         Type::Named(name) => user_name(name),
         Type::Applied(name, args) if name == builtins::MAP => format!(
             "std::collections::BTreeMap<{},{}>",
@@ -225,10 +231,7 @@ fn http_adapters() -> String {
     let response = user_name(builtins::RESPONSE);
     let field = |name: &str| user_name(name);
     format!(
-        r#"fn __tok_net_error(variant: &str) -> __TokIoError {{
-    match variant {{ "Denied" => __TokIoError::Denied, "NotFound" => __TokIoError::NotFound, "InvalidUtf8" => __TokIoError::InvalidUtf8, _ => __TokIoError::Other }}
-}}
-fn __tok_net_serve(addr: String, limit: i32, handler: std::sync::Arc<dyn Fn({request}) -> {response} + Send + Sync>) -> Result<(), __TokIoError> {{
+        r#"fn __tok_net_serve(addr: String, limit: i32, handler: std::sync::Arc<dyn Fn({request}) -> {response} + Send + Sync>) -> Result<(), __TokIoError> {{
     if !__tok_http_allowed(__TOK_NET_GRANT.get().map(String::as_str), &addr) {{ return Err(__TokIoError::Denied); }}
     __tok_flush();
     __tok_http_serve(&addr, limit, &mut |request| {{
@@ -251,6 +254,24 @@ fn __tok_net_request(method: String, url: String, headers: std::collections::BTr
         status = field("status"),
     )
 }
+
+/// Adapters between the shared TCP code and the `Conn` handle type.
+const TCP_ADAPTERS: &str = r#"fn __tok_net_error(variant: &str) -> __TokIoError {
+    match variant { "Denied" => __TokIoError::Denied, "NotFound" => __TokIoError::NotFound, "InvalidUtf8" => __TokIoError::InvalidUtf8, _ => __TokIoError::Other }
+}
+#[derive(Clone)] struct __TokConn(__TokSocket);
+impl __TokRender for __TokConn { fn tok_render(&self) -> String { "<conn>".to_owned() } }
+fn __tok_net_connect(addr: String) -> Result<__TokConn, __TokIoError> {
+    __tok_tcp_connect(__TOK_NET_GRANT.get().map(String::as_str), &addr).map(__TokConn).map_err(__tok_net_error)
+}
+fn __tok_net_send(conn: __TokConn, data: __TokBytes) -> Result<(), __TokIoError> {
+    __tok_tcp_send(&conn.0, &data.0).map_err(__tok_net_error)
+}
+fn __tok_net_recv(conn: __TokConn, max: i32) -> Result<__TokBytes, __TokIoError> {
+    __tok_tcp_recv(&conn.0, max).map(|data| __TokBytes(std::sync::Arc::new(data))).map_err(__tok_net_error)
+}
+fn __tok_net_close(conn: __TokConn) { __tok_tcp_close(&conn.0) }
+"#;
 
 fn is_map(ty: Option<&Type>) -> bool {
     matches!(ty, Some(Type::Applied(name, _)) if name == builtins::MAP)
@@ -387,6 +408,10 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PRINT => "__tok_print".to_owned(),
                 builtins::SERVE => "__tok_net_serve".to_owned(),
+                builtins::TCP_CONNECT => "__tok_net_connect".to_owned(),
+                builtins::TCP_SEND => "__tok_net_send".to_owned(),
+                builtins::TCP_RECV => "__tok_net_recv".to_owned(),
+                builtins::TCP_CLOSE => "__tok_net_close".to_owned(),
                 builtins::HTTP_REQUEST => "__tok_net_request".to_owned(),
                 builtins::LIST_DIR => "__tok_read_list_dir".to_owned(),
                 builtins::EXISTS => "__tok_read_exists".to_owned(),

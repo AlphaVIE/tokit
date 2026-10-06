@@ -155,6 +155,15 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if name == builtins::TCP_CONNECT {
+                facts.operations.insert("TCP connection");
+                facts.effects.insert("net.connect");
+            } else if matches!(
+                name.as_str(),
+                builtins::TCP_SEND | builtins::TCP_RECV | builtins::TCP_CLOSE
+            ) {
+                facts.operations.insert("TCP transfer");
+                facts.effects.insert("net.connect");
             } else if name == builtins::SERVE {
                 facts.operations.insert("HTTP server");
                 facts.effects.insert("net.listen");

@@ -7,6 +7,11 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const CONN: &str = "Conn";
+pub const TCP_CONNECT: &str = "tcp_connect";
+pub const TCP_SEND: &str = "tcp_send";
+pub const TCP_RECV: &str = "tcp_recv";
+pub const TCP_CLOSE: &str = "tcp_close";
 pub const SERVE: &str = "serve";
 pub const HTTP_REQUEST: &str = "http_request";
 pub const REQUEST: &str = "Request";
@@ -201,7 +206,11 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "serve"
+        "tcp_connect"
+            | "tcp_send"
+            | "tcp_recv"
+            | "tcp_close"
+            | "serve"
             | "http_request"
             | "Request"
             | "Response"
