@@ -414,13 +414,19 @@ fn main() {
         }
         [_, command, mode, path]
             if command == "compact"
-                && matches!(mode.as_str(), "--functions-only" | "--types-only") =>
+                && matches!(
+                    mode.as_str(),
+                    "--functions-only" | "--types-only" | "--blocks-only"
+                ) =>
         {
             Some((path, false, mode.as_str()))
         }
         [_, command, mode, flag, path]
             if command == "compact"
-                && matches!(mode.as_str(), "--functions-only" | "--types-only")
+                && matches!(
+                    mode.as_str(),
+                    "--functions-only" | "--types-only" | "--blocks-only"
+                )
                 && flag == "--write" =>
         {
             Some((path, true, mode.as_str()))
@@ -435,8 +441,10 @@ fn main() {
         let result = match mode {
             "--functions-only" => tokit_compiler::format::compact_functions(&source),
             "--types-only" => tokit_compiler::format::compact_integer_types(&source),
+            "--blocks-only" => tokit_compiler::format::compact_blocks(&source),
             _ => tokit_compiler::format::compact_functions(&source)
-                .and_then(|text| tokit_compiler::format::compact_integer_types(&text)),
+                .and_then(|text| tokit_compiler::format::compact_integer_types(&text))
+                .and_then(|text| tokit_compiler::format::compact_blocks(&text)),
         }
         .unwrap_or_else(|error| {
             eprintln!("{}", error.display(&source));

@@ -111,6 +111,15 @@ pub struct Expr {
 }
 
 impl Expr {
+    /// `if`, `match`, and blocks end with `}` and may stand as statements
+    /// without a trailing `;`.
+    pub fn is_block_like(&self) -> bool {
+        matches!(
+            self.kind,
+            ExprKind::If(..) | ExprKind::Match(..) | ExprKind::Block(..)
+        )
+    }
+
     /// Conservative subset that cannot mutate a caller binding while evaluated.
     /// Unknown forms must use normal value snapshots when an operand is borrowed.
     pub fn is_simple_read(&self) -> bool {

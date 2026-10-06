@@ -1,5 +1,6 @@
 //! Canonical whitespace for the experimental token grammar.
 
+use crate::ast::{Expr, ExprKind, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{self, Kind, Token};
 
@@ -113,6 +114,169 @@ pub fn compact_integer_types(source: &str) -> Result<String, Diagnostic> {
     let mut result = source.to_owned();
     for (span, replacement) in parser.compactible_types().iter().rev() {
         result.replace_range(span.start..span.end, replacement);
+    }
+    crate::parse(&result)?;
+    Ok(result)
+}
+
+/// Tokens that cannot continue an expression, so a block-like statement
+/// followed by one of them needs no `;`.
+fn starts_statement_or_closes(kind: &Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Ident(_)
+            | Kind::Let
+            | Kind::Var
+            | Kind::For
+            | Kind::While
+            | Kind::Return
+            | Kind::Break
+            | Kind::Continue
+            | Kind::If
+            | Kind::Match
+            | Kind::RBrace
+    )
+}
+
+/// An `if` chain or block whose branches all end without a value.
+fn statement_shaped(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Block(_, tail) => tail.is_none(),
+        ExprKind::If(_, yes, no) => statement_shaped(yes) && statement_shaped(no),
+        _ => false,
+    }
+}
+
+struct BlockCompactor<'a> {
+    source: &'a str,
+    tokens: &'a [Token],
+    removals: Vec<(usize, usize)>,
+}
+
+impl BlockCompactor<'_> {
+    fn token_after(&self, offset: usize) -> Option<usize> {
+        self.tokens
+            .iter()
+            .position(|token| token.span.start >= offset && token.kind != Kind::Eof)
+    }
+
+    fn only(&self, start: usize, end: usize, expected: &str) -> bool {
+        self.source[start..end]
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .eq(expected.chars())
+    }
+
+    fn expr(&mut self, expr: &Expr) {
+        match &expr.kind {
+            ExprKind::Int(_)
+            | ExprKind::I64(_)
+            | ExprKind::F64(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Var(_)
+            | ExprKind::None => {}
+            ExprKind::Array(items) | ExprKind::Call(_, items) => {
+                items.iter().for_each(|item| self.expr(item));
+            }
+            ExprKind::Index(left, right) | ExprKind::Binary(left, _, right) => {
+                self.expr(left);
+                self.expr(right);
+            }
+            ExprKind::Field(inner, _)
+            | ExprKind::Ok(inner)
+            | ExprKind::Err(inner)
+            | ExprKind::Some(inner)
+            | ExprKind::Try(inner)
+            | ExprKind::Not(inner)
+            | ExprKind::Neg(inner)
+            | ExprKind::Spawn(inner) => self.expr(inner),
+            ExprKind::Variant(_, _, payload) => {
+                if let Some(payload) = payload {
+                    self.expr(payload);
+                }
+            }
+            ExprKind::If(condition, yes, no) => {
+                self.expr(condition);
+                self.expr(yes);
+                self.expr(no);
+                if matches!(&no.kind, ExprKind::Block(stmts, None) if stmts.is_empty())
+                    && no.span.start < no.span.end
+                    && self.only(yes.span.end, no.span.end, "else{}")
+                {
+                    self.removals.push((yes.span.end, no.span.end));
+                }
+            }
+            ExprKind::Match(value, arms) => {
+                self.expr(value);
+                arms.iter().for_each(|(_, body)| self.expr(body));
+            }
+            ExprKind::Block(stmts, tail) => {
+                stmts.iter().for_each(|stmt| self.stmt(stmt));
+                if let Some(tail) = tail {
+                    self.expr(tail);
+                }
+            }
+        }
+    }
+
+    fn stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let { value, .. }
+            | Stmt::Assign { value, .. }
+            | Stmt::Push { value, .. }
+            | Stmt::Return { value, .. } => self.expr(value),
+            Stmt::For { iterable, body, .. } => {
+                self.expr(iterable);
+                self.expr(body);
+            }
+            Stmt::While {
+                condition, body, ..
+            } => {
+                self.expr(condition);
+                self.expr(body);
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::Expr(value) => {
+                self.expr(value);
+                if !statement_shaped(value) {
+                    return;
+                }
+                let Some(semicolon) = self.token_after(value.span.end) else {
+                    return;
+                };
+                let end = self.tokens[semicolon].span.end;
+                if self.tokens[semicolon].kind == Kind::Semicolon
+                    && self.only(value.span.end, end, ";")
+                    && self
+                        .tokens
+                        .get(semicolon + 1)
+                        .is_some_and(|next| starts_statement_or_closes(&next.kind))
+                {
+                    self.removals.push((value.span.end, end));
+                }
+            }
+        }
+    }
+}
+
+/// Remove empty `else{}` branches and the `;` after value-less block statements.
+pub fn compact_blocks(source: &str) -> Result<String, Diagnostic> {
+    let program = crate::parse(source)?;
+    let tokens = lexer::lex(source)?;
+    let mut compactor = BlockCompactor {
+        source,
+        tokens: &tokens,
+        removals: Vec::new(),
+    };
+    for function in &program.functions {
+        compactor.expr(&function.body);
+    }
+    let mut removals = compactor.removals;
+    removals.sort_unstable();
+    let mut result = source.to_owned();
+    for (start, end) in removals.into_iter().rev() {
+        result.replace_range(start..end, "");
     }
     crate::parse(&result)?;
     Ok(result)

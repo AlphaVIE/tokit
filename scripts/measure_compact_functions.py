@@ -22,7 +22,7 @@ def main() -> None:
     parser.add_argument("--tok", type=Path, required=True)
     parser.add_argument("--qwen-tokenizer", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--mode", choices=("all", "functions-only", "types-only"), default="functions-only")
+    parser.add_argument("--mode", choices=("all", "functions-only", "types-only", "blocks-only"), default="functions-only")
     args = parser.parse_args()
     import tiktoken
     from tokenizers import Tokenizer

@@ -16,6 +16,8 @@ Direct [record field reads](research/RECORD_FIELD_PROJECTION.md) now copy only t
 
 Function declarations may omit `fn`, and `I`/`L`/`F` abbreviate `i32`/`i64`/`f64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms and shorter type names, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the earlier integer changes across 43 examples.
 
+`if` may omit `else` when its branch returns `Unit`, and `if`/`match`/block statements need no trailing `;`: `if x<0{x=0;}`. `tok compact` removes existing `else{}` and redundant `;`; [measurements](research/COMPACT_BLOCKS.md) show 2.8–3.0% fewer tokens across the examples.
+
 Boolean expressions support `!`, lazy `&&`, and lazy `||`; [boolean_logic.tok](examples/boolean_logic.tok) shows the provisional syntax and [token counts](research/BOOLEAN_LOGIC_TOKENS.md) compare it with equivalent branches.
 
 Local `let` and `var` bindings can infer complete initializer types. A [versioned benchmark experiment](research/INFERRED_BINDINGS.md) measures the source-token savings and records its limits.

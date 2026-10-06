@@ -481,6 +481,9 @@ impl Parser {
                 if self.at(&Kind::Semicolon) {
                     self.bump();
                     stmts.push(Stmt::Expr(value));
+                } else if !self.at(&Kind::RBrace) && value.is_block_like() {
+                    // Like loops, block-like expression statements end at `}`.
+                    stmts.push(Stmt::Expr(value));
                 } else {
                     tail = Some(Box::new(value));
                     break;
@@ -769,8 +772,14 @@ impl Parser {
             Kind::If => {
                 let condition = self.expr(0)?;
                 let yes = self.block()?;
-                self.expect(Kind::Else)?;
-                let no = if self.at(&Kind::If) {
+                let no = if !self.at(&Kind::Else) {
+                    // A missing `else` is an empty block; the checker then
+                    // requires the `yes` branch to have type `Unit`.
+                    Expr {
+                        kind: ExprKind::Block(Vec::new(), None),
+                        span: Span::in_source(yes.span.source_id, yes.span.end, yes.span.end),
+                    }
+                } else if self.bump().kind == Kind::Else && self.at(&Kind::If) {
                     self.atom()?
                 } else {
                     self.block()?
