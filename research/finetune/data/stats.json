@@ -1,0 +1,75 @@
+{
+  "seed": 20261006,
+  "tok_sha256": "e4f5796e48743dd3017d4de941818a185b16a8b71cd61c08c79c4926b0719f16",
+  "families": [
+    "binary_search",
+    "brackets",
+    "bubble_sort",
+    "char_freq",
+    "cli_args",
+    "closures",
+    "count_prefix",
+    "dispatch",
+    "enum_machine",
+    "extreme",
+    "factorial",
+    "fibonacci",
+    "fizzbuzz",
+    "gcd",
+    "generic",
+    "http_handler",
+    "matrix",
+    "option_find",
+    "palindrome",
+    "parse_sum",
+    "primes",
+    "records_total",
+    "reverse_words",
+    "rle",
+    "sort_records",
+    "stdin_lines",
+    "string_transform",
+    "sum_filtered",
+    "temperature",
+    "tree",
+    "word_count"
+  ],
+  "ood_families": [
+    "rle",
+    "brackets",
+    "binary_search",
+    "tree",
+    "dispatch"
+  ],
+  "splits": {
+    "train": {
+      "rows": 1088,
+      "kinds": {
+        "repair": 246,
+        "generate": 842
+      }
+    },
+    "val": {
+      "rows": 60,
+      "kinds": {
+        "generate": 44,
+        "repair": 16
+      }
+    },
+    "test_iid": {
+      "rows": 61,
+      "kinds": {
+        "repair": 16,
+        "generate": 45
+      }
+    },
+    "test_ood": {
+      "rows": 275,
+      "kinds": {
+        "generate": 200,
+        "repair": 75
+      }
+    }
+  },
+  "rejected": {}
+}
