@@ -1,0 +1,4 @@
+// A small HTTP API: `tok run --allow-net 127.0.0.1:8080 examples/http_server.tok -- 127.0.0.1:8080 0`
+// GET /hello greets the query, POST /echo returns the body, anything else is 404.
+handle(r:Request)->Response{var h:Map<String,String>=Map();h["content-type"]="text/plain";match r.method+" "+r.path{"GET /hello"=>Response(200,h,"hello "+r.query),"POST /echo"=>Response(200,h,r.body),_=>Response(404,h,"not found")}}
+main()->Unit{let a=args();let limit=match parse_i32(a[1]){Ok(n)=>n,Err(e)=>0};print("listening on "+a[0]);match serve(a[0],limit,|r|handle(r)){Ok(u)=>print("done"),Err(e)=>{print("cannot serve");exit(1);}}}

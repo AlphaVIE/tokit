@@ -1,0 +1,208 @@
+// HTTP/1.1 over std::net. The reference interpreter includes this file and
+// native programs embed it, so both backends share one implementation.
+#[derive(Clone)]
+pub(crate) struct __TokHttpRequest { pub(crate) method: String, pub(crate) path: String, pub(crate) query: String, pub(crate) headers: Vec<(String, String)>, pub(crate) body: String }
+#[derive(Clone)]
+pub(crate) struct __TokHttpResponse { pub(crate) status: i32, pub(crate) headers: Vec<(String, String)>, pub(crate) body: String }
+
+const __TOK_HTTP_HEAD_LIMIT: usize = 64 * 1024;
+const __TOK_HTTP_BODY_LIMIT: usize = 16 * 1024 * 1024;
+
+/// Whether a `--allow-net` grant covers `addr`: an exact `host:port`, or `*`.
+pub(crate) fn __tok_http_allowed(grant: Option<&str>, addr: &str) -> bool {
+    grant.is_some_and(|grant| grant == "*" || grant == addr)
+}
+
+pub(crate) fn __tok_http_reason(status: i32) -> &'static str {
+    match status {
+        200 => "OK", 201 => "Created", 202 => "Accepted", 204 => "No Content",
+        301 => "Moved Permanently", 302 => "Found", 304 => "Not Modified",
+        400 => "Bad Request", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found",
+        405 => "Method Not Allowed", 409 => "Conflict", 413 => "Content Too Large",
+        422 => "Unprocessable Content", 500 => "Internal Server Error", 503 => "Service Unavailable",
+        _ => "Status",
+    }
+}
+
+/// Header names are case-insensitive, so they are lowercased; repeated
+/// headers are joined with ", " as HTTP permits.
+pub(crate) fn __tok_http_add_header(headers: &mut Vec<(String, String)>, name: &str, value: &str) {
+    let name = name.trim().to_ascii_lowercase();
+    let value = value.trim().to_owned();
+    match headers.iter_mut().find(|(existing, _)| *existing == name) {
+        Some((_, existing)) => { existing.push_str(", "); existing.push_str(&value); }
+        None => headers.push((name, value)),
+    }
+}
+
+pub(crate) fn __tok_http_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    headers.iter().find(|(existing, _)| existing == name).map(|(_, value)| value.as_str())
+}
+
+/// Read through the blank line that ends a message head; returns the head and any bytes already read past it.
+pub(crate) fn __tok_http_read_head(stream: &mut impl std::io::Read) -> Result<(String, Vec<u8>), &'static str> {
+    let mut data = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        if let Some(end) = data.windows(4).position(|window| window == b"\r\n\r\n") {
+            let head = String::from_utf8(data[..end].to_vec()).map_err(|_| "InvalidUtf8")?;
+            return Ok((head, data[end + 4..].to_vec()));
+        }
+        if data.len() > __TOK_HTTP_HEAD_LIMIT { return Err("Other"); }
+        let read = stream.read(&mut buffer).map_err(|_| "Other")?;
+        if read == 0 { return Err("Other"); }
+        data.extend_from_slice(&buffer[..read]);
+    }
+}
+
+pub(crate) fn __tok_http_parse_headers<'a>(lines: impl Iterator<Item = &'a str>) -> Result<Vec<(String, String)>, &'static str> {
+    let mut headers = Vec::new();
+    for line in lines {
+        let (name, value) = line.split_once(':').ok_or("Other")?;
+        if name.is_empty() || name.contains(' ') { return Err("Other"); }
+        __tok_http_add_header(&mut headers, name, value);
+    }
+    Ok(headers)
+}
+
+pub(crate) fn __tok_http_content_length(headers: &[(String, String)]) -> Result<Option<usize>, &'static str> {
+    match __tok_http_header(headers, "content-length") {
+        None => Ok(None),
+        Some(text) => {
+            let length = text.parse::<usize>().map_err(|_| "Other")?;
+            if length > __TOK_HTTP_BODY_LIMIT { return Err("Other"); }
+            Ok(Some(length))
+        }
+    }
+}
+
+/// Decode a complete `Transfer-Encoding: chunked` body.
+pub(crate) fn __tok_http_dechunk(mut data: &[u8]) -> Result<Vec<u8>, &'static str> {
+    let mut body = Vec::new();
+    loop {
+        let end = data.windows(2).position(|window| window == b"\r\n").ok_or("Other")?;
+        let size_text = std::str::from_utf8(&data[..end]).map_err(|_| "Other")?;
+        let size_text = size_text.split(';').next().unwrap_or("").trim();
+        let size = usize::from_str_radix(size_text, 16).map_err(|_| "Other")?;
+        data = &data[end + 2..];
+        if size == 0 { return Ok(body); }
+        if data.len() < size + 2 || body.len() + size > __TOK_HTTP_BODY_LIMIT { return Err("Other"); }
+        body.extend_from_slice(&data[..size]);
+        data = &data[size + 2..];
+    }
+}
+
+pub(crate) fn __tok_http_read_request(stream: &mut std::net::TcpStream) -> Result<__TokHttpRequest, &'static str> {
+    use std::io::Read;
+    let (head, mut body) = __tok_http_read_head(stream)?;
+    let mut lines = head.split("\r\n");
+    let mut parts = lines.next().ok_or("Other")?.split(' ');
+    let method = parts.next().filter(|method| !method.is_empty()).ok_or("Other")?.to_owned();
+    let target = parts.next().filter(|target| target.starts_with('/')).ok_or("Other")?;
+    if !parts.next().is_some_and(|version| version.starts_with("HTTP/1.")) { return Err("Other"); }
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let headers = __tok_http_parse_headers(lines)?;
+    if __tok_http_header(&headers, "transfer-encoding").is_some() { return Err("Other"); }
+    let length = __tok_http_content_length(&headers)?.unwrap_or(0);
+    while body.len() < length {
+        let mut buffer = vec![0u8; (length - body.len()).min(64 * 1024)];
+        let read = stream.read(&mut buffer).map_err(|_| "Other")?;
+        if read == 0 { return Err("Other"); }
+        body.extend_from_slice(&buffer[..read]);
+    }
+    body.truncate(length);
+    let body = String::from_utf8(body).map_err(|_| "InvalidUtf8")?;
+    Ok(__TokHttpRequest { method, path: path.to_owned(), query: query.to_owned(), headers, body })
+}
+
+pub(crate) fn __tok_http_write_response(stream: &mut std::net::TcpStream, response: &__TokHttpResponse) -> std::io::Result<()> {
+    use std::io::Write;
+    let status = if (100..=999).contains(&response.status) { response.status } else { 500 };
+    let mut head = format!("HTTP/1.1 {status} {}\r\n", __tok_http_reason(status));
+    for (name, value) in &response.headers {
+        let name = name.to_ascii_lowercase();
+        if name == "content-length" || name == "connection" || name.contains(['\r', '\n']) || value.contains(['\r', '\n']) { continue; }
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str(&format!("content-length: {}\r\nconnection: close\r\n\r\n", response.body.len()));
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(response.body.as_bytes())?;
+    stream.flush()
+}
+
+/// Answer `limit` requests one at a time (`limit <= 0` serves forever); the
+/// handler returns `None` to stop early. Malformed requests get a 400 without
+/// reaching the handler.
+pub(crate) fn __tok_http_serve(addr: &str, limit: i32, handle: &mut dyn FnMut(__TokHttpRequest) -> Option<__TokHttpResponse>) -> Result<(), &'static str> {
+    let listener = std::net::TcpListener::bind(addr).map_err(|_| "Other")?;
+    let mut served = 0;
+    for stream in listener.incoming() {
+        let Ok(mut stream) = stream else { continue };
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+        let response = match __tok_http_read_request(&mut stream) {
+            Ok(request) => match handle(request) { Some(response) => response, None => return Ok(()) },
+            Err(_) => __TokHttpResponse { status: 400, headers: Vec::new(), body: "bad request".to_owned() },
+        };
+        let _ = __tok_http_write_response(&mut stream, &response);
+        served += 1;
+        if limit > 0 && served >= limit { return Ok(()); }
+    }
+    Ok(())
+}
+
+/// Split `http://host[:port][/path][?query]` into the connect address, Host header, and request target.
+pub(crate) fn __tok_http_split_url(url: &str) -> Result<(String, String, String), &'static str> {
+    let rest = url.strip_prefix("http://").ok_or("Other")?;
+    let (authority, target) = match rest.find(['/', '?']) {
+        Some(at) => (&rest[..at], &rest[at..]),
+        None => (rest, "/"),
+    };
+    if authority.is_empty() || authority.contains('@') { return Err("Other"); }
+    let target = if target.starts_with('?') { format!("/{target}") } else { target.to_owned() };
+    let addr = if authority.rsplit_once(':').is_some_and(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())) {
+        authority.to_owned()
+    } else {
+        format!("{authority}:80")
+    };
+    Ok((addr, authority.to_owned(), target))
+}
+
+/// Send one request and read the whole response; only `http://` URLs are supported.
+pub(crate) fn __tok_http_request(grant: Option<&str>, method: &str, url: &str, headers: &[(String, String)], body: &str) -> Result<__TokHttpResponse, &'static str> {
+    use std::io::{Read, Write};
+    let (addr, host, target) = __tok_http_split_url(url)?;
+    if !__tok_http_allowed(grant, &addr) { return Err("Denied"); }
+    if method.is_empty() || method.contains([' ', '\r', '\n']) || target.contains([' ', '\r', '\n']) { return Err("Other"); }
+    let mut stream = std::net::TcpStream::connect(&addr).map_err(|_| "Other")?;
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+    let mut head = format!("{method} {target} HTTP/1.1\r\nhost: {host}\r\nconnection: close\r\ncontent-length: {}\r\n", body.len());
+    for (name, value) in headers {
+        let lower = name.to_ascii_lowercase();
+        if matches!(lower.as_str(), "host" | "connection" | "content-length") || name.contains(['\r', '\n', ':']) || value.contains(['\r', '\n']) { continue; }
+        head.push_str(&format!("{lower}: {value}\r\n"));
+    }
+    head.push_str("\r\n");
+    stream.write_all(head.as_bytes()).map_err(|_| "Other")?;
+    stream.write_all(body.as_bytes()).map_err(|_| "Other")?;
+    let (head, mut rest) = __tok_http_read_head(&mut stream)?;
+    let mut lines = head.split("\r\n");
+    let status_line = lines.next().ok_or("Other")?;
+    let mut parts = status_line.splitn(3, ' ');
+    if !parts.next().is_some_and(|version| version.starts_with("HTTP/1.")) { return Err("Other"); }
+    let status = parts.next().and_then(|code| code.parse::<i32>().ok()).ok_or("Other")?;
+    let headers = __tok_http_parse_headers(lines)?;
+    let mut limited = (&mut stream).take(__TOK_HTTP_BODY_LIMIT as u64 + 1);
+    limited.read_to_end(&mut rest).map_err(|_| "Other")?;
+    if rest.len() > __TOK_HTTP_BODY_LIMIT { return Err("Other"); }
+    let body = if __tok_http_header(&headers, "transfer-encoding").is_some_and(|value| value.to_ascii_lowercase().contains("chunked")) {
+        __tok_http_dechunk(&rest)?
+    } else {
+        match __tok_http_content_length(&headers)? {
+            Some(length) if rest.len() >= length => { rest.truncate(length); rest }
+            Some(_) => return Err("Other"),
+            None => rest,
+        }
+    };
+    let body = String::from_utf8(body).map_err(|_| "InvalidUtf8")?;
+    Ok(__TokHttpResponse { status, headers, body })
+}

@@ -58,6 +58,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
     }
     arities.insert(builtins::MAP.to_owned(), 2);
     record_names.insert(builtins::MAP.to_owned());
+    for record in builtins::http_records() {
+        record_names.insert(record.name.clone());
+        arities.insert(record.name.clone(), 0);
+        signatures.insert(
+            record.name.clone(),
+            Signature {
+                type_params: Vec::new(),
+                params: record.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                ret: Type::Named(record.name.clone()),
+                fields: Some(record.fields),
+                variants: None,
+                spawn_safe: false,
+            },
+        );
+    }
     for (name, params, ret) in [
         (
             builtins::READ_TEXT,
@@ -90,6 +105,31 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (
+            builtins::SERVE,
+            vec![
+                Type::String,
+                Type::I32,
+                Type::Fn(
+                    vec![Type::Named(builtins::REQUEST.to_owned())],
+                    Box::new(Type::Named(builtins::RESPONSE.to_owned())),
+                ),
+            ],
+            builtins::write_text_result(),
+        ),
+        (
+            builtins::HTTP_REQUEST,
+            vec![
+                Type::String,
+                Type::String,
+                builtins::map_type(Type::String, Type::String),
+                Type::String,
+            ],
+            Type::Result(
+                Box::new(Type::Named(builtins::RESPONSE.to_owned())),
+                Box::new(Type::Named(builtins::IO_ERROR.to_owned())),
+            ),
+        ),
         (
             builtins::LIST_DIR,
             vec![Type::String],
@@ -490,6 +530,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "serve"
+                | "http_request"
+                | "Request"
+                | "Response"
                 | "list_dir"
                 | "exists"
                 | "make_dir"
@@ -582,6 +626,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "serve"
+                | "http_request"
+                | "Request"
+                | "Response"
                 | "list_dir"
                 | "exists"
                 | "make_dir"
@@ -909,6 +957,8 @@ fn expression_is_spawn_safe(
                 && name != builtins::WRITE_BYTES
                 && name != builtins::ARGS
                 && name != builtins::PRINT
+                && name != builtins::SERVE
+                && name != builtins::HTTP_REQUEST
                 && name != builtins::LIST_DIR
                 && name != builtins::EXISTS
                 && name != builtins::MAKE_DIR
@@ -929,6 +979,8 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::REQUEST
+                        | builtins::RESPONSE
                         | builtins::ABS
                         | builtins::MIN
                         | builtins::MAX

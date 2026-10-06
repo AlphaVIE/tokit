@@ -7,6 +7,10 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const SERVE: &str = "serve";
+pub const HTTP_REQUEST: &str = "http_request";
+pub const REQUEST: &str = "Request";
+pub const RESPONSE: &str = "Response";
 pub const LIST_DIR: &str = "list_dir";
 pub const EXISTS: &str = "exists";
 pub const MAKE_DIR: &str = "make_dir";
@@ -197,7 +201,11 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "list_dir"
+        "serve"
+            | "http_request"
+            | "Request"
+            | "Response"
+            | "list_dir"
             | "exists"
             | "make_dir"
             | "remove_file"
@@ -271,4 +279,41 @@ pub fn is_call(name: &str) -> bool {
             | "bytes_to_i32"
             | "join"
     )
+}
+
+/// The built-in HTTP message records, in constructor field order.
+pub fn http_records() -> Vec<crate::ast::Record> {
+    let headers = map_type(Type::String, Type::String);
+    [
+        (
+            REQUEST,
+            vec![
+                ("method", Type::String),
+                ("path", Type::String),
+                ("query", Type::String),
+                ("headers", headers.clone()),
+                ("body", Type::String),
+            ],
+        ),
+        (
+            RESPONSE,
+            vec![
+                ("status", Type::I32),
+                ("headers", headers),
+                ("body", Type::String),
+            ],
+        ),
+    ]
+    .into_iter()
+    .map(|(name, fields)| crate::ast::Record {
+        name: name.to_owned(),
+        public: true,
+        type_params: Vec::new(),
+        fields: fields
+            .into_iter()
+            .map(|(field, ty)| (field.to_owned(), ty))
+            .collect(),
+        span: Span::new(0, 0),
+    })
+    .collect()
 }

@@ -93,6 +93,7 @@ fn __tok_configure_runtime() {
     let mut start = 0;
     let mut saw_read = false;
     let mut saw_write = false;
+    let mut saw_net = false;
     loop {
         match args.get(start).map(String::as_str) {
             Some("--allow-read") if !saw_read => {
@@ -105,6 +106,12 @@ fn __tok_configure_runtime() {
                 let Some(root) = args.get(start + 1) else { eprintln!("missing write grant root"); std::process::exit(2); };
                 __TOK_WRITE_ROOT.with(|cell| *cell.borrow_mut() = std::fs::canonicalize(root).ok());
                 saw_write = true;
+                start += 2;
+            }
+            Some("--allow-net") if !saw_net => {
+                let Some(grant) = args.get(start + 1) else { eprintln!("missing net grant"); std::process::exit(2); };
+                __tok_set_net_grant(grant.clone());
+                saw_net = true;
                 start += 2;
             }
             _ => break,
@@ -152,3 +159,6 @@ fn __tok_now_ms() -> i64 { std::time::SystemTime::now().duration_since(std::time
 static __TOK_STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 fn __tok_clock_ns() -> i64 { i64::try_from(__TOK_STARTED.get_or_init(std::time::Instant::now).elapsed().as_nanos()).unwrap_or(i64::MAX) }
 fn __tok_sleep_ms(millis: i64) { __tok_flush(); std::thread::sleep(std::time::Duration::from_millis(u64::try_from(millis).unwrap_or(0))); }
+// `--allow-net` grant: one `host:port`, or `*`.
+static __TOK_NET_GRANT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+fn __tok_set_net_grant(grant: String) { let _ = __TOK_NET_GRANT.set(grant); }
