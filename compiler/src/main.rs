@@ -371,6 +371,31 @@ fn main() {
         }
         return;
     }
+    // Project commands that work in the current directory.
+    match args.as_slice() {
+        [_, command, name] if command == "new" => {
+            exit_with(tokit_compiler::packages::new_project(Path::new(name)));
+        }
+        [_, command, spec] if command == "add" => {
+            exit_with(tokit_compiler::packages::add_registry(Path::new("."), spec));
+        }
+        [_, command, name] if command == "rm" => {
+            exit_with(tokit_compiler::packages::remove_local(Path::new("."), name));
+        }
+        [_, command, rest @ ..] if command == "search" && rest.len() <= 1 => {
+            let term = rest.first().map(String::as_str).unwrap_or("");
+            for package in tokit_compiler::registry::packages() {
+                if package.name.contains(term) || package.description.contains(term) {
+                    println!(
+                        "{}@{}  {}",
+                        package.name, package.version, package.description
+                    );
+                }
+            }
+            return;
+        }
+        _ => {}
+    }
     if args
         .get(1)
         .is_some_and(|command| command == "add" || command == "rm")
@@ -596,5 +621,19 @@ fn main() {
         );
     } else {
         println!("{output}");
+    }
+}
+
+/// Print a written path, or report the error and exit unsuccessfully.
+fn exit_with(result: Result<std::path::PathBuf, String>) -> ! {
+    match result {
+        Ok(path) => {
+            println!("{}", path.display());
+            process::exit(0);
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(1);
+        }
     }
 }

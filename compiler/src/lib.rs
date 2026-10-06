@@ -18,6 +18,7 @@ pub mod modules;
 pub mod native;
 pub mod packages;
 pub mod parser;
+pub mod registry;
 pub mod sources;
 pub mod stats;
 pub mod test_runner;

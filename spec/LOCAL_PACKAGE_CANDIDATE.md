@@ -80,7 +80,8 @@ path may leave it only when explicitly declared and pinned in the manifest.
 [The JSON example](../examples/package_json/main.tok) consumes the
 experimental JSON module from a separate directory. This is a candidate
 for reviewing package identity and import syntax, not a stable package
-manager. There is no registry, download, package version resolution,
-signature, or cache yet. Source pinning verifies
+manager. Registry packages, the shared store, and `tok new` are described in the
+[package registry](PACKAGE_REGISTRY.md); remote download, version ranges,
+and signatures do not exist yet. Source pinning verifies
 content but does not establish who published it. The design must be reviewed before expanding
 to remote packages or freezing compatibility guarantees.
