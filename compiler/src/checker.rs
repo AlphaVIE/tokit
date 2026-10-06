@@ -90,6 +90,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (builtins::ABS, vec![Type::I32], Type::I32),
+        (builtins::MIN, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::MAX, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::POW, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::SQRT, vec![Type::F64], Type::F64),
+        (builtins::FLOOR, vec![Type::F64], Type::F64),
+        (builtins::CEIL, vec![Type::F64], Type::F64),
+        (builtins::ROUND, vec![Type::F64], Type::F64),
+        (builtins::EXP, vec![Type::F64], Type::F64),
+        (builtins::LN, vec![Type::F64], Type::F64),
+        (builtins::SIN, vec![Type::F64], Type::F64),
+        (builtins::COS, vec![Type::F64], Type::F64),
+        (builtins::TAN, vec![Type::F64], Type::F64),
+        (builtins::ATAN2, vec![Type::F64, Type::F64], Type::F64),
+        (builtins::PI, Vec::new(), Type::F64),
         (
             builtins::RANGE,
             vec![Type::I32, Type::I32],
@@ -448,6 +463,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "abs"
+                | "min"
+                | "max"
+                | "pow"
+                | "sqrt"
+                | "floor"
+                | "ceil"
+                | "round"
+                | "exp"
+                | "ln"
+                | "sin"
+                | "cos"
+                | "tan"
+                | "atan2"
+                | "pi"
                 | "map"
                 | "filter"
                 | "any"
@@ -517,6 +547,21 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "abs"
+                | "min"
+                | "max"
+                | "pow"
+                | "sqrt"
+                | "floor"
+                | "ceil"
+                | "round"
+                | "exp"
+                | "ln"
+                | "sin"
+                | "cos"
+                | "tan"
+                | "atan2"
+                | "pi"
                 | "map"
                 | "filter"
                 | "any"
@@ -833,6 +878,21 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::ABS
+                        | builtins::MIN
+                        | builtins::MAX
+                        | builtins::POW
+                        | builtins::SQRT
+                        | builtins::FLOOR
+                        | builtins::CEIL
+                        | builtins::ROUND
+                        | builtins::EXP
+                        | builtins::LN
+                        | builtins::SIN
+                        | builtins::COS
+                        | builtins::TAN
+                        | builtins::ATAN2
+                        | builtins::PI
                         | builtins::MAP_FN
                         | builtins::FILTER
                         | builtins::ANY
@@ -1763,6 +1823,17 @@ fn infer(
             }
             if name == builtins::TO_F64 && actuals == [Type::I64] {
                 return Ok(Type::F64);
+            }
+            match (name.as_str(), actuals.as_slice()) {
+                (builtins::ABS, [ty @ (Type::I64 | Type::F64)]) => return Ok(ty.clone()),
+                (builtins::MIN | builtins::MAX, [left @ (Type::I64 | Type::F64), right])
+                    if left == right =>
+                {
+                    return Ok(left.clone());
+                }
+                (builtins::POW, [Type::I64, Type::I32]) => return Ok(Type::I64),
+                (builtins::POW, [Type::F64, Type::F64]) => return Ok(Type::F64),
+                _ => {}
             }
             if name == builtins::TO_STRING
                 && matches!(actuals[..], [Type::I64 | Type::F64 | Type::Bool])

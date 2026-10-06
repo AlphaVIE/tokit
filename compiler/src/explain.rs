@@ -120,6 +120,25 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                     | builtins::REMOVE
             ) {
                 facts.operations.insert("map operation");
+            } else if matches!(
+                name.as_str(),
+                builtins::ABS
+                    | builtins::MIN
+                    | builtins::MAX
+                    | builtins::POW
+                    | builtins::SQRT
+                    | builtins::FLOOR
+                    | builtins::CEIL
+                    | builtins::ROUND
+                    | builtins::EXP
+                    | builtins::LN
+                    | builtins::SIN
+                    | builtins::COS
+                    | builtins::TAN
+                    | builtins::ATAN2
+                    | builtins::PI
+            ) {
+                facts.operations.insert("math");
             } else if name == builtins::TO_STRING {
                 facts.operations.insert("string conversion");
             } else if matches!(

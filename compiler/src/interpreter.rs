@@ -837,6 +837,9 @@ fn eval_builtin(
     if let Some(value) = eval_map_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
+    if let Some(value) = eval_math_builtin(name, &values, expr.span) {
+        return Ok(Flow::Value(value?));
+    }
     if let Some(value) = eval_array_builtin(name, &values, expr.span) {
         return Ok(Flow::Value(value?));
     }
@@ -1696,4 +1699,79 @@ fn eval_higher_order(
         })(),
         _ => return None,
     })
+}
+
+fn float(value: f64) -> Value {
+    Value::F64(value.to_bits())
+}
+
+/// Integer `pow` by squaring with overflow checks; a negative exponent fails.
+fn checked_pow<T: Copy>(base: T, exponent: i32, one: T, mul: fn(T, T) -> Option<T>) -> Option<T> {
+    let mut exponent = u32::try_from(exponent).ok()?;
+    let (mut base, mut result) = (base, one);
+    while exponent > 0 {
+        if exponent & 1 == 1 {
+            result = mul(result, base)?;
+        }
+        exponent >>= 1;
+        if exponent > 0 {
+            base = mul(base, base)?;
+        }
+    }
+    Some(result)
+}
+
+fn eval_math_builtin(
+    name: &str,
+    values: &[Value],
+    span: Span,
+) -> Option<Result<Value, Diagnostic>> {
+    let overflow = || Diagnostic::new("E201", span, "integer overflow or division by zero");
+    let unary = |f: fn(f64) -> f64| match values {
+        [Value::F64(bits)] => Some(float(f(f64::from_bits(*bits)))),
+        _ => None,
+    };
+    let value = match (name, values) {
+        (builtins::ABS, [Value::I32(n)]) => n.checked_abs().map(Value::I32).ok_or_else(overflow),
+        (builtins::ABS, [Value::I64(n)]) => n.checked_abs().map(Value::I64).ok_or_else(overflow),
+        (builtins::ABS, [Value::F64(bits)]) => Ok(float(f64::from_bits(*bits).abs())),
+        (builtins::MIN, [Value::I32(a), Value::I32(b)]) => Ok(Value::I32(*a.min(b))),
+        (builtins::MIN, [Value::I64(a), Value::I64(b)]) => Ok(Value::I64(*a.min(b))),
+        (builtins::MIN, [Value::F64(a), Value::F64(b)]) => {
+            Ok(float(f64::from_bits(*a).min(f64::from_bits(*b))))
+        }
+        (builtins::MAX, [Value::I32(a), Value::I32(b)]) => Ok(Value::I32(*a.max(b))),
+        (builtins::MAX, [Value::I64(a), Value::I64(b)]) => Ok(Value::I64(*a.max(b))),
+        (builtins::MAX, [Value::F64(a), Value::F64(b)]) => {
+            Ok(float(f64::from_bits(*a).max(f64::from_bits(*b))))
+        }
+        (builtins::POW, [Value::I32(base), Value::I32(exponent)]) => {
+            checked_pow(*base, *exponent, 1, i32::checked_mul)
+                .map(Value::I32)
+                .ok_or_else(overflow)
+        }
+        (builtins::POW, [Value::I64(base), Value::I32(exponent)]) => {
+            checked_pow(*base, *exponent, 1, i64::checked_mul)
+                .map(Value::I64)
+                .ok_or_else(overflow)
+        }
+        (builtins::POW, [Value::F64(base), Value::F64(exponent)]) => {
+            Ok(float(f64::from_bits(*base).powf(f64::from_bits(*exponent))))
+        }
+        (builtins::ATAN2, [Value::F64(y), Value::F64(x)]) => {
+            Ok(float(f64::from_bits(*y).atan2(f64::from_bits(*x))))
+        }
+        (builtins::PI, []) => Ok(float(std::f64::consts::PI)),
+        (builtins::SQRT, _) => unary(f64::sqrt).ok_or_else(overflow),
+        (builtins::FLOOR, _) => unary(f64::floor).ok_or_else(overflow),
+        (builtins::CEIL, _) => unary(f64::ceil).ok_or_else(overflow),
+        (builtins::ROUND, _) => unary(f64::round).ok_or_else(overflow),
+        (builtins::EXP, _) => unary(f64::exp).ok_or_else(overflow),
+        (builtins::LN, _) => unary(f64::ln).ok_or_else(overflow),
+        (builtins::SIN, _) => unary(f64::sin).ok_or_else(overflow),
+        (builtins::COS, _) => unary(f64::cos).ok_or_else(overflow),
+        (builtins::TAN, _) => unary(f64::tan).ok_or_else(overflow),
+        _ => return None,
+    };
+    Some(value)
 }

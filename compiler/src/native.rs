@@ -24,6 +24,7 @@ const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt"
 const PRELUDE_STRINGS: &str = include_str!("native_runtime/strings.rs.txt");
 const PRELUDE_MAPS: &str = include_str!("native_runtime/maps.rs.txt");
 const PRELUDE_ARRAYS: &str = include_str!("native_runtime/arrays.rs.txt");
+const PRELUDE_MATH: &str = include_str!("native_runtime/math.rs.txt");
 
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
@@ -58,6 +59,9 @@ fn runtime_prelude(body: &str) -> String {
     }
     if body.contains("BTreeMap") {
         prelude.push_str(PRELUDE_MAPS);
+    }
+    if body.contains("__tok_math_") {
+        prelude.push_str(PRELUDE_MATH);
     }
     if body.contains("__tok_arr_") || body.contains("__tok_range") || body.contains("__tok_concat")
     {
@@ -343,6 +347,32 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                     "__tok_arr_contains".to_owned()
                 }
                 builtins::RANGE => "__tok_range".to_owned(),
+                builtins::PI => return "std::f64::consts::PI".to_owned(),
+                builtins::ABS | builtins::MIN | builtins::MAX | builtins::POW => {
+                    let suffix = match types.get(&args[0].span) {
+                        Some(Type::I64) => "i64",
+                        Some(Type::F64) => "f64",
+                        _ => "i32",
+                    };
+                    let (source_id, line, column) = location(source, expr.span);
+                    return format!(
+                        "__tok_math_{name}_{suffix}({},{source_id},{line},{column})",
+                        args.iter()
+                            .map(|arg| emit_expr(arg, source, types))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    );
+                }
+                builtins::SQRT => "f64::sqrt".to_owned(),
+                builtins::FLOOR => "f64::floor".to_owned(),
+                builtins::CEIL => "f64::ceil".to_owned(),
+                builtins::ROUND => "f64::round".to_owned(),
+                builtins::EXP => "f64::exp".to_owned(),
+                builtins::LN => "f64::ln".to_owned(),
+                builtins::SIN => "f64::sin".to_owned(),
+                builtins::COS => "f64::cos".to_owned(),
+                builtins::TAN => "f64::tan".to_owned(),
+                builtins::ATAN2 => "f64::atan2".to_owned(),
                 builtins::MAP_FN => "__tok_arr_map".to_owned(),
                 builtins::FILTER => "__tok_arr_filter".to_owned(),
                 builtins::ANY => "__tok_arr_any".to_owned(),
