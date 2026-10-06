@@ -1,4 +1,5 @@
-//! Small stdio language server for diagnostics, symbols, definitions, and hovers.
+//! Small stdio language server for diagnostics, symbols, definitions, hovers,
+//! references, renames, and completion.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -179,13 +180,24 @@ fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
         })
 }
 
-/// Where `name`, used at `offset`, is bound: the nearest preceding local binding
-/// in the enclosing function, else a top-level declaration of that name.
+/// Where the identifier at `offset` is bound.
 fn definition_span(text: &str, offset: usize) -> Option<Span> {
-    use crate::lexer::Kind;
     let (name, usage) = identifier_at(text, offset)?;
     let program = crate::parse(text).ok()?;
     let tokens = crate::lexer::lex(text).ok()?;
+    let tokens: Vec<_> = tokens.iter().collect();
+    binding(&program, &tokens, &name, usage)
+}
+
+/// Where `name`, used at `usage`, is bound: the nearest local binding at or
+/// before it in the enclosing function, else a top-level declaration of that name.
+fn binding(
+    program: &crate::ast::Program,
+    tokens: &[&crate::lexer::Token],
+    name: &str,
+    usage: Span,
+) -> Option<Span> {
+    use crate::lexer::Kind;
     let is_name = |kind: &Kind| matches!(kind, Kind::Ident(candidate) if *candidate == name);
     if let Some(function) = program
         .functions
@@ -194,10 +206,20 @@ fn definition_span(text: &str, offset: usize) -> Option<Span> {
     {
         let inside: Vec<_> = tokens
             .iter()
+            .copied()
             .filter(|token| {
-                function.span.start <= token.span.start && token.span.end <= usage.start
+                function.span.start <= token.span.start && token.span.end <= function.span.end
             })
             .collect();
+        let opening = |at: usize| {
+            inside[at].kind == Kind::Pipe
+                && inside[..at]
+                    .iter()
+                    .filter(|token| token.kind == Kind::Pipe)
+                    .count()
+                    % 2
+                    == 0
+        };
         let binds = |at: usize| {
             let previous = at.checked_sub(1).map(|before| &inside[before].kind);
             let next = inside.get(at + 1).map(|token| &token.kind);
@@ -205,14 +227,16 @@ fn definition_span(text: &str, offset: usize) -> Option<Span> {
                 || (matches!(previous, Some(Kind::LParen | Kind::Comma))
                     && next == Some(&Kind::Colon)
                     && inside[..at].iter().all(|token| token.kind != Kind::LBrace))
-                || matches!(previous, Some(Kind::Pipe))
-                || (matches!(previous, Some(Kind::Comma)) && lambda_parameter(&inside, at))
+                || (at > 0 && opening(at - 1))
+                || (matches!(previous, Some(Kind::Comma))
+                    && lambda_parameter(&inside, at).is_some_and(opening))
                 || (matches!(previous, Some(Kind::LParen))
                     && next == Some(&Kind::RParen)
                     && inside.get(at + 2).map(|token| &token.kind) == Some(&Kind::FatArrow))
         };
         if let Some(at) = (0..inside.len())
             .rev()
+            .filter(|at| inside[*at].span.start <= usage.start)
             .find(|at| is_name(&inside[*at].kind) && binds(*at))
         {
             return Some(inside[at].span);
@@ -238,14 +262,14 @@ fn definition_span(text: &str, offset: usize) -> Option<Span> {
         .map(|token| token.span)
 }
 
-/// Whether the identifier at `at` sits inside an open `|...|` parameter list.
-fn lambda_parameter(tokens: &[&crate::lexer::Token], at: usize) -> bool {
+/// The `|` that would open a lambda parameter list around the identifier at `at`.
+fn lambda_parameter(tokens: &[&crate::lexer::Token], at: usize) -> Option<usize> {
     use crate::lexer::Kind;
     let mut index = at;
     while index > 0 {
         index -= 1;
         match tokens[index].kind {
-            Kind::Pipe => return true,
+            Kind::Pipe => return Some(index),
             Kind::Ident(_) | Kind::Comma | Kind::Colon => {}
             Kind::LBracket
             | Kind::RBracket
@@ -254,10 +278,150 @@ fn lambda_parameter(tokens: &[&crate::lexer::Token], at: usize) -> bool {
             | Kind::LParen
             | Kind::RParen
             | Kind::Arrow => {}
-            _ => return false,
+            _ => return None,
         }
     }
-    false
+    None
+}
+
+/// Identifier tokens bound where the one at `offset` is, in source order.
+/// Field and variant names after `.` or `::` are not bindings and never match.
+fn references(text: &str, offset: usize) -> Option<(Span, Vec<Span>)> {
+    use crate::lexer::Kind;
+    let (name, usage) = identifier_at(text, offset)?;
+    let program = crate::parse(text).ok()?;
+    let tokens = crate::lexer::lex(text).ok()?;
+    let tokens: Vec<_> = tokens.iter().collect();
+    let target = binding(&program, &tokens, &name, usage)?;
+    let spans = tokens
+        .iter()
+        .enumerate()
+        .filter(|(at, token)| {
+            matches!(&token.kind, Kind::Ident(candidate) if *candidate == name)
+                && !(*at > 0 && matches!(tokens[at - 1].kind, Kind::Dot | Kind::ColonColon))
+        })
+        .filter(|(_, token)| binding(&program, &tokens, &name, token.span) == Some(target))
+        .map(|(_, token)| token.span)
+        .collect();
+    Some((target, spans))
+}
+
+const KEYWORDS: &[&str] = &[
+    "struct", "enum", "import", "pub", "let", "var", "for", "while", "break", "continue", "in",
+    "if", "match", "spawn", "else", "return", "true", "false", "Ok", "Err", "Some", "None",
+];
+
+fn identifier(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_')
+        && !KEYWORDS.contains(&name)
+        && name != "fn"
+}
+
+/// Completion items at `offset`: field names after `.`, otherwise visible
+/// locals, top-level declarations, builtins, and keywords. Works on tokens so
+/// that half-written programs still complete.
+fn completions(text: &str, offset: usize) -> Json {
+    use crate::lexer::Kind;
+    let tokens = crate::lexer::lex(text).unwrap_or_default();
+    let before: Vec<_> = tokens
+        .iter()
+        .filter(|token| {
+            token.span.end < offset
+                || (token.span.end == offset && !matches!(token.kind, Kind::Ident(_)))
+        })
+        .collect();
+    let mut items: Vec<(String, u8)> = Vec::new();
+    let mut fields = Vec::new();
+    let mut declarations = Vec::new();
+    let mut depth = 0usize;
+    let mut struct_body = false;
+    for (at, token) in tokens.iter().enumerate() {
+        let previous = at.checked_sub(1).map(|before| &tokens[before].kind);
+        let next = tokens.get(at + 1).map(|token| &token.kind);
+        match &token.kind {
+            Kind::LBrace => depth += 1,
+            Kind::RBrace => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    struct_body = false;
+                }
+            }
+            Kind::Ident(name) if depth == 0 => match previous {
+                Some(Kind::Struct) => {
+                    declarations.push((name.clone(), 22));
+                    struct_body = true;
+                }
+                Some(Kind::Enum) => declarations.push((name.clone(), 13)),
+                _ if matches!(next, Some(Kind::LParen | Kind::Lt))
+                    && !matches!(
+                        previous,
+                        Some(Kind::LParen | Kind::Comma | Kind::Colon | Kind::Arrow | Kind::Lt)
+                    ) =>
+                {
+                    declarations.push((name.clone(), 3));
+                }
+                _ => {}
+            },
+            Kind::Ident(name) if struct_body && depth == 1 && next == Some(&Kind::Colon) => {
+                fields.push((name.clone(), 5));
+            }
+            _ => {}
+        }
+    }
+    if before.last().is_some_and(|token| token.kind == Kind::Dot) {
+        items = fields;
+    } else {
+        let mut depth = 0usize;
+        let mut pipes = 0usize;
+        let mut locals: Vec<(String, u8)> = Vec::new();
+        for (at, token) in before.iter().enumerate() {
+            let previous = at.checked_sub(1).map(|index| &before[index].kind);
+            let next = before.get(at + 1).map(|token| &token.kind);
+            match &token.kind {
+                Kind::LBrace => depth += 1,
+                Kind::RBrace => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        locals.clear();
+                        pipes = 0;
+                    }
+                }
+                Kind::Pipe => pipes += 1,
+                Kind::Ident(name) => {
+                    let binds = matches!(previous, Some(Kind::Let | Kind::Var | Kind::For))
+                        || (matches!(previous, Some(Kind::Pipe)) && pipes % 2 == 1)
+                        || (matches!(previous, Some(Kind::LParen | Kind::Comma))
+                            && next == Some(&Kind::Colon))
+                        || (matches!(previous, Some(Kind::Comma)) && pipes % 2 == 1);
+                    if binds {
+                        locals.push((name.clone(), 6));
+                    }
+                }
+                _ => {}
+            }
+        }
+        items.extend(locals.into_iter().rev());
+        items.extend(declarations);
+        items.extend(
+            crate::builtins::CALLS
+                .iter()
+                .map(|name| ((*name).to_owned(), 3)),
+        );
+        items.extend(KEYWORDS.iter().map(|name| ((*name).to_owned(), 14)));
+    }
+    let mut seen = HashSet::new();
+    json!(
+        items
+            .into_iter()
+            .filter(|(label, _)| seen.insert(label.clone()))
+            .enumerate()
+            .map(|(rank, (label, kind))| json!({"label": label, "kind": kind, "sortText": format!("{rank:04}")}))
+            .collect::<Vec<_>>()
+    )
 }
 
 /// Markdown for the declaration or checked type at `offset`.
@@ -486,6 +650,9 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                                     "documentSymbolProvider": true,
                                     "definitionProvider": true,
                                     "hoverProvider": true,
+                                    "referencesProvider": true,
+                                    "renameProvider": true,
+                                    "completionProvider": {"triggerCharacters": ["."]},
                                 },
                                 "serverInfo": {"name": "tokit", "version": env!("CARGO_PKG_VERSION")},
                             }),
@@ -573,6 +740,71 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                         }
                     })
                     .unwrap_or(Json::Null);
+                send(output, &response(id.expect("checked id"), result))?;
+            }
+            Some(method @ ("textDocument/references" | "textDocument/rename"))
+                if initialized && !shutdown && id.is_some() =>
+            {
+                let id = id.expect("checked id");
+                let uri = params["textDocument"]["uri"].as_str();
+                let found = uri
+                    .and_then(|uri| documents.get(uri).map(|document| (uri, document)))
+                    .and_then(|(uri, document)| {
+                        let offset = offset_at(
+                            &document.text,
+                            params["position"]["line"].as_u64()?,
+                            params["position"]["character"].as_u64()?,
+                        );
+                        let (target, spans) = references(&document.text, offset)?;
+                        Some((uri, document, target, spans))
+                    });
+                let message = if method == "textDocument/references" {
+                    let include_declaration = params["context"]["includeDeclaration"]
+                        .as_bool()
+                        .unwrap_or(true);
+                    let result = found
+                        .map(|(uri, document, target, spans)| {
+                            json!(
+                                spans
+                                    .into_iter()
+                                    .filter(|span| include_declaration || *span != target)
+                                    .map(|span| json!({"uri": uri, "range": range(&document.text, span)}))
+                                    .collect::<Vec<_>>()
+                            )
+                        })
+                        .unwrap_or(Json::Null);
+                    response(id, result)
+                } else {
+                    let new_name = params["newName"].as_str().unwrap_or_default();
+                    match found {
+                        _ if !identifier(new_name) || crate::builtins::is_call(new_name) => {
+                            error_response(id, -32602, "new name must be a non-reserved identifier")
+                        }
+                        None => error_response(id, -32602, "nothing to rename here"),
+                        Some((uri, document, _, spans)) => {
+                            let edits: Vec<_> = spans
+                                .into_iter()
+                                .map(|span| json!({"range": range(&document.text, span), "newText": new_name}))
+                                .collect();
+                            response(id, json!({"changes": {uri: edits}}))
+                        }
+                    }
+                };
+                send(output, &message)?;
+            }
+            Some("textDocument/completion") if initialized && !shutdown && id.is_some() => {
+                let uri = params["textDocument"]["uri"].as_str();
+                let result = uri
+                    .and_then(|uri| documents.get(uri))
+                    .and_then(|document| {
+                        let offset = offset_at(
+                            &document.text,
+                            params["position"]["line"].as_u64()?,
+                            params["position"]["character"].as_u64()?,
+                        );
+                        Some(completions(&document.text, offset))
+                    })
+                    .unwrap_or_else(|| json!([]));
                 send(output, &response(id.expect("checked id"), result))?;
             }
             Some(_) if id.is_some() => {
