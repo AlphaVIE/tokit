@@ -28,6 +28,21 @@ written to a staging directory, verified against its digest, and then
 renamed into place; a missing, partial, or modified entry is rebuilt from
 the embedded registry. All projects on a machine share the store.
 
+The registry currently contains:
+
+| Package | Purpose |
+| --- | --- |
+| `json` | Parse and render JSON values with byte-offset errors (nesting up to 256). |
+| `http` | Routing with `:param` segments, 404/405, query and URL decoding, header lookup, `text`/`json`/`redirect` responses on top of `serve`. |
+| `redis` | RESP2 client over `Conn`: `cmd`, `ping`, `auth`, `fetch`, `store`, `incr`, `delete`, nested replies. |
+| `postgres` | PostgreSQL protocol v3: trust, cleartext, MD5, and SCRAM-SHA-256 authentication with server-signature check; `query`, parameterized `query_with`, `execute`, `quote`, `close`; text values with `NULL` as `None`. |
+
+Each package is tested end to end in both backends: `http` serves a real
+API, and `redis` and `postgres` talk to in-process servers that implement
+their wire protocols (the PostgreSQL server verifies SCRAM proofs). They
+have not yet been run against production Redis or PostgreSQL deployments in
+CI; TLS (`sslmode=require`) is not supported.
+
 Each package directory holds `tok.toml` with a `[package]` table (`name`,
 `version`, `entry`, `description`) and a `[dependencies]` table, which may
 name other registry packages in the same `version`/`sha256` form. Registry

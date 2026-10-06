@@ -1,7 +1,7 @@
 // Hashes and encodings implemented with std only. The reference interpreter
 // includes this file and native programs embed it.
 
-pub(crate) fn __tok_sha256(data: &[u8]) -> Vec<u8> {
+pub fn __tok_sha256(data: &[u8]) -> Vec<u8> {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
         0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -41,7 +41,7 @@ pub(crate) fn __tok_sha256(data: &[u8]) -> Vec<u8> {
     h.iter().flat_map(|word| word.to_be_bytes()).collect()
 }
 
-pub(crate) fn __tok_hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+pub fn __tok_hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut block = if key.len() > 64 { __tok_sha256(key) } else { key.to_vec() };
     block.resize(64, 0);
     let inner: Vec<u8> = block.iter().map(|byte| byte ^ 0x36).chain(data.iter().copied()).collect();
@@ -51,7 +51,7 @@ pub(crate) fn __tok_hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
 }
 
 /// PBKDF2-HMAC-SHA256 producing one 32-byte block (what SCRAM-SHA-256 needs).
-pub(crate) fn __tok_pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: i32) -> Vec<u8> {
+pub fn __tok_pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: i32) -> Vec<u8> {
     let mut first = salt.to_vec();
     first.extend_from_slice(&1u32.to_be_bytes());
     let mut u = __tok_hmac_sha256(password, &first);
@@ -63,7 +63,7 @@ pub(crate) fn __tok_pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: i32)
     result
 }
 
-pub(crate) fn __tok_md5(data: &[u8]) -> Vec<u8> {
+pub fn __tok_md5(data: &[u8]) -> Vec<u8> {
     const S: [u32; 64] = [
         7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
         4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
@@ -95,7 +95,7 @@ pub(crate) fn __tok_md5(data: &[u8]) -> Vec<u8> {
 
 const __TOK_BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-pub(crate) fn __tok_base64_encode(data: &[u8]) -> String {
+pub fn __tok_base64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let n = (u32::from(chunk[0]) << 16) | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8) | u32::from(*chunk.get(2).unwrap_or(&0));
@@ -107,7 +107,7 @@ pub(crate) fn __tok_base64_encode(data: &[u8]) -> String {
 }
 
 /// Standard padded base64; anything else (including whitespace) is rejected.
-pub(crate) fn __tok_base64_decode(text: &str) -> Option<Vec<u8>> {
+pub fn __tok_base64_decode(text: &str) -> Option<Vec<u8>> {
     let bytes = text.as_bytes();
     if bytes.len() % 4 != 0 { return None; }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
@@ -126,13 +126,13 @@ pub(crate) fn __tok_base64_decode(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-pub(crate) fn __tok_hex(data: &[u8]) -> String {
+pub fn __tok_hex(data: &[u8]) -> String {
     data.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// Bytes from SipHash keyed by the OS-seeded `RandomState`; suitable for
 /// nonces and identifiers, not as a key-generation CSPRNG.
-pub(crate) fn __tok_random_bytes(count: i32) -> Vec<u8> {
+pub fn __tok_random_bytes(count: i32) -> Vec<u8> {
     use std::hash::{BuildHasher, Hasher};
     let count = usize::try_from(count).unwrap_or(0);
     let mut out = Vec::with_capacity(count);
