@@ -297,22 +297,26 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &HashMap<Span, Type>) -> St
                 Op::Add if left_type == Some(&Type::String) => {
                     format!("({left} + &{right})")
                 }
-                Op::Add | Op::Sub | Op::Mul | Op::Div if left_type == Some(&Type::F64) => {
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem
+                    if left_type == Some(&Type::F64) =>
+                {
                     let symbol = match op {
                         Op::Add => "+",
                         Op::Sub => "-",
                         Op::Mul => "*",
                         Op::Div => "/",
+                        Op::Rem => "%",
                         _ => unreachable!(),
                     };
                     format!("({left} {symbol} {right})")
                 }
-                Op::Add | Op::Sub | Op::Mul | Op::Div => {
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem => {
                     let operation = match op {
                         Op::Add => "add",
                         Op::Sub => "sub",
                         Op::Mul => "mul",
                         Op::Div => "div",
+                        Op::Rem => "rem",
                         _ => unreachable!(),
                     };
                     let (source_id, line, column) = location(source, expr.span);
@@ -536,7 +540,11 @@ fn emit_ir_instructions(
                 let left_name = format!("__tok_v{}", left.0);
                 let right_name = format!("__tok_v{}", right.0);
                 match op {
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Rem
                         if instruction.ty == Type::F64 =>
                     {
                         let symbol = match op {
@@ -544,16 +552,22 @@ fn emit_ir_instructions(
                             BinaryOp::Sub => "-",
                             BinaryOp::Mul => "*",
                             BinaryOp::Div => "/",
+                            BinaryOp::Rem => "%",
                             _ => unreachable!(),
                         };
                         format!("({left_name} {symbol} {right_name})")
                     }
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Rem => {
                         let operation = match op {
                             BinaryOp::Add => "add",
                             BinaryOp::Sub => "sub",
                             BinaryOp::Mul => "mul",
                             BinaryOp::Div => "div",
+                            BinaryOp::Rem => "rem",
                             _ => unreachable!(),
                         };
                         let suffix = if instruction.ty == Type::I64 {

@@ -45,6 +45,9 @@ fn __tok_mul(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i3
 fn __tok_div(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
     a.checked_div(b).unwrap_or_else(|| __tok_fail(source_id, line, column))
 }
+fn __tok_rem(a: i32, b: i32, source_id: usize, line: usize, column: usize) -> i32 {
+    if b == 0 { __tok_fail(source_id, line, column) } else { a.wrapping_rem(b) }
+}
 fn __tok_index<T: Clone>(values: &[T], index: i32, source_id: usize, line: usize, column: usize) -> T {
     usize::try_from(index).ok().and_then(|i| values.get(i)).cloned().unwrap_or_else(|| {
         __tok_runtime_fail("E205", source_id, line, column, "array index out of bounds")

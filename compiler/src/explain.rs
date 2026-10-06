@@ -59,7 +59,7 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             visit(value, facts);
         }
         ExprKind::Binary(left, op, right) => {
-            if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div) {
+            if matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem) {
                 facts.operations.insert("arithmetic or concatenation");
             }
             visit(left, facts);

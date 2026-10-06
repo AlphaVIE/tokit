@@ -47,6 +47,7 @@ pub enum Kind {
     Minus,
     Star,
     Slash,
+    Percent,
     Eq,
     EqEq,
     BangEq,
@@ -225,6 +226,7 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
                 b'+' => Kind::Plus,
                 b'*' => Kind::Star,
                 b'/' => Kind::Slash,
+                b'%' => Kind::Percent,
                 b'-' if bytes.get(i) == Some(&b'>') => {
                     i += 1;
                     Kind::Arrow
