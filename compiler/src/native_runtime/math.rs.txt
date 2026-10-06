@@ -1,0 +1,22 @@
+fn __tok_math_abs_i32(value: i32, source_id: usize, line: usize, column: usize) -> i32 { value.checked_abs().unwrap_or_else(|| __tok_fail(source_id, line, column)) }
+fn __tok_math_abs_i64(value: i64, source_id: usize, line: usize, column: usize) -> i64 { value.checked_abs().unwrap_or_else(|| __tok_fail(source_id, line, column)) }
+fn __tok_math_abs_f64(value: f64, _: usize, _: usize, _: usize) -> f64 { value.abs() }
+fn __tok_math_min_i32(a: i32, b: i32, _: usize, _: usize, _: usize) -> i32 { a.min(b) }
+fn __tok_math_min_i64(a: i64, b: i64, _: usize, _: usize, _: usize) -> i64 { a.min(b) }
+fn __tok_math_min_f64(a: f64, b: f64, _: usize, _: usize, _: usize) -> f64 { a.min(b) }
+fn __tok_math_max_i32(a: i32, b: i32, _: usize, _: usize, _: usize) -> i32 { a.max(b) }
+fn __tok_math_max_i64(a: i64, b: i64, _: usize, _: usize, _: usize) -> i64 { a.max(b) }
+fn __tok_math_max_f64(a: f64, b: f64, _: usize, _: usize, _: usize) -> f64 { a.max(b) }
+fn __tok_checked_pow<T: Copy>(base: T, exponent: i32, one: T, mul: fn(T, T) -> Option<T>) -> Option<T> {
+    let mut exponent = u32::try_from(exponent).ok()?;
+    let (mut base, mut result) = (base, one);
+    while exponent > 0 {
+        if exponent & 1 == 1 { result = mul(result, base)?; }
+        exponent >>= 1;
+        if exponent > 0 { base = mul(base, base)?; }
+    }
+    Some(result)
+}
+fn __tok_math_pow_i32(base: i32, exponent: i32, source_id: usize, line: usize, column: usize) -> i32 { __tok_checked_pow(base, exponent, 1, i32::checked_mul).unwrap_or_else(|| __tok_fail(source_id, line, column)) }
+fn __tok_math_pow_i64(base: i64, exponent: i32, source_id: usize, line: usize, column: usize) -> i64 { __tok_checked_pow(base, exponent, 1, i64::checked_mul).unwrap_or_else(|| __tok_fail(source_id, line, column)) }
+fn __tok_math_pow_f64(base: f64, exponent: f64, _: usize, _: usize, _: usize) -> f64 { base.powf(exponent) }

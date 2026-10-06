@@ -7,6 +7,21 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const ABS: &str = "abs";
+pub const MIN: &str = "min";
+pub const MAX: &str = "max";
+pub const POW: &str = "pow";
+pub const SQRT: &str = "sqrt";
+pub const FLOOR: &str = "floor";
+pub const CEIL: &str = "ceil";
+pub const ROUND: &str = "round";
+pub const EXP: &str = "exp";
+pub const LN: &str = "ln";
+pub const SIN: &str = "sin";
+pub const COS: &str = "cos";
+pub const TAN: &str = "tan";
+pub const ATAN2: &str = "atan2";
+pub const PI: &str = "pi";
 pub const MAP: &str = "Map";
 pub const MAP_FN: &str = "map";
 pub const FILTER: &str = "filter";
@@ -174,7 +189,22 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "read_text"
+        "abs"
+            | "min"
+            | "max"
+            | "pow"
+            | "sqrt"
+            | "floor"
+            | "ceil"
+            | "round"
+            | "exp"
+            | "ln"
+            | "sin"
+            | "cos"
+            | "tan"
+            | "atan2"
+            | "pi"
+            | "read_text"
             | "read_bytes"
             | "write_text"
             | "write_bytes"
