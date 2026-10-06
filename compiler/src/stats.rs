@@ -1,6 +1,6 @@
 //! Structural counts for the checked experimental language subset.
 
-use crate::ast::{Expr, ExprKind, Program, Stmt, Type};
+use crate::ast::{Expr, ExprKind, PlaceStep, Program, Stmt, Type};
 use crate::sources::SourceMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +130,17 @@ fn count_stmt(stmt: &Stmt, nodes: &mut usize, ops: &mut usize) {
             }
             count_expr(value, nodes, ops);
         }
-        Stmt::Assign { value, .. } | Stmt::Push { value, .. } | Stmt::Return { value, .. } => {
+        Stmt::Assign { path, value, .. } => {
+            *ops += 1;
+            for step in path {
+                *nodes += 1;
+                if let PlaceStep::Index(index, _) = step {
+                    count_expr(index, nodes, ops);
+                }
+            }
+            count_expr(value, nodes, ops);
+        }
+        Stmt::Push { value, .. } | Stmt::Return { value, .. } => {
             *ops += 1;
             count_expr(value, nodes, ops);
         }

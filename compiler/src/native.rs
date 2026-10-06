@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ast::{Expr, ExprKind, Op, PatternKind, Program, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, Op, PatternKind, PlaceStep, Program, Span, Stmt, Type};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::ir::{self, BinaryOp, InstructionKind};
@@ -493,12 +493,55 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &EmitContext<'_>) -> String
                 emit_expr(value, source, types)
             )
         }
-        Stmt::Assign { name, value, .. } => {
+        Stmt::Assign {
+            name, path, value, ..
+        } if path.is_empty() => {
             format!(
                 "{} = {};\n",
                 user_name(name),
                 emit_expr(value, source, types)
             )
+        }
+        Stmt::Assign {
+            name, path, value, ..
+        } => {
+            // Evaluate indices left to right, then the value, then store.
+            let mut out = String::from("{ ");
+            let mut place = user_name(name);
+            let mut byte_store = None;
+            for (position, step) in path.iter().enumerate() {
+                match step {
+                    PlaceStep::Index(index, span) => {
+                        write!(
+                            out,
+                            "let __tok_i{position}: i32 = {}; ",
+                            emit_expr(index, source, types)
+                        )
+                        .expect("writing to String cannot fail");
+                        let (source_id, line, column) = location(source, *span);
+                        if types.get(span) == Some(&Type::Bytes) {
+                            byte_store = Some(format!(
+                                "__tok_byte_store(&mut {place}, __tok_i{position}, __tok_value, {source_id}, {line}, {column});"
+                            ));
+                        } else {
+                            place = format!(
+                                "(*__tok_slot(&mut {place}, __tok_i{position}, {source_id}, {line}, {column}))"
+                            );
+                        }
+                    }
+                    PlaceStep::Field(field, _) => {
+                        place = format!("{place}.{}", user_name(field));
+                    }
+                }
+            }
+            writeln!(
+                out,
+                "let __tok_value = {}; {} }}",
+                emit_expr(value, source, types),
+                byte_store.unwrap_or_else(|| format!("{place} = __tok_value;"))
+            )
+            .expect("writing to String cannot fail");
+            out
         }
         Stmt::Push { name, value, span } => {
             if types.get(span) == Some(&Type::Bytes) {

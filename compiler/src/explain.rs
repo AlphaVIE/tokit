@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::ast::{Expr, ExprKind, Op, Program, Stmt};
+use crate::ast::{Expr, ExprKind, Op, PlaceStep, Program, Stmt};
 use crate::builtins;
 
 #[derive(Default)]
@@ -169,7 +169,18 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
         ExprKind::Block(statements, tail) => {
             for statement in statements {
                 match statement {
-                    Stmt::Let { value, .. } | Stmt::Assign { value, .. } => visit(value, facts),
+                    Stmt::Let { value, .. } => visit(value, facts),
+                    Stmt::Assign { path, value, .. } => {
+                        if !path.is_empty() {
+                            facts.operations.insert("element or field assignment");
+                        }
+                        for step in path {
+                            if let PlaceStep::Index(index, _) = step {
+                                visit(index, facts);
+                            }
+                        }
+                        visit(value, facts);
+                    }
                     Stmt::Push { value, .. } => {
                         facts.operations.insert("mutable append");
                         visit(value, facts);

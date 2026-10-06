@@ -1,6 +1,6 @@
 use crate::ast::{
-    EnumDecl, EnumVariant, Expr, ExprKind, Function, ImportDecl, Op, Pattern, PatternKind, Program,
-    Record, Span, Stmt, Type,
+    EnumDecl, EnumVariant, Expr, ExprKind, Function, ImportDecl, Op, Pattern, PatternKind,
+    PlaceStep, Program, Record, Span, Stmt, Type,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Kind, Token};
@@ -436,6 +436,7 @@ impl Parser {
                 let end = self.expect(Kind::Semicolon)?.span;
                 stmts.push(Stmt::Assign {
                     name,
+                    path: Vec::new(),
                     value,
                     span: first.join(end),
                 });
@@ -478,7 +479,24 @@ impl Parser {
                 });
             } else {
                 let value = self.expr(0)?;
-                if self.at(&Kind::Semicolon) {
+                if self.at(&Kind::Eq) {
+                    let (name, path) = place(value)?;
+                    self.bump();
+                    let assigned = self.expr(0)?;
+                    let end = self.expect(Kind::Semicolon)?.span;
+                    let span = path
+                        .first()
+                        .map_or(end, |step| match step {
+                            PlaceStep::Index(_, span) | PlaceStep::Field(_, span) => *span,
+                        })
+                        .join(end);
+                    stmts.push(Stmt::Assign {
+                        name,
+                        path,
+                        value: assigned,
+                        span,
+                    });
+                } else if self.at(&Kind::Semicolon) {
                     self.bump();
                     stmts.push(Stmt::Expr(value));
                 } else if !self.at(&Kind::RBrace) && value.is_block_like() {
@@ -900,5 +918,27 @@ impl Parser {
             }
         };
         Ok(Pattern { kind, span })
+    }
+}
+
+/// Convert a parsed `name[index].field...` expression into an assignment target.
+fn place(expr: Expr) -> Result<(String, Vec<PlaceStep>), Diagnostic> {
+    match expr.kind {
+        ExprKind::Var(name) => Ok((name, Vec::new())),
+        ExprKind::Index(base, index) => {
+            let (name, mut path) = place(*base)?;
+            path.push(PlaceStep::Index(*index, expr.span));
+            Ok((name, path))
+        }
+        ExprKind::Field(base, field) => {
+            let (name, mut path) = place(*base)?;
+            path.push(PlaceStep::Field(field, expr.span));
+            Ok((name, path))
+        }
+        _ => Err(Diagnostic::new(
+            "E002",
+            expr.span,
+            "assignment target must be a local name, element, or field",
+        )),
     }
 }

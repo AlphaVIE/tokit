@@ -187,6 +187,14 @@ pub enum ExprKind {
     Block(Vec<Stmt>, Option<Box<Expr>>),
 }
 
+/// One step of an assignment target such as `grid[y].cells[x]`. The span
+/// covers the target up to and including this step.
+#[derive(Clone, Debug)]
+pub enum PlaceStep {
+    Index(Expr, Span),
+    Field(String, Span),
+}
+
 #[derive(Clone, Debug)]
 pub enum Stmt {
     Let {
@@ -198,6 +206,8 @@ pub enum Stmt {
     },
     Assign {
         name: String,
+        /// Element and field steps below the binding; empty for `name = value`.
+        path: Vec<PlaceStep>,
         value: Expr,
         span: Span,
     },

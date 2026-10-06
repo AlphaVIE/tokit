@@ -54,6 +54,8 @@ Integer and float arithmetic supports `%` as a truncated remainder; integer rema
 
 Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`, and `-0.0`. Arithmetic follows IEEE 754, including infinities and NaN; literal overflow is rejected. [float64.tok](examples/float64.tok) shows a typed function. There is no implicit conversion between float and integer types; `f64(n)` converts integers, `i32(x)`/`i64(x)` truncate floats with an `Option` result, and `parse_f64(String)` reads decimal text.
 
+Mutable bindings support element and field assignment such as `xs[i]=v;` and `grid.rows[y][x].alive=true;`, with bounds checks in both backends.
+
 Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
 
 Mutable strings support `text.push(piece);` with a `String` piece. [string_builder.tok](examples/string_builder.tok) demonstrates append without rebuilding the accumulated text on each step.

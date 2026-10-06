@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Expr, ExprKind, PatternKind, Program, SourceId, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, PatternKind, PlaceStep, Program, SourceId, Span, Stmt, Type};
 use crate::diagnostic::Diagnostic;
 use crate::sources::SourceMap;
 
@@ -388,10 +388,17 @@ impl Resolver<'_> {
                 }
                 self.expr(value)?;
             }
-            Stmt::Assign { value, .. }
-            | Stmt::Push { value, .. }
-            | Stmt::Return { value, .. }
-            | Stmt::Expr(value) => self.expr(value)?,
+            Stmt::Assign { path, value, .. } => {
+                for step in path {
+                    if let PlaceStep::Index(index, _) = step {
+                        self.expr(index)?;
+                    }
+                }
+                self.expr(value)?;
+            }
+            Stmt::Push { value, .. } | Stmt::Return { value, .. } | Stmt::Expr(value) => {
+                self.expr(value)?
+            }
             Stmt::For { iterable, body, .. } => {
                 self.expr(iterable)?;
                 self.expr(body)?;

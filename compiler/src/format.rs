@@ -1,6 +1,6 @@
 //! Canonical whitespace for the experimental token grammar.
 
-use crate::ast::{Expr, ExprKind, Stmt};
+use crate::ast::{Expr, ExprKind, PlaceStep, Stmt};
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{self, Kind, Token};
 
@@ -222,10 +222,17 @@ impl BlockCompactor<'_> {
 
     fn stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Let { value, .. }
-            | Stmt::Assign { value, .. }
-            | Stmt::Push { value, .. }
-            | Stmt::Return { value, .. } => self.expr(value),
+            Stmt::Assign { path, value, .. } => {
+                for step in path {
+                    if let PlaceStep::Index(index, _) = step {
+                        self.expr(index);
+                    }
+                }
+                self.expr(value);
+            }
+            Stmt::Let { value, .. } | Stmt::Push { value, .. } | Stmt::Return { value, .. } => {
+                self.expr(value)
+            }
             Stmt::For { iterable, body, .. } => {
                 self.expr(iterable);
                 self.expr(body);

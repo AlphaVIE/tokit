@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    EnumVariant, Expr, ExprKind, Op, Pattern, PatternKind, Program, Span, Stmt, Type,
+    EnumVariant, Expr, ExprKind, Op, Pattern, PatternKind, PlaceStep, Program, Span, Stmt, Type,
 };
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
@@ -603,8 +603,15 @@ fn expression_is_spawn_safe(
         }
         ExprKind::Block(stmts, tail) => {
             stmts.iter().all(|stmt| match stmt {
+                Stmt::Assign { path, value, .. } => {
+                    path.iter().all(|step| match step {
+                        PlaceStep::Index(index, _) => {
+                            expression_is_spawn_safe(index, program, visiting)
+                        }
+                        PlaceStep::Field(..) => true,
+                    }) && expression_is_spawn_safe(value, program, visiting)
+                }
                 Stmt::Let { value, .. }
-                | Stmt::Assign { value, .. }
                 | Stmt::Push { value, .. }
                 | Stmt::Return { value, .. }
                 | Stmt::Expr(value) => expression_is_spawn_safe(value, program, visiting),
@@ -1048,34 +1055,14 @@ fn infer(
             if actual == Type::Never {
                 return Ok(Type::Never);
             }
-            let (name, args) = match actual {
-                Type::Named(name) => (name, Vec::new()),
-                Type::Applied(name, args) => (name, args),
-                _ => {
-                    return Err(Diagnostic::new(
-                        "E113",
-                        value.span,
-                        "field access requires a record",
-                    ));
-                }
-            };
-            let signature = signatures
-                .get(&name)
-                .ok_or_else(|| Diagnostic::new("E113", expr.span, "unknown record"))?;
-            let inferred: HashMap<String, Type> =
-                signature.type_params.iter().cloned().zip(args).collect();
-            signature
-                .fields
-                .as_ref()
-                .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
-                .map(|(_, ty)| substitute(ty, &inferred))
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        "E113",
-                        expr.span,
-                        format!("unknown field {field} on {name}"),
-                    )
-                })
+            if !matches!(actual, Type::Named(_) | Type::Applied(..)) {
+                return Err(Diagnostic::new(
+                    "E113",
+                    value.span,
+                    "field access requires a record",
+                ));
+            }
+            field_type(actual, field, signatures, expr.span)
         }
         ExprKind::Ok(inner) => {
             let inner = type_of(inner, env, signatures, return_type, types)?;
@@ -1462,7 +1449,12 @@ fn infer(
                         );
                         (actual, *span)
                     }
-                    Stmt::Assign { name, value, span } => {
+                    Stmt::Assign {
+                        name,
+                        path,
+                        value,
+                        span,
+                    } => {
                         let binding = scope.get(name).ok_or_else(|| {
                             Diagnostic::new("E101", *span, format!("unknown name {name}"))
                         })?;
@@ -1473,8 +1465,36 @@ fn infer(
                                 format!("cannot assign immutable binding {name}"),
                             ));
                         }
+                        let mut target = binding.ty.clone();
+                        for step in path {
+                            // The backends read each step's container type.
+                            let container = target;
+                            target = match step {
+                                PlaceStep::Index(index, step_span) => {
+                                    let index_type =
+                                        type_of(index, &scope, signatures, return_type, types)?;
+                                    require(&Type::I32, &index_type, index.span, "array index")?;
+                                    types.insert(*step_span, container.clone());
+                                    match container {
+                                        Type::Array(element) => *element,
+                                        Type::Bytes => Type::I32,
+                                        _ => {
+                                            return Err(Diagnostic::new(
+                                                "E110",
+                                                *step_span,
+                                                "indexed assignment requires an array or Bytes",
+                                            ));
+                                        }
+                                    }
+                                }
+                                PlaceStep::Field(field, step_span) => {
+                                    types.insert(*step_span, container.clone());
+                                    field_type(container, field, signatures, *step_span)?
+                                }
+                            };
+                        }
                         let actual = type_of(value, &scope, signatures, return_type, types)?;
-                        require(&binding.ty, &actual, value.span, "assignment")?;
+                        require(&target, &actual, value.span, "assignment")?;
                         (actual, *span)
                     }
                     Stmt::Push { name, value, span } => {
@@ -1578,4 +1598,34 @@ fn infer(
             }
         }
     }
+}
+
+/// The type of `field` on a record value of type `record`.
+fn field_type(
+    record: Type,
+    field: &str,
+    signatures: &HashMap<String, Signature>,
+    span: Span,
+) -> Result<Type, Diagnostic> {
+    let (name, args) = match record {
+        Type::Named(name) => (name, Vec::new()),
+        Type::Applied(name, args) => (name, args),
+        _ => {
+            return Err(Diagnostic::new(
+                "E113",
+                span,
+                "field access requires a record",
+            ));
+        }
+    };
+    let signature = signatures
+        .get(&name)
+        .ok_or_else(|| Diagnostic::new("E113", span, "unknown record"))?;
+    let inferred: HashMap<String, Type> = signature.type_params.iter().cloned().zip(args).collect();
+    signature
+        .fields
+        .as_ref()
+        .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
+        .map(|(_, ty)| substitute(ty, &inferred))
+        .ok_or_else(|| Diagnostic::new("E113", span, format!("unknown field {field} on {name}")))
 }
