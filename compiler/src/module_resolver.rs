@@ -435,13 +435,17 @@ impl Resolver<'_> {
             ExprKind::Match(value, arms) => {
                 self.expr(value)?;
                 for (pattern, body) in arms {
-                    if let PatternKind::Variant(name, _, _) = &mut pattern.kind {
-                        *name = self.lookup(name, UseKind::Enum, pattern.span)?;
+                    let mut current = Some(&mut *pattern);
+                    while let Some(part) = current {
+                        if let PatternKind::Variant(name, _, _) = &mut part.kind {
+                            *name = self.lookup(name, UseKind::Enum, part.span)?;
+                        }
+                        current = part.payload_mut();
                     }
                     let depth = self.locals.borrow().len();
-                    if let Some(binding) = pattern.binding() {
-                        self.locals.borrow_mut().push(binding.to_owned());
-                    }
+                    self.locals
+                        .borrow_mut()
+                        .extend(pattern.bindings().into_iter().map(str::to_owned));
                     let result = self.expr(body);
                     self.locals.borrow_mut().truncate(depth);
                     result?;

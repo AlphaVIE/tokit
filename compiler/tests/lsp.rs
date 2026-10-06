@@ -496,3 +496,24 @@ fn lsp_completes_locals_declarations_builtins_and_fields() {
         "other function's parameter"
     );
 }
+
+#[test]
+fn lsp_resolves_nested_and_bare_pattern_bindings() {
+    let text = "enum S{C(I)}\nf(x:Option<S>)->I{match x{Some(S::C(r))=>r,other=>match other{None=>0,_=>1}}}";
+    let responses = session(
+        text,
+        &[
+            at(1, "textDocument/definition", 1, 41),
+            at(2, "textDocument/definition", 1, 56),
+        ],
+    );
+    let start = |id: i64| {
+        responses
+            .iter()
+            .find(|message| message["id"] == id)
+            .unwrap()["result"]["range"]["start"]
+            .clone()
+    };
+    assert_eq!(start(1), json!({"line":1,"character":36}));
+    assert_eq!(start(2), json!({"line":1,"character":43}));
+}

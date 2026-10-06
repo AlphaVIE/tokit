@@ -232,7 +232,12 @@ fn binding(
                     && lambda_parameter(&inside, at).is_some_and(opening))
                 || (matches!(previous, Some(Kind::LParen))
                     && next == Some(&Kind::RParen)
-                    && inside.get(at + 2).map(|token| &token.kind) == Some(&Kind::FatArrow))
+                    && inside[at + 1..]
+                        .iter()
+                        .find(|token| token.kind != Kind::RParen)
+                        .is_some_and(|token| token.kind == Kind::FatArrow))
+                || (matches!(previous, Some(Kind::LBrace | Kind::Comma))
+                    && next == Some(&Kind::FatArrow))
         };
         if let Some(at) = (0..inside.len())
             .rev()

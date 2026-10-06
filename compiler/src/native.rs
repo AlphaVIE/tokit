@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ast::{Expr, ExprKind, Op, PatternKind, PlaceStep, Program, Span, Stmt, Type};
+use crate::ast::{Expr, ExprKind, Op, Pattern, PatternKind, PlaceStep, Program, Span, Stmt, Type};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::ir::{self, BinaryOp, InstructionKind};
@@ -313,6 +313,36 @@ fn __tok_net_accept(listener: __TokListenerHandle) -> Result<__TokConn, __TokIoE
     __tok_tcp_accept(&listener.0).map(__TokConn).map_err(__tok_net_error)
 }
 "#;
+
+/// The Rust pattern for `pattern`. String literals below the top level
+/// become fresh bindings with `==` guards, since owned `String` payloads
+/// cannot be matched against literals directly.
+fn rust_pattern(pattern: &Pattern, top_level_str: bool, guards: &mut Vec<String>) -> String {
+    match &pattern.kind {
+        PatternKind::Int(value) => value.to_string(),
+        PatternKind::I64(value) => format!("{value}i64"),
+        PatternKind::Wildcard => "_".to_owned(),
+        PatternKind::Bind(name) => user_name(name),
+        PatternKind::Ok(inner) => format!("Ok({})", rust_pattern(inner, false, guards)),
+        PatternKind::Err(inner) => format!("Err({})", rust_pattern(inner, false, guards)),
+        PatternKind::Some(inner) => format!("Some({})", rust_pattern(inner, false, guards)),
+        PatternKind::None => "None".to_owned(),
+        PatternKind::Bool(value) => value.to_string(),
+        PatternKind::String(value) if top_level_str => format!("{value:?}"),
+        PatternKind::String(value) => {
+            let name = format!("__tok_text{}", guards.len());
+            guards.push(format!("{name} == {value:?}"));
+            name
+        }
+        PatternKind::Variant(name, variant, inner) => {
+            let prefix = enum_path(name, variant);
+            match inner {
+                Some(inner) => format!("{prefix}({})", rust_pattern(inner, false, guards)),
+                None => prefix,
+            }
+        }
+    }
+}
 
 fn is_map(ty: Option<&Type>) -> bool {
     matches!(ty, Some(Type::Applied(name, _)) if name == builtins::MAP)
@@ -717,28 +747,25 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
             )
         }
         ExprKind::Match(value, arms) => {
+            let string_match = matches!(types.get(&value.span), Some(Type::String));
             let arms = arms
                 .iter()
                 .map(|(pattern, body)| {
-                    let pattern = match &pattern.kind {
-                        PatternKind::Int(value) => value.to_string(),
-                        PatternKind::I64(value) => format!("{value}i64"),
-                        PatternKind::Wildcard => "_".to_owned(),
-                        PatternKind::Ok(name) => format!("Ok({})", user_name(name)),
-                        PatternKind::Err(name) => format!("Err({})", user_name(name)),
-                        PatternKind::Some(name) => format!("Some({})", user_name(name)),
-                        PatternKind::None => "None".to_owned(),
-                        PatternKind::Bool(value) => value.to_string(),
-                        PatternKind::String(value) => format!("{value:?}"),
-                        PatternKind::Variant(name, variant, binding) => {
-                            let prefix = enum_path(name, variant);
-                            match binding {
-                                Some(name) => format!("{prefix}({})", user_name(name)),
-                                None => prefix,
-                            }
-                        }
-                    };
-                    format!("{pattern} => {}", emit_expr(body, source, types))
+                    let body = emit_expr(body, source, types);
+                    if let (true, PatternKind::Bind(name)) = (string_match, &pattern.kind) {
+                        // The scrutinee is matched as `&str`; bind an owned copy.
+                        return format!(
+                            "__tok_bound => {{ let {}: String = __tok_bound.to_owned(); {body} }}",
+                            user_name(name)
+                        );
+                    }
+                    let mut guards = Vec::new();
+                    let pattern = rust_pattern(pattern, string_match, &mut guards);
+                    if guards.is_empty() {
+                        format!("{pattern} => {body}")
+                    } else {
+                        format!("{pattern} if {} => {body}", guards.join(" && "))
+                    }
                 })
                 .collect::<Vec<_>>()
                 .join(",");
