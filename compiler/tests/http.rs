@@ -25,7 +25,7 @@ fn native_available() -> bool {
 fn build(source_path: &Path, label: &str) -> PathBuf {
     let source = std::fs::read_to_string(source_path).unwrap();
     let binary = std::env::temp_dir().join(format!(
-        "tokit-http-{label}-{}{}",
+        "tokit-http-bin-{label}-{}{}",
         std::process::id(),
         std::env::consts::EXE_SUFFIX
     ));
