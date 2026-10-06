@@ -188,6 +188,12 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) {
                 facts.operations.insert("TCP transfer");
                 facts.effects.insert("net.connect");
+            } else if name == builtins::LISTEN || name == builtins::ACCEPT {
+                facts.operations.insert("TCP listener");
+                facts.effects.insert("net.listen");
+            } else if name == builtins::HTTP_READ || name == builtins::HTTP_WRITE {
+                facts.operations.insert("HTTP over a connection");
+                facts.effects.insert("net.listen");
             } else if name == builtins::SERVE {
                 facts.operations.insert("HTTP server");
                 facts.effects.insert("net.listen");

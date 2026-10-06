@@ -30,6 +30,7 @@ pub enum Value {
     Task(Box<Value>),
     Closure(Arc<Closure>),
     Conn(Socket),
+    Listener(ListenerHandle),
     Unit,
 }
 
@@ -48,6 +49,24 @@ impl Eq for Socket {}
 impl std::fmt::Debug for Socket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Socket")
+    }
+}
+
+/// A listening socket; copies share it and compare by identity.
+#[derive(Clone)]
+pub struct ListenerHandle(crate::http::__TokListener);
+
+impl PartialEq for ListenerHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ListenerHandle {}
+
+impl std::fmt::Debug for ListenerHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Listener")
     }
 }
 
@@ -89,6 +108,7 @@ impl std::fmt::Display for Value {
             }
             Self::Closure(_) => f.write_str("<fn>"),
             Self::Conn(_) => f.write_str("<conn>"),
+            Self::Listener(_) => f.write_str("<listener>"),
             Self::Map(entries) => {
                 f.write_str("{")?;
                 for (index, (key, value)) in entries.iter().enumerate() {
@@ -1947,6 +1967,32 @@ fn string_field(value: &Value, field: &str) -> String {
     }
 }
 
+fn request_value(request: crate::http::__TokHttpRequest) -> Value {
+    Value::Record(
+        builtins::REQUEST.to_owned(),
+        vec![
+            ("method".to_owned(), Value::String(request.method)),
+            ("path".to_owned(), Value::String(request.path)),
+            ("query".to_owned(), Value::String(request.query)),
+            ("headers".to_owned(), headers_value(request.headers)),
+            ("body".to_owned(), Value::String(request.body)),
+        ],
+    )
+}
+
+fn response_from(response: &Value) -> crate::http::__TokHttpResponse {
+    crate::http::__TokHttpResponse {
+        status: match record_field(response, "status") {
+            Some(Value::I32(status)) => *status,
+            _ => 500,
+        },
+        headers: record_field(response, "headers")
+            .map(headers_from)
+            .unwrap_or_default(),
+        body: string_field(response, "body"),
+    }
+}
+
 fn response_value(response: crate::http::__TokHttpResponse) -> Value {
     Value::Record(
         builtins::RESPONSE.to_owned(),
@@ -1980,34 +2026,21 @@ fn eval_http(
                 return Some(Ok(io_error_value("Denied")));
             }
             let mut failure = None;
-            let served = crate::http::__tok_http_serve(addr, *limit, &mut |request| {
-                let request = Value::Record(
-                    builtins::REQUEST.to_owned(),
-                    vec![
-                        ("method".to_owned(), Value::String(request.method)),
-                        ("path".to_owned(), Value::String(request.path)),
-                        ("query".to_owned(), Value::String(request.query)),
-                        ("headers".to_owned(), headers_value(request.headers)),
-                        ("body".to_owned(), Value::String(request.body)),
-                    ],
-                );
-                match call_closure(handler, vec![request], program, depth, runtime, span) {
-                    Ok(response) => Some(crate::http::__TokHttpResponse {
-                        status: match record_field(&response, "status") {
-                            Some(Value::I32(status)) => *status,
-                            _ => 500,
-                        },
-                        headers: record_field(&response, "headers")
-                            .map(headers_from)
-                            .unwrap_or_default(),
-                        body: string_field(&response, "body"),
-                    }),
+            let served =
+                crate::http::__tok_http_serve(addr, *limit, &mut |request| match call_closure(
+                    handler,
+                    vec![request_value(request)],
+                    program,
+                    depth,
+                    runtime,
+                    span,
+                ) {
+                    Ok(response) => Some(response_from(&response)),
                     Err(error) => {
                         failure = Some(error);
                         None
                     }
-                }
-            });
+                });
             Some(match (failure, served) {
                 (Some(error), _) => Err(error),
                 (None, Ok(())) => Ok(Value::Ok(Box::new(Value::Unit))),
@@ -2036,6 +2069,31 @@ fn eval_http(
             crate::http::__tok_tcp_close(&socket.0);
             Some(Ok(Value::Unit))
         }
+        (builtins::LISTEN, [Value::String(addr)]) => Some(Ok(match crate::http::__tok_tcp_listen(
+            runtime.net.as_deref(),
+            addr,
+        ) {
+            Ok(listener) => Value::Ok(Box::new(Value::Listener(ListenerHandle(listener)))),
+            Err(variant) => io_error_value(variant),
+        })),
+        (builtins::ACCEPT, [Value::Listener(listener)]) => {
+            Some(Ok(match crate::http::__tok_tcp_accept(&listener.0) {
+                Ok(socket) => Value::Ok(Box::new(Value::Conn(Socket(socket)))),
+                Err(variant) => io_error_value(variant),
+            }))
+        }
+        (builtins::HTTP_READ, [Value::Conn(socket)]) => {
+            Some(Ok(match crate::http::__tok_http_read(&socket.0) {
+                Ok(request) => Value::Ok(Box::new(request_value(request))),
+                Err(variant) => io_error_value(variant),
+            }))
+        }
+        (builtins::HTTP_WRITE, [Value::Conn(socket), response]) => Some(Ok(
+            match crate::http::__tok_http_write(&socket.0, &response_from(response)) {
+                Ok(()) => Value::Ok(Box::new(Value::Unit)),
+                Err(variant) => io_error_value(variant),
+            },
+        )),
         (
             builtins::HTTP_REQUEST,
             [

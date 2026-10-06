@@ -49,8 +49,11 @@ fn runtime_prelude(body: &str) -> String {
         || body.contains("__tok_into_bytes")
         || body.contains("__tok_net_")
         || body.contains("__TokConn")
+        || body.contains("__TokListenerHandle")
         || body.contains("__tok_c_");
-    let uses_net = body.contains("__tok_net_") || body.contains("__TokConn");
+    let uses_net = body.contains("__tok_net_")
+        || body.contains("__TokConn")
+        || body.contains("__TokListenerHandle");
     let mut prelude = String::from(PRELUDE_CORE);
     if body.contains("i64") {
         prelude.push_str(PRELUDE_I64);
@@ -80,7 +83,10 @@ fn runtime_prelude(body: &str) -> String {
     if uses_net {
         prelude.push_str(PRELUDE_HTTP);
         prelude.push_str(TCP_ADAPTERS);
-        if body.contains("__tok_net_serve") || body.contains("__tok_net_request") {
+        if body.contains("__tok_net_serve")
+            || body.contains("__tok_net_request")
+            || body.contains("__tok_net_http_")
+        {
             prelude.push_str(&http_adapters());
         }
     }
@@ -116,6 +122,7 @@ fn rust_type(ty: &Type) -> String {
         Type::Named(name) if name == builtins::PARSE_ERROR => "__TokParseError".to_owned(),
         Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
         Type::Named(name) if name == builtins::CONN => "__TokConn".to_owned(),
+        Type::Named(name) if name == builtins::LISTENER => "__TokListenerHandle".to_owned(),
         Type::Named(name) => user_name(name),
         Type::Applied(name, args) if name == builtins::MAP => format!(
             "std::collections::BTreeMap<{},{}>",
@@ -257,6 +264,14 @@ fn http_adapters() -> String {
         Some(__TokHttpResponse {{ status: response.{status}, headers: response.{headers}.into_iter().collect(), body: response.{body} }})
     }}).map_err(__tok_net_error)
 }}
+fn __tok_net_http_read(conn: __TokConn) -> Result<{request}, __TokIoError> {{
+    let request = __tok_http_read(&conn.0).map_err(__tok_net_error)?;
+    Ok({request} {{ {method}: request.method, {path}: request.path, {query}: request.query, {headers}: request.headers.into_iter().collect(), {body}: request.body }})
+}}
+fn __tok_net_http_write(conn: __TokConn, response: {response}) -> Result<(), __TokIoError> {{
+    __tok_flush();
+    __tok_http_write(&conn.0, &__TokHttpResponse {{ status: response.{status}, headers: response.{headers}.into_iter().collect(), body: response.{body} }}).map_err(__tok_net_error)
+}}
 fn __tok_net_request(method: String, url: String, headers: std::collections::BTreeMap<String, String>, body: String) -> Result<{response}, __TokIoError> {{
     let headers = headers.into_iter().collect::<Vec<_>>();
     let response = __tok_http_request(__TOK_NET_GRANT.get().map(String::as_str), &method, &url, &headers, &body).map_err(__tok_net_error)?;
@@ -288,6 +303,14 @@ fn __tok_net_recv(conn: __TokConn, max: i32) -> Result<__TokBytes, __TokIoError>
     __tok_tcp_recv(&conn.0, max).map(|data| __TokBytes(std::sync::Arc::new(data))).map_err(__tok_net_error)
 }
 fn __tok_net_close(conn: __TokConn) { __tok_tcp_close(&conn.0) }
+#[derive(Clone)] struct __TokListenerHandle(__TokListener);
+impl __TokRender for __TokListenerHandle { fn tok_render(&self) -> String { "<listener>".to_owned() } }
+fn __tok_net_listen(addr: String) -> Result<__TokListenerHandle, __TokIoError> {
+    __tok_tcp_listen(__TOK_NET_GRANT.get().map(String::as_str), &addr).map(__TokListenerHandle).map_err(__tok_net_error)
+}
+fn __tok_net_accept(listener: __TokListenerHandle) -> Result<__TokConn, __TokIoError> {
+    __tok_tcp_accept(&listener.0).map(__TokConn).map_err(__tok_net_error)
+}
 "#;
 
 fn is_map(ty: Option<&Type>) -> bool {
@@ -437,6 +460,10 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::TCP_SEND => "__tok_net_send".to_owned(),
                 builtins::TCP_RECV => "__tok_net_recv".to_owned(),
                 builtins::TCP_CLOSE => "__tok_net_close".to_owned(),
+                builtins::LISTEN => "__tok_net_listen".to_owned(),
+                builtins::ACCEPT => "__tok_net_accept".to_owned(),
+                builtins::HTTP_READ => "__tok_net_http_read".to_owned(),
+                builtins::HTTP_WRITE => "__tok_net_http_write".to_owned(),
                 builtins::HTTP_REQUEST => "__tok_net_request".to_owned(),
                 builtins::LIST_DIR => "__tok_read_list_dir".to_owned(),
                 builtins::EXISTS => "__tok_read_exists".to_owned(),

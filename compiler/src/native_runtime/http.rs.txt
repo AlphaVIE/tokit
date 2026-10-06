@@ -243,3 +243,36 @@ pub(crate) fn __tok_tcp_close(socket: &__TokSocket) {
         let _ = stream.shutdown(std::net::Shutdown::Both);
     }
 }
+
+// Listening sockets. Accepted connections are ordinary `Conn` sockets.
+pub(crate) type __TokListener = std::sync::Arc<std::net::TcpListener>;
+
+/// Bind `addr` when the `--allow-net` grant covers it.
+pub(crate) fn __tok_tcp_listen(grant: Option<&str>, addr: &str) -> Result<__TokListener, &'static str> {
+    if !__tok_http_allowed(grant, addr) { return Err("Denied"); }
+    std::net::TcpListener::bind(addr).map(std::sync::Arc::new).map_err(|_| "Other")
+}
+
+/// Wait for the next connection.
+pub(crate) fn __tok_tcp_accept(listener: &__TokListener) -> Result<__TokSocket, &'static str> {
+    let (stream, _) = listener.accept().map_err(|_| "Other")?;
+    let _ = stream.set_nodelay(true);
+    Ok(std::sync::Arc::new(std::sync::Mutex::new(Some(stream))))
+}
+
+/// Read one HTTP/1.1 request from a connection, waiting at most 30 seconds.
+pub(crate) fn __tok_http_read(socket: &__TokSocket) -> Result<__TokHttpRequest, &'static str> {
+    let mut guard = socket.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let stream = guard.as_mut().ok_or("Other")?;
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+    let request = __tok_http_read_request(stream);
+    let _ = stream.set_read_timeout(None);
+    request
+}
+
+/// Write one response with `content-length` and `connection: close`.
+pub(crate) fn __tok_http_write(socket: &__TokSocket, response: &__TokHttpResponse) -> Result<(), &'static str> {
+    let mut guard = socket.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let stream = guard.as_mut().ok_or("Other")?;
+    __tok_http_write_response(stream, response).map_err(|_| "Other")
+}

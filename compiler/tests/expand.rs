@@ -39,6 +39,7 @@ fn expanded_programs_check_and_run_the_same() {
             "read_line",
             "read_stdin",
             "serve(",
+            "listen(",
             "tcp_",
             "http_request",
             "sleep_ms",
