@@ -746,6 +746,9 @@ fn eval_builtin(
             runtime.args.iter().cloned().map(Value::String).collect(),
         )));
     }
+    if let Some(value) = eval_string_builtin(name, &values) {
+        return Ok(Flow::Value(value));
+    }
     if name == builtins::PRINT {
         let [Value::String(text)] = values.as_slice() else {
             return Err(Diagnostic::new("E204", expr.span, "invalid print call"));
@@ -1076,6 +1079,15 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
     if let (Value::String(a), Op::Add, Value::String(b)) = (&left, op, &right) {
         return Ok(Value::String(format!("{a}{b}")));
     }
+    if let (Value::String(a), Value::String(b)) = (&left, &right) {
+        match op {
+            Op::Lt => return Ok(Value::Bool(a < b)),
+            Op::Le => return Ok(Value::Bool(a <= b)),
+            Op::Gt => return Ok(Value::Bool(a > b)),
+            Op::Ge => return Ok(Value::Bool(a >= b)),
+            _ => {}
+        }
+    }
     if matches!(op, Op::Eq | Op::Ne) {
         if let (Value::F64(a), Value::F64(b)) = (&left, &right) {
             let equal = f64::from_bits(*a) == f64::from_bits(*b);
@@ -1194,4 +1206,59 @@ fn parse_f64(text: &str) -> Result<f64, &'static str> {
     } else {
         Err("OutOfRange")
     }
+}
+
+/// Pure string builtins, including string `join` and `String(...)` conversions.
+fn eval_string_builtin(name: &str, values: &[Value]) -> Option<Value> {
+    let text = |value: &str| Value::String(value.to_owned());
+    let strings = |items: Vec<&str>| Value::Array(items.into_iter().map(text).collect());
+    Some(match (name, values) {
+        (
+            builtins::TO_STRING,
+            [value @ (Value::I32(_) | Value::I64(_) | Value::F64(_) | Value::Bool(_))],
+        ) => Value::String(value.to_string()),
+        (builtins::JOIN, [Value::Array(parts), Value::String(separator)]) => Value::String(
+            parts
+                .iter()
+                .map(|part| match part {
+                    Value::String(part) => part.as_str(),
+                    _ => "",
+                })
+                .collect::<Vec<_>>()
+                .join(separator),
+        ),
+        (builtins::CHARS, [Value::String(value)]) => Value::Array(
+            value
+                .chars()
+                .map(|c| Value::String(c.to_string()))
+                .collect(),
+        ),
+        (builtins::SPLIT, [Value::String(value), Value::String(separator)]) => {
+            if separator.is_empty() {
+                strings(vec![value])
+            } else {
+                strings(value.split(separator.as_str()).collect())
+            }
+        }
+        (builtins::TRIM, [Value::String(value)]) => text(value.trim()),
+        (builtins::CONTAINS, [Value::String(value), Value::String(part)]) => {
+            Value::Bool(value.contains(part.as_str()))
+        }
+        (builtins::STARTS_WITH, [Value::String(value), Value::String(part)]) => {
+            Value::Bool(value.starts_with(part.as_str()))
+        }
+        (builtins::ENDS_WITH, [Value::String(value), Value::String(part)]) => {
+            Value::Bool(value.ends_with(part.as_str()))
+        }
+        (builtins::REPLACE, [Value::String(value), Value::String(from), Value::String(to)]) => {
+            if from.is_empty() {
+                text(value)
+            } else {
+                Value::String(value.replace(from.as_str(), to))
+            }
+        }
+        (builtins::LOWER, [Value::String(value)]) => Value::String(value.to_lowercase()),
+        (builtins::UPPER, [Value::String(value)]) => Value::String(value.to_uppercase()),
+        _ => return None,
+    })
 }

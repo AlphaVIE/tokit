@@ -21,6 +21,7 @@ const PRELUDE_PARSE: &str = include_str!("native_runtime/parse.rs.txt");
 const PRELUDE_UTF8: &str = include_str!("native_runtime/utf8.rs.txt");
 const PRELUDE_TASKS: &str = include_str!("native_runtime/tasks.rs.txt");
 const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt");
+const PRELUDE_STRINGS: &str = include_str!("native_runtime/strings.rs.txt");
 
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
@@ -49,6 +50,9 @@ fn runtime_prelude(body: &str) -> String {
     }
     if uses_utf8 {
         prelude.push_str(PRELUDE_UTF8);
+    }
+    if body.contains("__tok_str") {
+        prelude.push_str(PRELUDE_STRINGS);
     }
     if body.contains("__TokTask") || body.contains("__tok_spawn") || body.contains("__tok_join") {
         prelude.push_str(PRELUDE_TASKS);
@@ -255,6 +259,17 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PRINT => "__tok_print".to_owned(),
+                builtins::TO_STRING => "__tok_string".to_owned(),
+                builtins::JOIN if args.len() == 2 => "__tok_str_join".to_owned(),
+                builtins::CHARS => "__tok_str_chars".to_owned(),
+                builtins::SPLIT => "__tok_str_split".to_owned(),
+                builtins::TRIM => "__tok_str_trim".to_owned(),
+                builtins::CONTAINS => "__tok_str_contains".to_owned(),
+                builtins::STARTS_WITH => "__tok_str_starts_with".to_owned(),
+                builtins::ENDS_WITH => "__tok_str_ends_with".to_owned(),
+                builtins::REPLACE => "__tok_str_replace".to_owned(),
+                builtins::LOWER => "__tok_str_lower".to_owned(),
+                builtins::UPPER => "__tok_str_upper".to_owned(),
                 builtins::READ_LINE => "__tok_stdin_line".to_owned(),
                 builtins::READ_STDIN => "__tok_stdin_all".to_owned(),
                 builtins::EXIT => "__tok_exit".to_owned(),

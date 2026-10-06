@@ -1,0 +1,15 @@
+fn __tok_string<T: __TokRender>(value: T) -> String { value.tok_render() }
+fn __tok_str_join(parts: Vec<String>, separator: String) -> String { parts.join(&separator) }
+fn __tok_str_chars(text: String) -> Vec<String> { text.chars().map(String::from).collect() }
+fn __tok_str_split(text: String, separator: String) -> Vec<String> {
+    if separator.is_empty() { vec![text] } else { text.split(separator.as_str()).map(str::to_owned).collect() }
+}
+fn __tok_str_trim(text: String) -> String { text.trim().to_owned() }
+fn __tok_str_contains(text: String, part: String) -> bool { text.contains(part.as_str()) }
+fn __tok_str_starts_with(text: String, part: String) -> bool { text.starts_with(part.as_str()) }
+fn __tok_str_ends_with(text: String, part: String) -> bool { text.ends_with(part.as_str()) }
+fn __tok_str_replace(text: String, from: String, to: String) -> String {
+    if from.is_empty() { text } else { text.replace(from.as_str(), &to) }
+}
+fn __tok_str_lower(text: String) -> String { text.to_lowercase() }
+fn __tok_str_upper(text: String) -> String { text.to_uppercase() }

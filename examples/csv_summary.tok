@@ -1,0 +1,2 @@
+// Summarizes comma-separated rows from standard input: row count and normalized names.
+main()->Unit{let text=match read_stdin(){Ok(text)=>text,Err(error)=>{print("unreadable input");exit(2)}};var names:[String]=[];for row in lines(text){let cells=split(row,",");if len(cells)>0&&trim(cells[0])!=""{names.push(upper(trim(cells[0])));}}print("rows="+String(len(names)));print(join(names,";"));}

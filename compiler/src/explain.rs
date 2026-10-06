@@ -87,6 +87,22 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             } else if name == builtins::ARGS {
                 facts.operations.insert("program arguments");
                 facts.effects.insert("env.args");
+            } else if name == builtins::TO_STRING {
+                facts.operations.insert("string conversion");
+            } else if matches!(
+                name.as_str(),
+                builtins::CHARS
+                    | builtins::SPLIT
+                    | builtins::TRIM
+                    | builtins::CONTAINS
+                    | builtins::STARTS_WITH
+                    | builtins::ENDS_WITH
+                    | builtins::REPLACE
+                    | builtins::LOWER
+                    | builtins::UPPER
+            ) || (name == builtins::JOIN && args.len() == 2)
+            {
+                facts.operations.insert("string operation");
             } else if name == builtins::PRINT {
                 facts.operations.insert("standard output");
                 facts.effects.insert("io.stdout");
