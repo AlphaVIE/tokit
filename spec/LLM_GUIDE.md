@@ -80,7 +80,7 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 - Files (need `--allow-read`/`--allow-write`): `read_text`, `write_text`, `read_bytes`, `write_bytes`, `list_dir`, `exists`, `make_dir`, `remove_file`.
 - HTTP (needs `--allow-net`): `serve(addr,limit,|r|Response(200,Map(),"ok"))`, `http_request(method,url,headers,body)`; records `Request{method,path,query,headers,body}`, `Response{status,headers,body}`.
 - TCP (needs `--allow-net`): `tcp_connect(addr)->Result<Conn,IoError>`, `tcp_send(c,bytes)`, `tcp_recv(c,max)->Result<Bytes,IoError>` (empty at end of stream), `tcp_close(c)`. No TLS.
-- Bytes and crypto: `sha256`, `md5`, `hmac_sha256(key,data)`, `pbkdf2_sha256(pw,salt,iterations)`, `base64_encode`, `base64_decode->Option<Bytes>`, `hex`, `random_bytes(n)`.
+- Bytes and crypto: `sha256`, `sha1`, `md5`, `hmac_sha256(key,data)`, `pbkdf2_sha256(pw,salt,iterations)`, `base64_encode`, `base64_decode->Option<Bytes>`, `hex`, `random_bytes(n)`.
 - Bits (no `|`/`&` operators): `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(x,n)`, `shr(x,n)` on `I` or `L`.
 - Unit value: `()`, e.g. `Ok(())` in a `Result<Unit,E>` function.
 - Tasks: `let t=spawn f(x);` then `join(t)->Result<T,TaskError>`; spawned functions must be pure.

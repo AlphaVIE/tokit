@@ -115,6 +115,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         (builtins::SHR, vec![Type::I32, Type::I32], Type::I32),
         (builtins::SHA256, vec![Type::Bytes], Type::Bytes),
         (builtins::MD5, vec![Type::Bytes], Type::Bytes),
+        (builtins::SHA1, vec![Type::Bytes], Type::Bytes),
         (
             builtins::HMAC_SHA256,
             vec![Type::Bytes, Type::Bytes],
@@ -592,6 +593,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "shr"
                 | "sha256"
                 | "md5"
+                | "sha1"
                 | "hmac_sha256"
                 | "pbkdf2_sha256"
                 | "base64_encode"
@@ -707,6 +709,7 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "shr"
                 | "sha256"
                 | "md5"
+                | "sha1"
                 | "hmac_sha256"
                 | "pbkdf2_sha256"
                 | "base64_encode"
@@ -1084,6 +1087,7 @@ fn expression_is_spawn_safe(
                         | builtins::SHR
                         | builtins::SHA256
                         | builtins::MD5
+                        | builtins::SHA1
                         | builtins::HMAC_SHA256
                         | builtins::PBKDF2_SHA256
                         | builtins::BASE64_ENCODE

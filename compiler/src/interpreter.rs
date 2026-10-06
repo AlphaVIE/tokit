@@ -2067,6 +2067,7 @@ fn eval_crypto_builtin(name: &str, values: &[Value]) -> Option<Value> {
     Some(match (name, values) {
         (builtins::SHA256, [Value::Bytes(data)]) => bytes(c::__tok_sha256(data)),
         (builtins::MD5, [Value::Bytes(data)]) => bytes(c::__tok_md5(data)),
+        (builtins::SHA1, [Value::Bytes(data)]) => bytes(c::__tok_sha1(data)),
         (builtins::HMAC_SHA256, [Value::Bytes(key), Value::Bytes(data)]) => {
             bytes(c::__tok_hmac_sha256(key, data))
         }
