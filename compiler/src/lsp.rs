@@ -1,4 +1,4 @@
-//! Small stdio language server for live diagnostics and document symbols.
+//! Small stdio language server for diagnostics, symbols, definitions, and hovers.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -143,6 +143,156 @@ fn range(text: &str, span: Span) -> Json {
         "start": position(text, span.start),
         "end": position(text, span.end),
     })
+}
+
+/// The byte offset of an LSP position (line and UTF-16 column), clamped to the text.
+fn offset_at(text: &str, line: u64, character: u64) -> usize {
+    let mut start = 0;
+    for _ in 0..line {
+        match text[start..].find('\n') {
+            Some(newline) => start += newline + 1,
+            None => return text.len(),
+        }
+    }
+    let mut units = 0;
+    for (index, character_value) in text[start..].char_indices() {
+        if character_value == '\n' || units >= character {
+            return start + index;
+        }
+        units += character_value.len_utf16() as u64;
+    }
+    text.len()
+}
+
+/// The identifier token touching `offset`, if any.
+fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
+    crate::lexer::lex(text)
+        .ok()?
+        .into_iter()
+        .find_map(|token| match token.kind {
+            crate::lexer::Kind::Ident(name)
+                if token.span.start <= offset && offset <= token.span.end =>
+            {
+                Some((name, token.span))
+            }
+            _ => None,
+        })
+}
+
+/// Where `name`, used at `offset`, is bound: the nearest preceding local binding
+/// in the enclosing function, else a top-level declaration of that name.
+fn definition_span(text: &str, offset: usize) -> Option<Span> {
+    use crate::lexer::Kind;
+    let (name, usage) = identifier_at(text, offset)?;
+    let program = crate::parse(text).ok()?;
+    let tokens = crate::lexer::lex(text).ok()?;
+    let is_name = |kind: &Kind| matches!(kind, Kind::Ident(candidate) if *candidate == name);
+    if let Some(function) = program
+        .functions
+        .iter()
+        .find(|function| function.span.start <= usage.start && usage.end <= function.span.end)
+    {
+        let inside: Vec<_> = tokens
+            .iter()
+            .filter(|token| {
+                function.span.start <= token.span.start && token.span.end <= usage.start
+            })
+            .collect();
+        let binds = |at: usize| {
+            let previous = at.checked_sub(1).map(|before| &inside[before].kind);
+            let next = inside.get(at + 1).map(|token| &token.kind);
+            matches!(previous, Some(Kind::Let | Kind::Var | Kind::For))
+                || (matches!(previous, Some(Kind::LParen | Kind::Comma))
+                    && next == Some(&Kind::Colon)
+                    && inside[..at].iter().all(|token| token.kind != Kind::LBrace))
+                || matches!(previous, Some(Kind::Pipe))
+                || (matches!(previous, Some(Kind::Comma)) && lambda_parameter(&inside, at))
+                || (matches!(previous, Some(Kind::LParen))
+                    && next == Some(&Kind::RParen)
+                    && inside.get(at + 2).map(|token| &token.kind) == Some(&Kind::FatArrow))
+        };
+        if let Some(at) = (0..inside.len())
+            .rev()
+            .find(|at| is_name(&inside[*at].kind) && binds(*at))
+        {
+            return Some(inside[at].span);
+        }
+    }
+    let declaration = program
+        .functions
+        .iter()
+        .map(|function| function.span)
+        .chain(program.records.iter().map(|record| record.span))
+        .chain(program.enums.iter().map(|enumeration| enumeration.span))
+        .find(|span| {
+            tokens
+                .iter()
+                .find(|token| {
+                    span.start <= token.span.start && matches!(token.kind, Kind::Ident(_))
+                })
+                .is_some_and(|token| is_name(&token.kind))
+        })?;
+    tokens
+        .iter()
+        .find(|token| declaration.start <= token.span.start && is_name(&token.kind))
+        .map(|token| token.span)
+}
+
+/// Whether the identifier at `at` sits inside an open `|...|` parameter list.
+fn lambda_parameter(tokens: &[&crate::lexer::Token], at: usize) -> bool {
+    use crate::lexer::Kind;
+    let mut index = at;
+    while index > 0 {
+        index -= 1;
+        match tokens[index].kind {
+            Kind::Pipe => return true,
+            Kind::Ident(_) | Kind::Comma | Kind::Colon => {}
+            Kind::LBracket
+            | Kind::RBracket
+            | Kind::Lt
+            | Kind::Gt
+            | Kind::LParen
+            | Kind::RParen
+            | Kind::Arrow => {}
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Markdown for the declaration or checked type at `offset`.
+fn hover_text(text: &str, offset: usize) -> Option<(String, Span)> {
+    let (name, usage) = identifier_at(text, offset)?;
+    let program = crate::parse(text).ok()?;
+    let excerpt = |start: usize, end: usize| text[start..end].trim().to_owned();
+    let declaration = program
+        .functions
+        .iter()
+        .find(|function| function.name == name)
+        .map(|function| excerpt(function.span.start, function.body.span.start))
+        .or_else(|| {
+            program
+                .records
+                .iter()
+                .find(|record| record.name == name)
+                .map(|record| excerpt(record.span.start, record.span.end))
+        })
+        .or_else(|| {
+            program
+                .enums
+                .iter()
+                .find(|enumeration| enumeration.name == name)
+                .map(|enumeration| excerpt(enumeration.span.start, enumeration.span.end))
+        });
+    let local_type = crate::checker::check_with_types(&program)
+        .ok()
+        .and_then(|types| types.get(&usage).map(|ty| format!("{name}: {ty}")));
+    let shown = match (local_type, declaration) {
+        (Some(local), _) => local,
+        (None, Some(declaration)) => declaration,
+        (None, None) => return None,
+    };
+    Some((format!("```tokit\n{shown}\n```"), usage))
 }
 
 fn diagnostic(text: &str, error: &Diagnostic) -> Json {
@@ -334,6 +484,8 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                                     "positionEncoding": "utf-16",
                                     "textDocumentSync": {"openClose": true, "change": 1},
                                     "documentSymbolProvider": true,
+                                    "definitionProvider": true,
+                                    "hoverProvider": true,
                                 },
                                 "serverInfo": {"name": "tokit", "version": env!("CARGO_PKG_VERSION")},
                             }),
@@ -395,6 +547,32 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                     .and_then(|uri| documents.get(uri))
                     .map(|document| symbols(&document.text))
                     .unwrap_or_else(|| json!([]));
+                send(output, &response(id.expect("checked id"), result))?;
+            }
+            Some(method @ ("textDocument/definition" | "textDocument/hover"))
+                if initialized && !shutdown && id.is_some() =>
+            {
+                let uri = params["textDocument"]["uri"].as_str();
+                let result = uri
+                    .and_then(|uri| documents.get(uri).map(|document| (uri, document)))
+                    .and_then(|(uri, document)| {
+                        let offset = offset_at(
+                            &document.text,
+                            params["position"]["line"].as_u64()?,
+                            params["position"]["character"].as_u64()?,
+                        );
+                        if method == "textDocument/definition" {
+                            let span = definition_span(&document.text, offset)?;
+                            Some(json!({"uri": uri, "range": range(&document.text, span)}))
+                        } else {
+                            let (value, span) = hover_text(&document.text, offset)?;
+                            Some(json!({
+                                "contents": {"kind": "markdown", "value": value},
+                                "range": range(&document.text, span),
+                            }))
+                        }
+                    })
+                    .unwrap_or(Json::Null);
                 send(output, &response(id.expect("checked id"), result))?;
             }
             Some(_) if id.is_some() => {

@@ -305,3 +305,79 @@ fn lsp_resolves_new_unsaved_import_file() {
     assert!(!new_path.exists());
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+fn session(text: &str, requests: &[Value]) -> Vec<Value> {
+    let uri = "file:///virtual/navigation.tok";
+    let mut messages = vec![
+        json!({"jsonrpc":"2.0","id":"init","method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"initialized","params":{}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"languageId":"tokit","version":1,"text":text}}}),
+    ];
+    messages.extend(requests.iter().cloned());
+    messages.push(json!({"jsonrpc":"2.0","id":"stop","method":"shutdown"}));
+    messages.push(json!({"jsonrpc":"2.0","method":"exit"}));
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut process = Command::new(env!("CARGO_BIN_EXE_tok"))
+        .arg("lsp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    process.stdin.take().unwrap().write_all(&input).unwrap();
+    let result = process.wait_with_output().unwrap();
+    assert!(result.status.success());
+    decode(&result.stdout)
+        .into_iter()
+        .filter(|message| message.get("id").is_some_and(|id| id.is_number()))
+        .collect()
+}
+
+fn at(id: i64, method: &str, line: u64, character: u64) -> Value {
+    json!({"jsonrpc":"2.0","id":id,"method":method,"params":{"textDocument":{"uri":"file:///virtual/navigation.tok"},"position":{"line":line,"character":character}}})
+}
+
+#[test]
+fn lsp_finds_definitions_and_hovers() {
+    let text = "struct Point{x:I,y:I}\nnorm(p:Point)->I{p.x*p.x}\nmain()->I{let first=Point(3,4);let d=norm(first);map([1],|v|v+d)[0]}\n// é 😀 offsets";
+    let responses = session(
+        text,
+        &[
+            // `norm` call on line 2 → its declaration on line 1.
+            at(1, "textDocument/definition", 2, 38),
+            // `first` argument → the `let first` binding.
+            at(2, "textDocument/definition", 2, 43),
+            // `d` inside the lambda → the `let d` binding.
+            at(3, "textDocument/definition", 2, 62),
+            // `v` inside the lambda → the lambda parameter.
+            at(4, "textDocument/definition", 2, 60),
+            // Hover on the call shows the signature; on a local, its type.
+            at(5, "textDocument/hover", 2, 38),
+            at(6, "textDocument/hover", 2, 43),
+            at(7, "textDocument/hover", 1, 7),
+            // Nothing to show on punctuation.
+            at(8, "textDocument/definition", 2, 6),
+        ],
+    );
+    let by_id = |id: i64| {
+        responses
+            .iter()
+            .find(|message| message["id"] == id)
+            .unwrap()["result"]
+            .clone()
+    };
+    assert_eq!(by_id(1)["range"]["start"], json!({"line":1,"character":0}));
+    assert_eq!(by_id(2)["range"]["start"], json!({"line":2,"character":14}));
+    assert_eq!(by_id(3)["range"]["start"], json!({"line":2,"character":35}));
+    assert_eq!(by_id(4)["range"]["start"], json!({"line":2,"character":58}));
+    assert_eq!(
+        by_id(5)["contents"]["value"],
+        "```tokit\nnorm(p:Point)->I\n```"
+    );
+    assert_eq!(by_id(6)["contents"]["value"], "```tokit\nfirst: Point\n```");
+    // A type name has no expression type, so it shows its declaration.
+    assert_eq!(
+        by_id(7)["contents"]["value"],
+        "```tokit\nstruct Point{x:I,y:I}\n```"
+    );
+    assert_eq!(by_id(8), Value::Null);
+}

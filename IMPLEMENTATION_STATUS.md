@@ -24,7 +24,7 @@ denominator and revise this inventory when evidence changes.
 | 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md), [network capability](spec/NETWORK_CAPABILITY.md), [builtins](spec/EXPERIMENTAL_SUBSET.md) | Runnable partial implementation; strings, maps, arrays, math, standard I/O, environment, clocks, directories, and an HTTP/1.1 server and client; TLS and streaming absent |
 | 12 Toolchain | [CLI](compiler/src/main.rs), [formatter](compiler/src/format.rs), [local packages](spec/LOCAL_PACKAGE_CANDIDATE.md) | Runnable partial implementation; registry/build ecosystem incomplete |
 | 13 AI interfaces | [Program index](compiler/src/ai_index.rs), [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md), [structured diagnostics](spec/AI_INDEX.md) | Runnable partial implementation; expression-level and multi-file AST edits absent |
-| 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; editor integration and navigation absent |
+| 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; diagnostics, symbols, definitions, and hover; completion, rename, and bundled editor extension absent |
 | 15 Self-hosting | [Self-hosted lexer](selfhost/lexer.tok), [contract](spec/SELF_HOSTING.md), [equivalence test](compiler/tests/selfhost_lexer.rs) | Runnable partial implementation; lexer only, parser and checker remain in Rust |
 
 The current implementation supports a checked experimental subset, including
