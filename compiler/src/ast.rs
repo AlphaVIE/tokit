@@ -158,11 +158,13 @@ pub enum PatternKind {
     Int(i32),
     I64(i64),
     Wildcard,
-    Ok(String),
-    Err(String),
-    Some(String),
+    /// A name that matches anything and binds it.
+    Bind(String),
+    Ok(Box<Pattern>),
+    Err(Box<Pattern>),
+    Some(Box<Pattern>),
     None,
-    Variant(String, String, Option<String>),
+    Variant(String, String, Option<Box<Pattern>>),
     Bool(bool),
     String(String),
 }
@@ -365,7 +367,7 @@ fn collect_free(expr: &Expr, bound: &mut Vec<String>, found: &mut Vec<String>) {
             collect_free(value, bound, found);
             for (pattern, body) in arms {
                 let depth = bound.len();
-                bound.extend(pattern.binding().map(str::to_owned));
+                bound.extend(pattern.bindings().into_iter().map(str::to_owned));
                 collect_free(body, bound, found);
                 bound.truncate(depth);
             }
@@ -435,17 +437,42 @@ fn collect_free(expr: &Expr, bound: &mut Vec<String>, found: &mut Vec<String>) {
 }
 
 impl Pattern {
-    /// The payload name a matching arm binds, if any.
-    pub fn binding(&self) -> Option<&str> {
+    /// The payload pattern inside `Ok`, `Err`, `Some`, or a variant, if any.
+    pub fn payload(&self) -> Option<&Pattern> {
         match &self.kind {
-            PatternKind::Ok(name) | PatternKind::Err(name) | PatternKind::Some(name) => Some(name),
-            PatternKind::Variant(_, _, binding) => binding.as_deref(),
-            PatternKind::Int(_)
-            | PatternKind::I64(_)
-            | PatternKind::Wildcard
-            | PatternKind::None
-            | PatternKind::Bool(_)
-            | PatternKind::String(_) => None,
+            PatternKind::Ok(inner) | PatternKind::Err(inner) | PatternKind::Some(inner) => {
+                Some(inner)
+            }
+            PatternKind::Variant(_, _, inner) => inner.as_deref(),
+            _ => None,
         }
+    }
+
+    pub fn payload_mut(&mut self) -> Option<&mut Pattern> {
+        match &mut self.kind {
+            PatternKind::Ok(inner) | PatternKind::Err(inner) | PatternKind::Some(inner) => {
+                Some(inner)
+            }
+            PatternKind::Variant(_, _, inner) => inner.as_deref_mut(),
+            _ => None,
+        }
+    }
+
+    /// The names a matching arm binds, outermost first.
+    pub fn bindings(&self) -> Vec<&str> {
+        let mut names = Vec::new();
+        let mut current = Some(self);
+        while let Some(pattern) = current {
+            if let PatternKind::Bind(name) = &pattern.kind {
+                names.push(name.as_str());
+            }
+            current = pattern.payload();
+        }
+        names
+    }
+
+    /// Whether the pattern matches every value (`_` or a name).
+    pub fn is_irrefutable(&self) -> bool {
+        matches!(self.kind, PatternKind::Wildcard | PatternKind::Bind(_))
     }
 }

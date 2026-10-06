@@ -357,21 +357,7 @@ impl Printer {
     }
 
     fn pattern(pattern: &Pattern) -> String {
-        match &pattern.kind {
-            PatternKind::Int(value) => value.to_string(),
-            PatternKind::I64(value) => format!("{value}i64"),
-            PatternKind::Wildcard => "_".to_owned(),
-            PatternKind::Ok(name) => format!("Ok({name})"),
-            PatternKind::Err(name) => format!("Err({name})"),
-            PatternKind::Some(name) => format!("Some({name})"),
-            PatternKind::None => "None".to_owned(),
-            PatternKind::Variant(name, variant, binding) => match binding {
-                Some(binding) => format!("{name}::{variant}({binding})"),
-                None => format!("{name}::{variant}"),
-            },
-            PatternKind::Bool(value) => value.to_string(),
-            PatternKind::String(value) => string_literal(value),
-        }
+        pattern_text(pattern)
     }
 
     fn expr(&self, expr: &Expr, depth: usize) -> String {
@@ -507,5 +493,25 @@ impl Printer {
                 }
             }
         }
+    }
+}
+
+/// Source text of a pattern.
+pub fn pattern_text(pattern: &Pattern) -> String {
+    match &pattern.kind {
+        PatternKind::Int(value) => value.to_string(),
+        PatternKind::I64(value) => format!("{value}i64"),
+        PatternKind::Wildcard => "_".to_owned(),
+        PatternKind::Bind(name) => name.clone(),
+        PatternKind::Ok(inner) => format!("Ok({})", pattern_text(inner)),
+        PatternKind::Err(inner) => format!("Err({})", pattern_text(inner)),
+        PatternKind::Some(inner) => format!("Some({})", pattern_text(inner)),
+        PatternKind::None => "None".to_owned(),
+        PatternKind::Variant(name, variant, inner) => match inner {
+            Some(inner) => format!("{name}::{variant}({})", pattern_text(inner)),
+            None => format!("{name}::{variant}"),
+        },
+        PatternKind::Bool(value) => value.to_string(),
+        PatternKind::String(value) => string_literal(value),
     }
 }

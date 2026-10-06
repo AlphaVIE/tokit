@@ -53,11 +53,11 @@ main()->State{var s=State(0,[]);for op in [Op::Add(5),Op::Neg,Op::Add(2)]{s=step
 ```tokit
 parse_pair(a:String,b:String)->Result<I,ParseError>{Ok(parse_i32(a)?+parse_i32(b)?)}
 first_even(xs:[I])->Option<I>{for x in xs{if x%2==0{return Some(x);}}None}
-main()->String{match parse_pair("4","x"){Ok(n)=>String(n),Err(e)=>match e{ParseError::Invalid=>"invalid",ParseError::OutOfRange=>"range"}}}
+main()->String{match parse_pair("4","x"){Ok(n)=>String(n),Err(ParseError::Invalid)=>"invalid",Err(e)=>"range"}}
 ```
 
 - `?` propagates `Err` (in `Result` functions) or `None` (in `Option` functions).
-- Patterns bind one name and do not nest: match `Err(e)`, then match `e`.
+- Patterns nest: `Ok(Some(Shape::Circle(r)))`, `Err(IoError::NotFound)`, literals inside (`Some(0)`, `Some("x")`); a bare name such as `other=>` binds the whole value. Arms must be exhaustive and reachable (`E116` names the missing case).
 
 ## Functions as values
 

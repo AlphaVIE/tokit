@@ -1501,11 +1501,13 @@ fn infer_params(
     }
 }
 
-fn match_pattern(
+/// Type-check `pattern` against `matched`, collecting the names it binds.
+fn bind_pattern(
     pattern: &Pattern,
     matched: &Type,
     signatures: &HashMap<String, Signature>,
-) -> Result<(String, Option<(String, Type)>), Diagnostic> {
+    bound: &mut Vec<(String, Type)>,
+) -> Result<(), Diagnostic> {
     let invalid = || {
         Diagnostic::new(
             "E116",
@@ -1514,47 +1516,188 @@ fn match_pattern(
         )
     };
     match (&pattern.kind, matched) {
-        (PatternKind::Int(value), Type::I32) => Ok((value.to_string(), None)),
-        (PatternKind::I64(value), Type::I64) => Ok((value.to_string(), None)),
-        (PatternKind::Wildcard, _) => Ok(("_".to_owned(), None)),
-        (PatternKind::Ok(name), Type::Result(ok, _)) => {
-            Ok(("Ok".to_owned(), Some((name.clone(), *ok.clone()))))
+        (PatternKind::Int(_), Type::I32)
+        | (PatternKind::I64(_), Type::I64)
+        | (PatternKind::Wildcard, _)
+        | (PatternKind::None, Type::Option(_))
+        | (PatternKind::Bool(_), Type::Bool)
+        | (PatternKind::String(_), Type::String) => Ok(()),
+        (PatternKind::Bind(name), _) => {
+            bound.push((name.clone(), matched.clone()));
+            Ok(())
         }
-        (PatternKind::Err(name), Type::Result(_, err)) => {
-            Ok(("Err".to_owned(), Some((name.clone(), *err.clone()))))
+        (PatternKind::Ok(inner), Type::Result(ok, _)) => bind_pattern(inner, ok, signatures, bound),
+        (PatternKind::Err(inner), Type::Result(_, err)) => {
+            bind_pattern(inner, err, signatures, bound)
         }
-        (PatternKind::Some(name), Type::Option(element)) => {
-            Ok(("Some".to_owned(), Some((name.clone(), *element.clone()))))
+        (PatternKind::Some(inner), Type::Option(element)) => {
+            bind_pattern(inner, element, signatures, bound)
         }
-        (PatternKind::None, Type::Option(_)) => Ok(("None".to_owned(), None)),
-        (PatternKind::Bool(value), Type::Bool) => Ok((value.to_string(), None)),
-        (PatternKind::String(value), Type::String) => Ok((format!("{value:?}"), None)),
         (
-            PatternKind::Variant(name, variant, binding),
+            PatternKind::Variant(name, variant, inner),
             Type::Named(actual) | Type::Applied(actual, _),
         ) if name == actual => {
-            let signature = signatures.get(name);
-            let args = match matched {
-                Type::Applied(_, args) => args.clone(),
-                _ => Vec::new(),
-            };
-            let inferred: HashMap<String, Type> = signature
-                .map(|signature| signature.type_params.iter().cloned().zip(args).collect())
-                .unwrap_or_default();
-            let declared = signature
-                .and_then(|signature| signature.variants.as_ref())
-                .and_then(|variants| variants.iter().find(|item| item.name == *variant));
-            match (declared.and_then(|item| item.payload.as_ref()), binding) {
-                (None, None) if declared.is_some() => Ok((variant.clone(), None)),
-                (Some(ty), Some(name)) => Ok((
-                    variant.clone(),
-                    Some((name.clone(), substitute(ty, &inferred))),
-                )),
+            let declared = constructors(matched, signatures)
+                .and_then(|cases| cases.into_iter().find(|(case, _)| case == variant))
+                .ok_or_else(invalid)?;
+            match (declared.1, inner) {
+                (None, None) => Ok(()),
+                (Some(ty), Some(inner)) => bind_pattern(inner, &ty, signatures, bound),
                 _ => Err(invalid()),
             }
         }
         _ => Err(invalid()),
     }
+}
+
+/// The cases of a closed type with their payload types; `None` for types
+/// whose values cannot be listed (integers, strings, records, functions).
+fn constructors(
+    ty: &Type,
+    signatures: &HashMap<String, Signature>,
+) -> Option<Vec<(String, Option<Type>)>> {
+    match ty {
+        Type::Result(ok, err) => Some(vec![
+            ("Ok".to_owned(), Some(*ok.clone())),
+            ("Err".to_owned(), Some(*err.clone())),
+        ]),
+        Type::Option(element) => Some(vec![
+            ("Some".to_owned(), Some(*element.clone())),
+            ("None".to_owned(), None),
+        ]),
+        Type::Bool => Some(vec![("true".to_owned(), None), ("false".to_owned(), None)]),
+        Type::Named(name) | Type::Applied(name, _) => {
+            let signature = signatures.get(name)?;
+            let args = match ty {
+                Type::Applied(_, args) => args.clone(),
+                _ => Vec::new(),
+            };
+            let inferred: HashMap<String, Type> =
+                signature.type_params.iter().cloned().zip(args).collect();
+            Some(
+                signature
+                    .variants
+                    .as_ref()?
+                    .iter()
+                    .map(|variant| {
+                        (
+                            variant.name.clone(),
+                            variant.payload.as_ref().map(|ty| substitute(ty, &inferred)),
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        _ => None,
+    }
+}
+
+/// The case a pattern selects, or `None` when it matches everything.
+fn pattern_head(pattern: &Pattern) -> Option<String> {
+    Some(match &pattern.kind {
+        PatternKind::Int(value) => value.to_string(),
+        PatternKind::I64(value) => value.to_string(),
+        PatternKind::Wildcard | PatternKind::Bind(_) => return None,
+        PatternKind::Ok(_) => "Ok".to_owned(),
+        PatternKind::Err(_) => "Err".to_owned(),
+        PatternKind::Some(_) => "Some".to_owned(),
+        PatternKind::None => "None".to_owned(),
+        PatternKind::Bool(value) => value.to_string(),
+        PatternKind::String(value) => format!("{value:?}"),
+        PatternKind::Variant(_, variant, _) => variant.clone(),
+    })
+}
+
+/// Rows of earlier arms that apply inside case `key`; `None` stands for a row
+/// that matches anything there.
+fn specialize<'a>(rows: &[Option<&'a Pattern>], key: &str) -> Vec<Option<&'a Pattern>> {
+    rows.iter()
+        .filter_map(|row| match row.and_then(pattern_head) {
+            None => Some(None),
+            Some(head) if head == key => Some(row.and_then(Pattern::payload)),
+            Some(_) => None,
+        })
+        .collect()
+}
+
+/// Whether some value of `ty` matching `candidate` (`None`: anything) is
+/// matched by none of `rows`. This usefulness check drives unreachable-arm and
+/// exhaustiveness diagnostics; each pattern has at most one payload, so the
+/// pattern matrix always has a single column.
+fn useful(
+    rows: &[Option<&Pattern>],
+    candidate: Option<&Pattern>,
+    ty: &Type,
+    signatures: &HashMap<String, Signature>,
+) -> bool {
+    let cases = constructors(ty, signatures);
+    let payload_type = |key: &str| {
+        cases
+            .as_ref()
+            .and_then(|cases| cases.iter().find(|(case, _)| case == key))
+            .and_then(|(_, payload)| payload.clone())
+    };
+    match candidate.and_then(pattern_head) {
+        Some(key) => {
+            let specialized = specialize(rows, &key);
+            match (candidate.and_then(Pattern::payload), payload_type(&key)) {
+                (Some(inner), Some(inner_type)) => {
+                    useful(&specialized, Some(inner), &inner_type, signatures)
+                }
+                _ => specialized.is_empty(),
+            }
+        }
+        None => match &cases {
+            Some(cases)
+                if cases.iter().all(|(key, _)| {
+                    rows.iter()
+                        .any(|row| row.and_then(pattern_head).as_deref() == Some(key.as_str()))
+                }) =>
+            {
+                cases.iter().any(|(key, payload)| {
+                    let specialized = specialize(rows, key);
+                    match payload {
+                        Some(inner_type) => useful(&specialized, None, inner_type, signatures),
+                        None => specialized.is_empty(),
+                    }
+                })
+            }
+            _ => !rows
+                .iter()
+                .any(|row| row.is_none_or(Pattern::is_irrefutable)),
+        },
+    }
+}
+
+/// Values of `ty` that no row matches, described as patterns.
+fn missing_cases(
+    rows: &[Option<&Pattern>],
+    ty: &Type,
+    signatures: &HashMap<String, Signature>,
+) -> Vec<String> {
+    if !useful(rows, None, ty, signatures) {
+        return Vec::new();
+    }
+    let Some(cases) = constructors(ty, signatures) else {
+        return vec!["_".to_owned()];
+    };
+    let mut missing = Vec::new();
+    for (key, payload) in cases {
+        let specialized = specialize(rows, &key);
+        if specialized.is_empty() {
+            missing.push(key);
+        } else if let Some(inner_type) = payload
+            && useful(&specialized, None, &inner_type, signatures)
+        {
+            let inner = missing_cases(&specialized, &inner_type, signatures);
+            missing.push(format!(
+                "{key}({})",
+                inner.first().map_or("_", String::as_str)
+            ));
+        }
+    }
+    missing.sort();
+    missing
 }
 
 fn type_of(
@@ -2148,66 +2291,39 @@ fn infer(
                     "cannot infer Option element type for match",
                 ));
             }
-            // Integer and string domains cannot be listed, so they need `_`.
-            let integer_match = matches!(matched, Type::I32 | Type::I64 | Type::String);
-            let expected: HashSet<String> = match &matched {
-                Type::I32 | Type::I64 | Type::String => HashSet::new(),
-                Type::Result(_, _) => ["Ok".to_owned(), "Err".to_owned()].into_iter().collect(),
-                Type::Option(_) => ["Some".to_owned(), "None".to_owned()].into_iter().collect(),
-                Type::Bool => ["true".to_owned(), "false".to_owned()]
-                    .into_iter()
-                    .collect(),
-                Type::Named(name) | Type::Applied(name, _) => signatures
-                    .get(name)
-                    .and_then(|signature| signature.variants.as_ref())
-                    .ok_or_else(|| {
-                        Diagnostic::new(
-                            "E116",
-                            value.span,
-                            "match requires integer, string, result, enum, or bool",
-                        )
-                    })?
-                    .iter()
-                    .map(|variant| variant.name.clone())
-                    .collect(),
-                _ => {
-                    return Err(Diagnostic::new(
-                        "E116",
-                        value.span,
-                        "match requires integer, string, result, enum, or bool",
-                    ));
-                }
-            };
-            let mut seen = HashSet::new();
-            let mut wildcard = false;
+            if !matches!(matched, Type::I32 | Type::I64 | Type::String)
+                && constructors(&matched, signatures).is_none()
+            {
+                return Err(Diagnostic::new(
+                    "E116",
+                    value.span,
+                    "match requires integer, string, result, enum, or bool",
+                ));
+            }
+            let mut rows: Vec<Option<&Pattern>> = Vec::new();
             let mut result = None;
             for (pattern, body) in arms {
-                let (key, binding) = match_pattern(pattern, &matched, signatures)?;
-                if wildcard {
-                    return Err(Diagnostic::new(
-                        "E116",
-                        pattern.span,
-                        "unreachable match arm after wildcard",
-                    ));
+                let mut bound = Vec::new();
+                bind_pattern(pattern, &matched, signatures, &mut bound)?;
+                if !useful(&rows, Some(pattern), &matched, signatures) {
+                    let message = if rows
+                        .iter()
+                        .any(|row| row.is_some_and(Pattern::is_irrefutable))
+                    {
+                        "unreachable match arm after wildcard".to_owned()
+                    } else if pattern.is_irrefutable() {
+                        "wildcard arm is unreachable".to_owned()
+                    } else {
+                        format!(
+                            "duplicate match arm {}",
+                            crate::expand::pattern_text(pattern)
+                        )
+                    };
+                    return Err(Diagnostic::new("E116", pattern.span, message));
                 }
-                if matches!(&pattern.kind, PatternKind::Wildcard) {
-                    if !integer_match && seen == expected {
-                        return Err(Diagnostic::new(
-                            "E116",
-                            pattern.span,
-                            "wildcard arm is unreachable",
-                        ));
-                    }
-                    wildcard = true;
-                } else if !seen.insert(key.clone()) {
-                    return Err(Diagnostic::new(
-                        "E116",
-                        pattern.span,
-                        format!("duplicate match arm {key}"),
-                    ));
-                }
+                rows.push(Some(pattern));
                 let mut scope = env.clone();
-                if let Some((name, ty)) = binding {
+                for (name, ty) in bound {
                     scope.insert(name, Binding { ty, mutable: false });
                 }
                 let branch = type_of(body, &scope, signatures, return_type, types)?;
@@ -2222,12 +2338,8 @@ fn infer(
                     None => branch,
                 });
             }
-            if !wildcard && (integer_match || seen != expected) {
-                let mut missing: Vec<_> = expected.difference(&seen).cloned().collect();
-                if integer_match {
-                    missing.push("_".to_owned());
-                }
-                missing.sort();
+            let missing = missing_cases(&rows, &matched, signatures);
+            if !missing.is_empty() {
                 return Err(Diagnostic::new(
                     "E116",
                     expr.span,

@@ -1136,6 +1136,35 @@ fn eval_builtin(
     ))
 }
 
+/// Whether `value` matches `pattern`, collecting the names it binds.
+fn matches_pattern(pattern: &Pattern, value: &Value, bindings: &mut Vec<(String, Value)>) -> bool {
+    match (&pattern.kind, value) {
+        (PatternKind::Int(pattern), Value::I32(value)) => pattern == value,
+        (PatternKind::I64(pattern), Value::I64(value)) => pattern == value,
+        (PatternKind::Wildcard, _) => true,
+        (PatternKind::Bind(name), value) => {
+            bindings.push((name.clone(), value.clone()));
+            true
+        }
+        (PatternKind::Ok(inner), Value::Ok(value))
+        | (PatternKind::Err(inner), Value::Err(value))
+        | (PatternKind::Some(inner), Value::Some(value)) => matches_pattern(inner, value, bindings),
+        (PatternKind::None, Value::None) => true,
+        (PatternKind::Bool(pattern), Value::Bool(value)) => pattern == value,
+        (PatternKind::String(pattern), Value::String(value)) => pattern == value,
+        (PatternKind::Variant(name, variant, inner), Value::Enum(actual, value, payload))
+            if name == actual && variant == value =>
+        {
+            match (inner, payload) {
+                (None, None) => true,
+                (Some(inner), Some(payload)) => matches_pattern(inner, payload, bindings),
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 fn eval_match(
     expr: &Expr,
     value: &Expr,
@@ -1147,36 +1176,10 @@ fn eval_match(
 ) -> Result<Flow, Diagnostic> {
     let scrutinee = take_value!(eval(value, env, program, depth, runtime));
     for (pattern, body) in arms {
-        let binding = match (&pattern.kind, &scrutinee) {
-            (PatternKind::Int(pattern), Value::I32(value)) if pattern == value => Some(None),
-            (PatternKind::I64(pattern), Value::I64(value)) if pattern == value => Some(None),
-            (PatternKind::Wildcard, _) => Some(None),
-            (PatternKind::Ok(name), Value::Ok(value)) => Some(Some((name.clone(), *value.clone()))),
-            (PatternKind::Err(name), Value::Err(value)) => {
-                Some(Some((name.clone(), *value.clone())))
-            }
-            (PatternKind::Some(name), Value::Some(value)) => {
-                Some(Some((name.clone(), *value.clone())))
-            }
-            (PatternKind::None, Value::None) => Some(None),
-            (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => Some(None),
-            (PatternKind::String(pattern), Value::String(value)) if pattern == value => Some(None),
-            (PatternKind::Variant(name, variant, binding), Value::Enum(actual, value, payload))
-                if name == actual && variant == value =>
-            {
-                match (binding, payload) {
-                    (None, None) => Some(None),
-                    (Some(binding), Some(payload)) => {
-                        Some(Some((binding.clone(), *payload.clone())))
-                    }
-                    _ => None,
-                }
-            }
-            _ => None,
-        };
-        if let Some(binding) = binding {
+        let mut bindings = Vec::new();
+        if matches_pattern(pattern, &scrutinee, &mut bindings) {
             let mut scope = env.clone();
-            if let Some((name, value)) = binding {
+            for (name, value) in bindings {
                 scope.insert(name, Rc::new(RefCell::new(value)));
             }
             return eval(body, &scope, program, depth, runtime);

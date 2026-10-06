@@ -967,18 +967,21 @@ impl Parser {
             Kind::False => (PatternKind::Bool(false), token.span),
             Kind::Ok | Kind::Err | Kind::Some => {
                 self.expect(Kind::LParen)?;
-                let (name, _) = self.ident()?;
+                let inner = Box::new(self.pattern()?);
                 let end = self.expect(Kind::RParen)?.span;
                 let kind = match token.kind {
-                    Kind::Ok => PatternKind::Ok(name),
-                    Kind::Err => PatternKind::Err(name),
-                    Kind::Some => PatternKind::Some(name),
+                    Kind::Ok => PatternKind::Ok(inner),
+                    Kind::Err => PatternKind::Err(inner),
+                    Kind::Some => PatternKind::Some(inner),
                     _ => unreachable!(),
                 };
                 (kind, token.span.join(end))
             }
             Kind::None => (PatternKind::None, token.span),
             Kind::Ident(name) if name == "_" => (PatternKind::Wildcard, token.span),
+            Kind::Ident(name) if !self.at(&Kind::ColonColon) => {
+                (PatternKind::Bind(name), token.span)
+            }
             Kind::Ident(name) => {
                 self.expect(Kind::ColonColon)?;
                 let (segment, end) = self.ident()?;
@@ -991,9 +994,9 @@ impl Parser {
                 };
                 let (binding, end) = if self.at(&Kind::LParen) {
                     self.bump();
-                    let (binding, _) = self.ident()?;
+                    let inner = Box::new(self.pattern()?);
                     let end = self.expect(Kind::RParen)?.span;
-                    (Some(binding), end)
+                    (Some(inner), end)
                 } else {
                     (None, end)
                 };
