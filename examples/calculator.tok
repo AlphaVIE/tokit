@@ -1,0 +1,14 @@
+// CLI calculator: `tok run examples/calculator.tok -- "2*(3+4.5)"`, or one expression per line on standard input.
+// Supports + - * / % ^ with the usual precedence, parentheses, unary minus, and decimal numbers.
+enum Tok{Num(F),Op(String),Open,Close}
+struct P{value:F,next:I}
+lex(s:String)->Result<[Tok],String>{var out:[Tok]=[];let cs=chars(s);var i=0;while i<len(cs){let c=cs[i];if c==" "{i=i+1;}else if contains("+-*/%^",c){out.push(Tok::Op(c));i=i+1;}else if c=="("{out.push(Tok::Open);i=i+1;}else if c==")"{out.push(Tok::Close);i=i+1;}else if contains("0123456789",c){var text="";while i<len(cs)&&contains("0123456789.",cs[i]){text=text+cs[i];i=i+1;}match parse_f64(text){Ok(v)=>{out.push(Tok::Num(v));},Err(e)=>{return Err("bad number "+text);}}}else{return Err("unexpected "+c+" at column "+String(i+1));}}Ok(out)}
+op(t:[Tok],at:I)->String{if at<len(t){match t[at]{Tok::Op(o)=>o,_=>""}}else{""}}
+atom(t:[Tok],at:I)->Result<P,String>{if at>=len(t){return Err("unexpected end of expression");}match t[at]{Tok::Num(v)=>Ok(P(v,at+1)),Tok::Open=>{let inner=sum(t,at+1)?;if inner.next<len(t){match t[inner.next]{Tok::Close=>Ok(P(inner.value,inner.next+1)),_=>Err("expected )")}}else{Err("missing )")}},_=>Err("expected a number or (")}}
+unary(t:[Tok],at:I)->Result<P,String>{if op(t,at)=="-"{let inner=unary(t,at+1)?;Ok(P(-inner.value,inner.next))}else{atom(t,at)}}
+power(t:[Tok],at:I)->Result<P,String>{let base=unary(t,at)?;if op(t,base.next)=="^"{let exponent=power(t,base.next+1)?;Ok(P(pow(base.value,exponent.value),exponent.next))}else{Ok(base)}}
+product(t:[Tok],at:I)->Result<P,String>{var left=power(t,at)?;while contains(["*","/","%"],op(t,left.next)){let o=op(t,left.next);let right=power(t,left.next+1)?;if o!="*"&&right.value==0.0{return Err("division by zero");}left=P(match o{"*"=>left.value*right.value,"/"=>left.value/right.value,_=>left.value%right.value},right.next);}Ok(left)}
+sum(t:[Tok],at:I)->Result<P,String>{var left=product(t,at)?;while contains(["+","-"],op(t,left.next)){let o=op(t,left.next);let right=product(t,left.next+1)?;left=P(if o=="+"{left.value+right.value}else{left.value-right.value},right.next);}Ok(left)}
+evaluate(s:String)->Result<F,String>{let t=lex(s)?;if len(t)==0{return Err("empty expression");}let p=sum(t,0)?;if p.next<len(t){Err("unexpected token after position "+String(p.next))}else{Ok(p.value)}}
+show(s:String)->String{match evaluate(s){Ok(v)=>match i64(v){Some(n)=>if f64(n)==v{String(n)}else{String(v)},None=>String(v)},Err(e)=>"error: "+e}}
+main()->Unit{let a=args();if len(a)>0{let out=show(join(a," "));print(out);if starts_with(out,"error"){exit(1);}}else{while true{match read_line(){Some(l)=>{if trim(l)!=""{print(show(l));}},None=>{break;}}}}}
