@@ -288,3 +288,34 @@ pub fn lex_in_source(source: &str, source_id: SourceId) -> Result<Vec<Token>, Di
     });
     Ok(tokens)
 }
+
+impl Kind {
+    /// The variant name without its payload, as printed by `tok tokens`.
+    pub fn name(&self) -> String {
+        let debug = format!("{self:?}");
+        debug.split('(').next().unwrap_or(&debug).to_owned()
+    }
+}
+
+/// One `Kind start end` line per token (byte offsets, ending with `Eof`), or
+/// `error CODE start end`. The self-hosted lexer must reproduce this listing.
+pub fn listing(source: &str) -> String {
+    match lex(source) {
+        Ok(tokens) => tokens
+            .iter()
+            .map(|token| {
+                format!(
+                    "{} {} {}",
+                    token.kind.name(),
+                    token.span.start,
+                    token.span.end
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Err(error) => format!(
+            "error {} {} {}",
+            error.code, error.span.start, error.span.end
+        ),
+    }
+}

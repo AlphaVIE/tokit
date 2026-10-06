@@ -8,6 +8,8 @@ An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can pa
 
 An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and provides live diagnostics and document symbols for `.tok` buffers, including unsaved relative imports and pinned package sources.
 
+The first [self-hosted component](spec/SELF_HOSTING.md) is Tokit's lexer written in Tokit; a test requires its token listing to equal the Rust lexer's (`tok tokens`) for every source in the repository.
+
 An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agents submit hash-guarded, checked changes to named functions without resending their surrounding source file.
 
 The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, `f64`, and `bool` functions with immutable local bindings, conditional expressions, and non-generic scalar calls. Other checked functions still use the AST emitter while the IR grows.
