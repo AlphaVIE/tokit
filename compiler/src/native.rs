@@ -549,6 +549,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                         PatternKind::Some(name) => format!("Some({})", user_name(name)),
                         PatternKind::None => "None".to_owned(),
                         PatternKind::Bool(value) => value.to_string(),
+                        PatternKind::String(value) => format!("{value:?}"),
                         PatternKind::Variant(name, variant, binding) => {
                             let prefix = enum_path(name, variant);
                             match binding {
@@ -568,6 +569,9 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                         "{{ let __tok_matched: {} = {matched}; __tok_matched }}",
                         rust_type_fallback(ty)
                     )
+                }
+                Some(Type::String) => {
+                    format!("{{ let __tok_matched: String = {matched}; __tok_matched }}.as_str()")
                 }
                 _ => matched,
             };
