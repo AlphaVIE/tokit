@@ -58,12 +58,14 @@ fn __tok_len<T>(values: &[T], source_id: usize, line: usize, column: usize) -> i
         __tok_runtime_fail("E206", source_id, line, column, "array length exceeds i32")
     })
 }
+// Reserved, lazily committed stack for the main program and each task thread.
+const __TOK_STACK_BYTES: usize = 512 * 1024 * 1024;
 thread_local! { static __TOK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 struct __TokDepthGuard;
 impl __TokDepthGuard {
     fn enter(source_id: usize, line: usize, column: usize) -> Self {
         __TOK_DEPTH.with(|depth| {
-            if depth.get() >= 32 {
+            if depth.get() >= 10_000 {
                 __tok_runtime_fail("E202", source_id, line, column, "call depth limit exceeded");
             }
             depth.set(depth.get() + 1);

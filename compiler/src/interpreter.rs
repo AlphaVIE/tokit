@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::ast::{Expr, ExprKind, Function, Op, PatternKind, Program, Span, Stmt};
+use crate::ast::{Expr, ExprKind, Function, Op, Pattern, PatternKind, Program, Span, Stmt};
 use crate::builtins;
 use crate::diagnostic::Diagnostic;
 use crate::filesystem::{ReadPolicy, WritePolicy};
@@ -81,7 +81,12 @@ enum Flow {
 }
 
 type Env = HashMap<String, Rc<RefCell<Value>>>;
-const MAX_CALL_DEPTH: usize = 32;
+const MAX_CALL_DEPTH: usize = 10_000;
+/// Each evaluator thread runs at most this many nested calls; deeper calls
+/// continue on a fresh thread so recursion never depends on one host stack.
+const CALLS_PER_STACK_SEGMENT: usize = 256;
+/// Unoptimized builds need up to ~100 KiB of host stack per Tokit call.
+const STACK_SEGMENT_BYTES: usize = 64 * 1024 * 1024;
 
 struct Runtime<'a> {
     read: ReadPolicy,
@@ -165,11 +170,11 @@ fn run_entry(
             format!("{name} must have no parameters or type parameters"),
         ));
     }
-    // The reference evaluator uses the host call stack. Give its fixed depth
-    // limit enough room even on hosts with small default thread stacks.
+    // The reference evaluator uses the host call stack; `invoke` moves to a
+    // new stack segment periodically so only the depth limit bounds recursion.
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024)
+            .stack_size(STACK_SEGMENT_BYTES)
             .spawn_scoped(scope, || invoke(program, function, Vec::new(), 0, &runtime))
             .map_err(|error| {
                 Diagnostic::new(
@@ -198,6 +203,36 @@ fn invoke(
             "call depth limit exceeded",
         ));
     }
+    if depth > 0 && depth.is_multiple_of(CALLS_PER_STACK_SEGMENT) {
+        return std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .stack_size(STACK_SEGMENT_BYTES)
+                .spawn_scoped(scope, || {
+                    invoke_frame(program, function, args, depth, runtime)
+                })
+                .map_err(|error| {
+                    Diagnostic::new(
+                        "E204",
+                        function.span,
+                        format!("cannot extend evaluator stack: {error}"),
+                    )
+                })?
+                .join()
+                .map_err(|_| {
+                    Diagnostic::new("E204", function.span, "reference evaluator panicked")
+                })?
+        });
+    }
+    invoke_frame(program, function, args, depth, runtime)
+}
+
+fn invoke_frame(
+    program: &Program,
+    function: &Function,
+    args: Vec<Value>,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Value, Diagnostic> {
     let env: Env = function
         .params
         .iter()
@@ -376,80 +411,10 @@ fn eval(
             Value::Array(values)
         }
         ExprKind::Index(array, index) => {
-            // A variable read normally copies its value. Indexing only needs
-            // the selected element. Borrow only when evaluating the index cannot
-            // mutate the binding; otherwise preserve the pre-index value snapshot.
-            let borrowed = match &array.kind {
-                ExprKind::Var(name) if index.is_simple_read() => Some(
-                    env.get(name)
-                        .ok_or_else(|| {
-                            Diagnostic::new(
-                                "E204",
-                                array.span,
-                                format!("unresolved runtime name {name}"),
-                            )
-                        })?
-                        .borrow(),
-                ),
-                _ => None,
-            };
-            let owned = if borrowed.is_none() {
-                Some(take_value!(eval(array, env, program, depth, runtime)))
-            } else {
-                None
-            };
-            let position = take_value!(eval(index, env, program, depth, runtime));
-            let Value::I32(position) = position else {
-                return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
-            };
-            let position = usize::try_from(position).ok();
-            let values = borrowed.as_deref().or(owned.as_ref());
-            match values.expect("array expression has a value") {
-                Value::Array(values) => position.and_then(|at| values.get(at)).cloned(),
-                Value::Bytes(values) => position
-                    .and_then(|at| values.get(at))
-                    .map(|byte| Value::I32(i32::from(*byte))),
-                _ => return Err(Diagnostic::new("E204", expr.span, "invalid runtime index")),
-            }
-            .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
+            return eval_index(expr, array, index, env, program, depth, runtime);
         }
         ExprKind::Field(value, field) => {
-            if let ExprKind::Var(name) = &value.kind {
-                let binding = env.get(name).ok_or_else(|| {
-                    Diagnostic::new(
-                        "E204",
-                        value.span,
-                        format!("unresolved runtime name {name}"),
-                    )
-                })?;
-                let borrowed = binding.borrow();
-                let Value::Record(_, fields) = &*borrowed else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid runtime field access",
-                    ));
-                };
-                let selected = fields
-                    .iter()
-                    .find(|(name, _)| name == field)
-                    .map(|(_, value)| value.clone())
-                    .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?;
-                return Ok(Flow::Value(selected));
-            }
-            let value = take_value!(eval(value, env, program, depth, runtime));
-            let Value::Record(_, fields) = value else {
-                return Err(Diagnostic::new(
-                    "E204",
-                    expr.span,
-                    "invalid runtime field access",
-                ));
-            };
-            fields
-                .into_iter()
-                .find(|(name, _)| name == field)
-                .map(|(_, value)| value)
-                .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?
+            return eval_field(expr, value, field, env, program, depth, runtime);
         }
         ExprKind::Ok(inner) => Value::Ok(Box::new(take_value!(eval(
             inner, env, program, depth, runtime
@@ -512,234 +477,7 @@ fn eval(
             }
         }
         ExprKind::Call(name, args) => {
-            if name == builtins::LEN
-                && args.len() == 1
-                && let ExprKind::Var(variable) = &args[0].kind
-            {
-                let binding = env.get(variable).ok_or_else(|| {
-                    Diagnostic::new(
-                        "E204",
-                        args[0].span,
-                        format!("unresolved runtime name {variable}"),
-                    )
-                })?;
-                return Ok(Flow::Value(array_length(&binding.borrow(), expr.span)?));
-            }
-            let mut values = Vec::new();
-            for arg in args {
-                values.push(take_value!(eval(arg, env, program, depth, runtime)));
-            }
-            if let Some(value) = eval_utf8_builtin(name, &values, expr.span) {
-                return Ok(Flow::Value(value?));
-            }
-            if name == builtins::READ_TEXT {
-                let [Value::String(path)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid read_text call"));
-                };
-                return Ok(Flow::Value(match runtime.read.read_text(path) {
-                    Ok(value) => Value::Ok(Box::new(Value::String(value))),
-                    Err(error) => Value::Err(Box::new(Value::Enum(
-                        builtins::IO_ERROR.to_owned(),
-                        error.variant().to_owned(),
-                        None,
-                    ))),
-                }));
-            }
-            if name == builtins::READ_BYTES {
-                let [Value::String(path)] = values.as_slice() else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid read_bytes call",
-                    ));
-                };
-                return Ok(Flow::Value(match runtime.read.read_bytes(path) {
-                    Ok(bytes) => Value::Ok(Box::new(Value::Bytes(Arc::new(bytes)))),
-                    Err(error) => Value::Err(Box::new(Value::Enum(
-                        builtins::IO_ERROR.to_owned(),
-                        error.variant().to_owned(),
-                        None,
-                    ))),
-                }));
-            }
-            if name == builtins::WRITE_TEXT {
-                let [Value::String(path), Value::String(text)] = values.as_slice() else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid write_text call",
-                    ));
-                };
-                return Ok(Flow::Value(match runtime.write.write_text(path, text) {
-                    Ok(()) => Value::Ok(Box::new(Value::Unit)),
-                    Err(error) => Value::Err(Box::new(Value::Enum(
-                        builtins::IO_ERROR.to_owned(),
-                        error.variant().to_owned(),
-                        None,
-                    ))),
-                }));
-            }
-            if name == builtins::WRITE_BYTES {
-                let [Value::String(path), Value::Bytes(bytes)] = values.as_slice() else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid write_bytes call",
-                    ));
-                };
-                return Ok(Flow::Value(match runtime.write.write_bytes(path, bytes) {
-                    Ok(()) => Value::Ok(Box::new(Value::Unit)),
-                    Err(error) => Value::Err(Box::new(Value::Enum(
-                        builtins::IO_ERROR.to_owned(),
-                        error.variant().to_owned(),
-                        None,
-                    ))),
-                }));
-            }
-            if name == builtins::LINES {
-                let [Value::String(text)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid lines call"));
-                };
-                return Ok(Flow::Value(Value::Array(
-                    text.lines()
-                        .map(|line| Value::String(line.to_owned()))
-                        .collect(),
-                )));
-            }
-            if name == builtins::ARGS {
-                return Ok(Flow::Value(Value::Array(
-                    runtime.args.iter().cloned().map(Value::String).collect(),
-                )));
-            }
-            if name == builtins::LEN {
-                let [value] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid len call"));
-                };
-                return Ok(Flow::Value(array_length(value, expr.span)?));
-            }
-            if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {
-                let [Value::String(text)] = values.as_slice() else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid integer parse call",
-                    ));
-                };
-                let digits = text
-                    .strip_prefix('+')
-                    .or_else(|| text.strip_prefix('-'))
-                    .unwrap_or(text);
-                if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-                    return Ok(Flow::Value(Value::Err(Box::new(Value::Enum(
-                        builtins::PARSE_ERROR.to_owned(),
-                        "Invalid".to_owned(),
-                        None,
-                    )))));
-                }
-                let parsed = if name == builtins::PARSE_I32 {
-                    text.parse::<i32>().map(Value::I32)
-                } else {
-                    text.parse::<i64>().map(Value::I64)
-                };
-                return Ok(Flow::Value(match parsed {
-                    Ok(number) => Value::Ok(Box::new(number)),
-                    Err(error) => {
-                        let variant = match error.kind() {
-                            std::num::IntErrorKind::PosOverflow
-                            | std::num::IntErrorKind::NegOverflow => "OutOfRange",
-                            _ => "Invalid",
-                        };
-                        Value::Err(Box::new(Value::Enum(
-                            builtins::PARSE_ERROR.to_owned(),
-                            variant.to_owned(),
-                            None,
-                        )))
-                    }
-                }));
-            }
-            if name == builtins::PARSE_F64 {
-                let [Value::String(text)] = values.as_slice() else {
-                    return Err(Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        "invalid float parse call",
-                    ));
-                };
-                return Ok(Flow::Value(match parse_f64(text) {
-                    Ok(number) => Value::Ok(Box::new(Value::F64(number.to_bits()))),
-                    Err(variant) => Value::Err(Box::new(Value::Enum(
-                        builtins::PARSE_ERROR.to_owned(),
-                        variant.to_owned(),
-                        None,
-                    ))),
-                }));
-            }
-            if name == builtins::WIDEN_I64
-                || name == builtins::NARROW_I32
-                || name == builtins::TO_F64
-            {
-                let option = |value: Option<Value>| match value {
-                    Some(value) => Value::Some(Box::new(value)),
-                    None => Value::None,
-                };
-                let converted = match (name.as_str(), values.as_slice()) {
-                    (builtins::WIDEN_I64, [Value::I32(number)]) => Value::I64(i64::from(*number)),
-                    (builtins::WIDEN_I64, [Value::F64(bits)]) => {
-                        option(float_to_i64(f64::from_bits(*bits)).map(Value::I64))
-                    }
-                    (builtins::NARROW_I32, [Value::I64(number)]) => {
-                        option(i32::try_from(*number).ok().map(Value::I32))
-                    }
-                    (builtins::NARROW_I32, [Value::F64(bits)]) => option(
-                        float_to_i64(f64::from_bits(*bits))
-                            .and_then(|number| i32::try_from(number).ok())
-                            .map(Value::I32),
-                    ),
-                    (builtins::TO_F64, [Value::I32(number)]) => {
-                        Value::F64(f64::from(*number).to_bits())
-                    }
-                    (builtins::TO_F64, [Value::I64(number)]) => {
-                        Value::F64((*number as f64).to_bits())
-                    }
-                    _ => {
-                        return Err(Diagnostic::new(
-                            "E204",
-                            expr.span,
-                            "invalid numeric conversion",
-                        ));
-                    }
-                };
-                return Ok(Flow::Value(converted));
-            }
-            if name == builtins::JOIN {
-                let [Value::Task(value)] = values.as_slice() else {
-                    return Err(Diagnostic::new("E204", expr.span, "invalid join call"));
-                };
-                return Ok(Flow::Value(Value::Ok(value.clone())));
-            }
-            if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-                return Ok(Flow::Value(Value::Record(
-                    name.clone(),
-                    record
-                        .fields
-                        .iter()
-                        .map(|(name, _)| name.clone())
-                        .zip(values)
-                        .collect(),
-                )));
-            }
-            let function = program
-                .functions
-                .iter()
-                .find(|function| function.name == *name)
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        "E204",
-                        expr.span,
-                        format!("unresolved runtime function {name}"),
-                    )
-                })?;
-            invoke(program, function, values, depth + 1, runtime)?
+            return eval_call(expr, name, args, env, program, depth, runtime);
         }
         ExprKind::Spawn(call) => {
             let value = take_value!(eval(call, env, program, depth, runtime));
@@ -755,170 +493,526 @@ fn eval(
             return eval(branch, env, program, depth, runtime);
         }
         ExprKind::Match(value, arms) => {
-            let scrutinee = take_value!(eval(value, env, program, depth, runtime));
-            for (pattern, body) in arms {
-                let binding = match (&pattern.kind, &scrutinee) {
-                    (PatternKind::Int(pattern), Value::I32(value)) if pattern == value => {
-                        Some(None)
-                    }
-                    (PatternKind::I64(pattern), Value::I64(value)) if pattern == value => {
-                        Some(None)
-                    }
-                    (PatternKind::Wildcard, _) => Some(None),
-                    (PatternKind::Ok(name), Value::Ok(value)) => {
-                        Some(Some((name.clone(), *value.clone())))
-                    }
-                    (PatternKind::Err(name), Value::Err(value)) => {
-                        Some(Some((name.clone(), *value.clone())))
-                    }
-                    (PatternKind::Some(name), Value::Some(value)) => {
-                        Some(Some((name.clone(), *value.clone())))
-                    }
-                    (PatternKind::None, Value::None) => Some(None),
-                    (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => {
-                        Some(None)
-                    }
-                    (
-                        PatternKind::Variant(name, variant, binding),
-                        Value::Enum(actual, value, payload),
-                    ) if name == actual && variant == value => match (binding, payload) {
-                        (None, None) => Some(None),
-                        (Some(binding), Some(payload)) => {
-                            Some(Some((binding.clone(), *payload.clone())))
-                        }
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                if let Some(binding) = binding {
-                    let mut scope = env.clone();
-                    if let Some((name, value)) = binding {
-                        scope.insert(name, Rc::new(RefCell::new(value)));
-                    }
-                    return eval(body, &scope, program, depth, runtime);
-                }
-            }
-            return Err(Diagnostic::new(
-                "E204",
-                expr.span,
-                "unmatched runtime value",
-            ));
+            return eval_match(expr, value, arms, env, program, depth, runtime);
         }
         ExprKind::Block(stmts, tail) => {
-            let mut scope = env.clone();
-            for stmt in stmts {
-                match stmt {
-                    Stmt::Let { name, value, .. } => {
-                        let value = take_value!(eval(value, &scope, program, depth, runtime));
-                        scope.insert(name.clone(), Rc::new(RefCell::new(value)));
-                    }
-                    Stmt::Assign { name, value, span } => {
-                        let value = take_value!(eval(value, &scope, program, depth, runtime));
-                        let cell = scope.get(name).ok_or_else(|| {
-                            Diagnostic::new(
-                                "E204",
-                                *span,
-                                format!("unresolved runtime name {name}"),
-                            )
-                        })?;
-                        *cell.borrow_mut() = value;
-                    }
-                    Stmt::Push { name, value, span } => {
-                        let value = take_value!(eval(value, &scope, program, depth, runtime));
-                        let cell = scope.get(name).ok_or_else(|| {
-                            Diagnostic::new(
-                                "E204",
-                                *span,
-                                format!("unresolved runtime name {name}"),
-                            )
-                        })?;
-                        let mut array = cell.borrow_mut();
-                        match (&mut *array, value) {
-                            (Value::Array(items), value) => items.push(value),
-                            (Value::String(text), Value::String(piece)) => text.push_str(&piece),
-                            (Value::Bytes(items), Value::I32(value)) => {
-                                let byte = u8::try_from(value).map_err(|_| {
-                                    Diagnostic::new("E207", *span, "byte value outside 0..255")
-                                })?;
-                                Arc::make_mut(items).push(byte);
-                            }
-                            _ => {
-                                return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
-                            }
-                        }
-                    }
-                    Stmt::For {
-                        name,
-                        iterable,
-                        body,
-                        span,
-                    } => {
-                        let iterable = take_value!(eval(iterable, &scope, program, depth, runtime));
-                        let values = match iterable {
-                            Value::Array(values) => values,
-                            Value::Bytes(bytes) => bytes
-                                .iter()
-                                .map(|byte| Value::I32(i32::from(*byte)))
-                                .collect(),
-                            _ => {
-                                return Err(Diagnostic::new(
-                                    "E204",
-                                    *span,
-                                    "invalid runtime iterable",
-                                ));
-                            }
-                        };
-                        for value in values {
-                            let mut loop_scope = scope.clone();
-                            loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
-                            match eval(body, &loop_scope, program, depth, runtime)? {
-                                Flow::Value(_) | Flow::Continue => {}
-                                Flow::Break => break,
-                                Flow::Return(value) => return Ok(Flow::Return(value)),
-                            }
-                        }
-                    }
-                    Stmt::While {
-                        condition,
-                        body,
-                        span,
-                    } => loop {
-                        let value = take_value!(eval(condition, &scope, program, depth, runtime));
-                        let Value::Bool(keep_going) = value else {
-                            return Err(Diagnostic::new(
-                                "E204",
-                                *span,
-                                "invalid runtime while condition",
-                            ));
-                        };
-                        if !keep_going {
-                            break;
-                        }
-                        match eval(body, &scope, program, depth, runtime)? {
-                            Flow::Value(_) => {}
-                            Flow::Continue => continue,
-                            Flow::Break => break,
-                            Flow::Return(value) => return Ok(Flow::Return(value)),
-                        }
-                    },
-                    Stmt::Break { .. } => return Ok(Flow::Break),
-                    Stmt::Continue { .. } => return Ok(Flow::Continue),
-                    Stmt::Return { value, .. } => {
-                        let value = take_value!(eval(value, &scope, program, depth, runtime));
-                        return Ok(Flow::Return(value));
-                    }
-                    Stmt::Expr(value) => {
-                        take_value!(eval(value, &scope, program, depth, runtime));
-                    }
-                }
-            }
-            if let Some(tail) = tail {
-                return eval(tail, &scope, program, depth, runtime);
-            }
-            Value::Unit
+            return eval_block(stmts, tail, env, program, depth, runtime);
         }
     };
     Ok(Flow::Value(value))
+}
+
+fn eval_index(
+    expr: &Expr,
+    array: &Expr,
+    index: &Expr,
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    let value = {
+        // A variable read normally copies its value. Indexing only needs
+        // the selected element. Borrow only when evaluating the index cannot
+        // mutate the binding; otherwise preserve the pre-index value snapshot.
+        let borrowed = match &array.kind {
+            ExprKind::Var(name) if index.is_simple_read() => Some(
+                env.get(name)
+                    .ok_or_else(|| {
+                        Diagnostic::new(
+                            "E204",
+                            array.span,
+                            format!("unresolved runtime name {name}"),
+                        )
+                    })?
+                    .borrow(),
+            ),
+            _ => None,
+        };
+        let owned = if borrowed.is_none() {
+            Some(take_value!(eval(array, env, program, depth, runtime)))
+        } else {
+            None
+        };
+        let position = take_value!(eval(index, env, program, depth, runtime));
+        let Value::I32(position) = position else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid runtime index"));
+        };
+        let position = usize::try_from(position).ok();
+        let values = borrowed.as_deref().or(owned.as_ref());
+        match values.expect("array expression has a value") {
+            Value::Array(values) => position.and_then(|at| values.get(at)).cloned(),
+            Value::Bytes(values) => position
+                .and_then(|at| values.get(at))
+                .map(|byte| Value::I32(i32::from(*byte))),
+            _ => return Err(Diagnostic::new("E204", expr.span, "invalid runtime index")),
+        }
+        .ok_or_else(|| Diagnostic::new("E205", expr.span, "array index out of bounds"))?
+    };
+    Ok(Flow::Value(value))
+}
+
+fn eval_field(
+    expr: &Expr,
+    value: &Expr,
+    field: &str,
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    let value = {
+        if let ExprKind::Var(name) = &value.kind {
+            let binding = env.get(name).ok_or_else(|| {
+                Diagnostic::new(
+                    "E204",
+                    value.span,
+                    format!("unresolved runtime name {name}"),
+                )
+            })?;
+            let borrowed = binding.borrow();
+            let Value::Record(_, fields) = &*borrowed else {
+                return Err(Diagnostic::new(
+                    "E204",
+                    expr.span,
+                    "invalid runtime field access",
+                ));
+            };
+            let selected = fields
+                .iter()
+                .find(|(name, _)| name == field)
+                .map(|(_, value)| value.clone())
+                .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?;
+            return Ok(Flow::Value(selected));
+        }
+        let value = take_value!(eval(value, env, program, depth, runtime));
+        let Value::Record(_, fields) = value else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid runtime field access",
+            ));
+        };
+        fields
+            .into_iter()
+            .find(|(name, _)| name == field)
+            .map(|(_, value)| value)
+            .ok_or_else(|| Diagnostic::new("E204", expr.span, "unknown runtime field"))?
+    };
+    Ok(Flow::Value(value))
+}
+
+fn eval_call(
+    expr: &Expr,
+    name: &String,
+    args: &[Expr],
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    if name == builtins::LEN
+        && args.len() == 1
+        && let ExprKind::Var(variable) = &args[0].kind
+    {
+        let binding = env.get(variable).ok_or_else(|| {
+            Diagnostic::new(
+                "E204",
+                args[0].span,
+                format!("unresolved runtime name {variable}"),
+            )
+        })?;
+        return Ok(Flow::Value(array_length(&binding.borrow(), expr.span)?));
+    }
+    let mut values = Vec::new();
+    for arg in args {
+        values.push(take_value!(eval(arg, env, program, depth, runtime)));
+    }
+    let Some(function) = program
+        .functions
+        .iter()
+        .find(|function| function.name == *name)
+    else {
+        return eval_builtin(expr, name, values, program, runtime);
+    };
+    Ok(Flow::Value(invoke(
+        program,
+        function,
+        values,
+        depth + 1,
+        runtime,
+    )?))
+}
+
+/// Builtins and record constructors never recurse into user code, so they
+/// stay out of the evaluator's recursive stack frames.
+#[inline(never)]
+fn eval_builtin(
+    expr: &Expr,
+    name: &String,
+    values: Vec<Value>,
+    program: &Program,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    if let Some(value) = eval_utf8_builtin(name, &values, expr.span) {
+        return Ok(Flow::Value(value?));
+    }
+    if name == builtins::READ_TEXT {
+        let [Value::String(path)] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid read_text call"));
+        };
+        return Ok(Flow::Value(match runtime.read.read_text(path) {
+            Ok(value) => Value::Ok(Box::new(Value::String(value))),
+            Err(error) => Value::Err(Box::new(Value::Enum(
+                builtins::IO_ERROR.to_owned(),
+                error.variant().to_owned(),
+                None,
+            ))),
+        }));
+    }
+    if name == builtins::READ_BYTES {
+        let [Value::String(path)] = values.as_slice() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid read_bytes call",
+            ));
+        };
+        return Ok(Flow::Value(match runtime.read.read_bytes(path) {
+            Ok(bytes) => Value::Ok(Box::new(Value::Bytes(Arc::new(bytes)))),
+            Err(error) => Value::Err(Box::new(Value::Enum(
+                builtins::IO_ERROR.to_owned(),
+                error.variant().to_owned(),
+                None,
+            ))),
+        }));
+    }
+    if name == builtins::WRITE_TEXT {
+        let [Value::String(path), Value::String(text)] = values.as_slice() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid write_text call",
+            ));
+        };
+        return Ok(Flow::Value(match runtime.write.write_text(path, text) {
+            Ok(()) => Value::Ok(Box::new(Value::Unit)),
+            Err(error) => Value::Err(Box::new(Value::Enum(
+                builtins::IO_ERROR.to_owned(),
+                error.variant().to_owned(),
+                None,
+            ))),
+        }));
+    }
+    if name == builtins::WRITE_BYTES {
+        let [Value::String(path), Value::Bytes(bytes)] = values.as_slice() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid write_bytes call",
+            ));
+        };
+        return Ok(Flow::Value(match runtime.write.write_bytes(path, bytes) {
+            Ok(()) => Value::Ok(Box::new(Value::Unit)),
+            Err(error) => Value::Err(Box::new(Value::Enum(
+                builtins::IO_ERROR.to_owned(),
+                error.variant().to_owned(),
+                None,
+            ))),
+        }));
+    }
+    if name == builtins::LINES {
+        let [Value::String(text)] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid lines call"));
+        };
+        return Ok(Flow::Value(Value::Array(
+            text.lines()
+                .map(|line| Value::String(line.to_owned()))
+                .collect(),
+        )));
+    }
+    if name == builtins::ARGS {
+        return Ok(Flow::Value(Value::Array(
+            runtime.args.iter().cloned().map(Value::String).collect(),
+        )));
+    }
+    if name == builtins::LEN {
+        let [value] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid len call"));
+        };
+        return Ok(Flow::Value(array_length(value, expr.span)?));
+    }
+    if name == builtins::PARSE_I32 || name == builtins::PARSE_I64 {
+        let [Value::String(text)] = values.as_slice() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid integer parse call",
+            ));
+        };
+        let digits = text
+            .strip_prefix('+')
+            .or_else(|| text.strip_prefix('-'))
+            .unwrap_or(text);
+        if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Ok(Flow::Value(Value::Err(Box::new(Value::Enum(
+                builtins::PARSE_ERROR.to_owned(),
+                "Invalid".to_owned(),
+                None,
+            )))));
+        }
+        let parsed = if name == builtins::PARSE_I32 {
+            text.parse::<i32>().map(Value::I32)
+        } else {
+            text.parse::<i64>().map(Value::I64)
+        };
+        return Ok(Flow::Value(match parsed {
+            Ok(number) => Value::Ok(Box::new(number)),
+            Err(error) => {
+                let variant = match error.kind() {
+                    std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow => {
+                        "OutOfRange"
+                    }
+                    _ => "Invalid",
+                };
+                Value::Err(Box::new(Value::Enum(
+                    builtins::PARSE_ERROR.to_owned(),
+                    variant.to_owned(),
+                    None,
+                )))
+            }
+        }));
+    }
+    if name == builtins::PARSE_F64 {
+        let [Value::String(text)] = values.as_slice() else {
+            return Err(Diagnostic::new(
+                "E204",
+                expr.span,
+                "invalid float parse call",
+            ));
+        };
+        return Ok(Flow::Value(match parse_f64(text) {
+            Ok(number) => Value::Ok(Box::new(Value::F64(number.to_bits()))),
+            Err(variant) => Value::Err(Box::new(Value::Enum(
+                builtins::PARSE_ERROR.to_owned(),
+                variant.to_owned(),
+                None,
+            ))),
+        }));
+    }
+    if name == builtins::WIDEN_I64 || name == builtins::NARROW_I32 || name == builtins::TO_F64 {
+        let option = |value: Option<Value>| match value {
+            Some(value) => Value::Some(Box::new(value)),
+            None => Value::None,
+        };
+        let converted = match (name.as_str(), values.as_slice()) {
+            (builtins::WIDEN_I64, [Value::I32(number)]) => Value::I64(i64::from(*number)),
+            (builtins::WIDEN_I64, [Value::F64(bits)]) => {
+                option(float_to_i64(f64::from_bits(*bits)).map(Value::I64))
+            }
+            (builtins::NARROW_I32, [Value::I64(number)]) => {
+                option(i32::try_from(*number).ok().map(Value::I32))
+            }
+            (builtins::NARROW_I32, [Value::F64(bits)]) => option(
+                float_to_i64(f64::from_bits(*bits))
+                    .and_then(|number| i32::try_from(number).ok())
+                    .map(Value::I32),
+            ),
+            (builtins::TO_F64, [Value::I32(number)]) => Value::F64(f64::from(*number).to_bits()),
+            (builtins::TO_F64, [Value::I64(number)]) => Value::F64((*number as f64).to_bits()),
+            _ => {
+                return Err(Diagnostic::new(
+                    "E204",
+                    expr.span,
+                    "invalid numeric conversion",
+                ));
+            }
+        };
+        return Ok(Flow::Value(converted));
+    }
+    if name == builtins::JOIN {
+        let [Value::Task(value)] = values.as_slice() else {
+            return Err(Diagnostic::new("E204", expr.span, "invalid join call"));
+        };
+        return Ok(Flow::Value(Value::Ok(value.clone())));
+    }
+    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+        return Ok(Flow::Value(Value::Record(
+            name.clone(),
+            record
+                .fields
+                .iter()
+                .map(|(name, _)| name.clone())
+                .zip(values)
+                .collect(),
+        )));
+    }
+    Err(Diagnostic::new(
+        "E204",
+        expr.span,
+        format!("unresolved runtime function {name}"),
+    ))
+}
+
+fn eval_match(
+    expr: &Expr,
+    value: &Expr,
+    arms: &[(Pattern, Expr)],
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    let scrutinee = take_value!(eval(value, env, program, depth, runtime));
+    for (pattern, body) in arms {
+        let binding = match (&pattern.kind, &scrutinee) {
+            (PatternKind::Int(pattern), Value::I32(value)) if pattern == value => Some(None),
+            (PatternKind::I64(pattern), Value::I64(value)) if pattern == value => Some(None),
+            (PatternKind::Wildcard, _) => Some(None),
+            (PatternKind::Ok(name), Value::Ok(value)) => Some(Some((name.clone(), *value.clone()))),
+            (PatternKind::Err(name), Value::Err(value)) => {
+                Some(Some((name.clone(), *value.clone())))
+            }
+            (PatternKind::Some(name), Value::Some(value)) => {
+                Some(Some((name.clone(), *value.clone())))
+            }
+            (PatternKind::None, Value::None) => Some(None),
+            (PatternKind::Bool(pattern), Value::Bool(value)) if pattern == value => Some(None),
+            (PatternKind::Variant(name, variant, binding), Value::Enum(actual, value, payload))
+                if name == actual && variant == value =>
+            {
+                match (binding, payload) {
+                    (None, None) => Some(None),
+                    (Some(binding), Some(payload)) => {
+                        Some(Some((binding.clone(), *payload.clone())))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        if let Some(binding) = binding {
+            let mut scope = env.clone();
+            if let Some((name, value)) = binding {
+                scope.insert(name, Rc::new(RefCell::new(value)));
+            }
+            return eval(body, &scope, program, depth, runtime);
+        }
+    }
+    Err(Diagnostic::new(
+        "E204",
+        expr.span,
+        "unmatched runtime value",
+    ))
+}
+
+fn eval_block(
+    stmts: &[Stmt],
+    tail: &Option<Box<Expr>>,
+    env: &Env,
+    program: &Program,
+    depth: usize,
+    runtime: &Runtime<'_>,
+) -> Result<Flow, Diagnostic> {
+    let mut scope = env.clone();
+    for stmt in stmts {
+        match stmt {
+            Stmt::Let { name, value, .. } => {
+                let value = take_value!(eval(value, &scope, program, depth, runtime));
+                scope.insert(name.clone(), Rc::new(RefCell::new(value)));
+            }
+            Stmt::Assign { name, value, span } => {
+                let value = take_value!(eval(value, &scope, program, depth, runtime));
+                let cell = scope.get(name).ok_or_else(|| {
+                    Diagnostic::new("E204", *span, format!("unresolved runtime name {name}"))
+                })?;
+                *cell.borrow_mut() = value;
+            }
+            Stmt::Push { name, value, span } => {
+                let value = take_value!(eval(value, &scope, program, depth, runtime));
+                let cell = scope.get(name).ok_or_else(|| {
+                    Diagnostic::new("E204", *span, format!("unresolved runtime name {name}"))
+                })?;
+                let mut array = cell.borrow_mut();
+                match (&mut *array, value) {
+                    (Value::Array(items), value) => items.push(value),
+                    (Value::String(text), Value::String(piece)) => text.push_str(&piece),
+                    (Value::Bytes(items), Value::I32(value)) => {
+                        let byte = u8::try_from(value).map_err(|_| {
+                            Diagnostic::new("E207", *span, "byte value outside 0..255")
+                        })?;
+                        Arc::make_mut(items).push(byte);
+                    }
+                    _ => {
+                        return Err(Diagnostic::new("E204", *span, "invalid runtime push"));
+                    }
+                }
+            }
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                span,
+            } => {
+                let iterable = take_value!(eval(iterable, &scope, program, depth, runtime));
+                let values = match iterable {
+                    Value::Array(values) => values,
+                    Value::Bytes(bytes) => bytes
+                        .iter()
+                        .map(|byte| Value::I32(i32::from(*byte)))
+                        .collect(),
+                    _ => {
+                        return Err(Diagnostic::new("E204", *span, "invalid runtime iterable"));
+                    }
+                };
+                for value in values {
+                    let mut loop_scope = scope.clone();
+                    loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
+                    match eval(body, &loop_scope, program, depth, runtime)? {
+                        Flow::Value(_) | Flow::Continue => {}
+                        Flow::Break => break,
+                        Flow::Return(value) => return Ok(Flow::Return(value)),
+                    }
+                }
+            }
+            Stmt::While {
+                condition,
+                body,
+                span,
+            } => loop {
+                let value = take_value!(eval(condition, &scope, program, depth, runtime));
+                let Value::Bool(keep_going) = value else {
+                    return Err(Diagnostic::new(
+                        "E204",
+                        *span,
+                        "invalid runtime while condition",
+                    ));
+                };
+                if !keep_going {
+                    break;
+                }
+                match eval(body, &scope, program, depth, runtime)? {
+                    Flow::Value(_) => {}
+                    Flow::Continue => continue,
+                    Flow::Break => break,
+                    Flow::Return(value) => return Ok(Flow::Return(value)),
+                }
+            },
+            Stmt::Break { .. } => return Ok(Flow::Break),
+            Stmt::Continue { .. } => return Ok(Flow::Continue),
+            Stmt::Return { value, .. } => {
+                let value = take_value!(eval(value, &scope, program, depth, runtime));
+                return Ok(Flow::Return(value));
+            }
+            Stmt::Expr(value) => {
+                take_value!(eval(value, &scope, program, depth, runtime));
+            }
+        }
+    }
+    if let Some(tail) = tail {
+        return eval(tail, &scope, program, depth, runtime);
+    }
+    Ok(Flow::Value(Value::Unit))
 }
 
 fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagnostic> {
