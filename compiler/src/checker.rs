@@ -88,6 +88,40 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (builtins::TO_STRING, vec![Type::I32], Type::String),
+        (
+            builtins::CHARS,
+            vec![Type::String],
+            Type::Array(Box::new(Type::String)),
+        ),
+        (
+            builtins::SPLIT,
+            vec![Type::String, Type::String],
+            Type::Array(Box::new(Type::String)),
+        ),
+        (builtins::TRIM, vec![Type::String], Type::String),
+        (
+            builtins::CONTAINS,
+            vec![Type::String, Type::String],
+            Type::Bool,
+        ),
+        (
+            builtins::STARTS_WITH,
+            vec![Type::String, Type::String],
+            Type::Bool,
+        ),
+        (
+            builtins::ENDS_WITH,
+            vec![Type::String, Type::String],
+            Type::Bool,
+        ),
+        (
+            builtins::REPLACE,
+            vec![Type::String, Type::String, Type::String],
+            Type::String,
+        ),
+        (builtins::LOWER, vec![Type::String], Type::String),
+        (builtins::UPPER, vec![Type::String], Type::String),
         (
             builtins::READ_LINE,
             Vec::new(),
@@ -205,6 +239,15 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "chars"
+                | "split"
+                | "trim"
+                | "contains"
+                | "starts_with"
+                | "ends_with"
+                | "replace"
+                | "lower"
+                | "upper"
                 | "read_line"
                 | "read_stdin"
                 | "exit"
@@ -249,6 +292,15 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "chars"
+                | "split"
+                | "trim"
+                | "contains"
+                | "starts_with"
+                | "ends_with"
+                | "replace"
+                | "lower"
+                | "upper"
                 | "read_line"
                 | "read_stdin"
                 | "exit"
@@ -505,7 +557,7 @@ fn expression_is_spawn_safe(
                 && name != builtins::READ_LINE
                 && name != builtins::READ_STDIN
                 && name != builtins::EXIT
-                && name != builtins::JOIN
+                && (name != builtins::JOIN || args.len() == 2)
                 && (matches!(
                     name.as_str(),
                     builtins::LINES
@@ -513,6 +565,17 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I32
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
+                        | builtins::JOIN
+                        | builtins::TO_STRING
+                        | builtins::CHARS
+                        | builtins::SPLIT
+                        | builtins::TRIM
+                        | builtins::CONTAINS
+                        | builtins::STARTS_WITH
+                        | builtins::ENDS_WITH
+                        | builtins::REPLACE
+                        | builtins::LOWER
+                        | builtins::UPPER
                         | builtins::WIDEN_I64
                         | builtins::TO_F64
                         | builtins::NARROW_I32
@@ -1109,6 +1172,9 @@ fn infer(
                     }
                 }
                 Op::Add if lhs == Type::String && rhs == Type::String => Ok(Type::String),
+                Op::Lt | Op::Le | Op::Gt | Op::Ge if lhs == Type::String && rhs == Type::String => {
+                    Ok(Type::Bool)
+                }
                 Op::Eq | Op::Ne
                     if lhs == rhs
                         && matches!(
@@ -1129,6 +1195,18 @@ fn infer(
                     format!("invalid operands {lhs} and {rhs} for {op:?}"),
                 )),
             }
+        }
+        ExprKind::Call(name, args) if name == builtins::JOIN && args.len() == 2 => {
+            let parts = type_of(&args[0], env, signatures, return_type, types)?;
+            let separator = type_of(&args[1], env, signatures, return_type, types)?;
+            require(
+                &Type::Array(Box::new(Type::String)),
+                &parts,
+                args[0].span,
+                "argument",
+            )?;
+            require(&Type::String, &separator, args[1].span, "argument")?;
+            Ok(Type::String)
         }
         ExprKind::Call(name, args) => {
             let signature = signatures.get(name).ok_or_else(|| {
@@ -1169,6 +1247,11 @@ fn infer(
             }
             if name == builtins::TO_F64 && actuals == [Type::I64] {
                 return Ok(Type::F64);
+            }
+            if name == builtins::TO_STRING
+                && matches!(actuals[..], [Type::I64 | Type::F64 | Type::Bool])
+            {
+                return Ok(Type::String);
             }
             let mut inferred = HashMap::new();
             for ((arg, expected), actual) in args.iter().zip(&signature.params).zip(&actuals) {
