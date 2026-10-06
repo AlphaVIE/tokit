@@ -460,7 +460,16 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 }
                 builtins::RANGE => "__tok_range".to_owned(),
                 builtins::PI => return "std::f64::consts::PI".to_owned(),
-                builtins::ABS | builtins::MIN | builtins::MAX | builtins::POW => {
+                builtins::ABS
+                | builtins::MIN
+                | builtins::MAX
+                | builtins::POW
+                | builtins::BIT_AND
+                | builtins::BIT_OR
+                | builtins::BIT_XOR
+                | builtins::BIT_NOT
+                | builtins::SHL
+                | builtins::SHR => {
                     let suffix = match types.get(&args[0].span) {
                         Some(Type::I64) => "i64",
                         Some(Type::F64) => "f64",

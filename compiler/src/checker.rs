@@ -107,6 +107,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (builtins::BIT_AND, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::BIT_OR, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::BIT_XOR, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::BIT_NOT, vec![Type::I32], Type::I32),
+        (builtins::SHL, vec![Type::I32, Type::I32], Type::I32),
+        (builtins::SHR, vec![Type::I32, Type::I32], Type::I32),
         (builtins::SHA256, vec![Type::Bytes], Type::Bytes),
         (builtins::MD5, vec![Type::Bytes], Type::Bytes),
         (
@@ -578,6 +584,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "bit_and"
+                | "bit_or"
+                | "bit_xor"
+                | "bit_not"
+                | "shl"
+                | "shr"
                 | "sha256"
                 | "md5"
                 | "hmac_sha256"
@@ -687,6 +699,12 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "bit_and"
+                | "bit_or"
+                | "bit_xor"
+                | "bit_not"
+                | "shl"
+                | "shr"
                 | "sha256"
                 | "md5"
                 | "hmac_sha256"
@@ -1058,6 +1076,12 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::BIT_AND
+                        | builtins::BIT_OR
+                        | builtins::BIT_XOR
+                        | builtins::BIT_NOT
+                        | builtins::SHL
+                        | builtins::SHR
                         | builtins::SHA256
                         | builtins::MD5
                         | builtins::HMAC_SHA256
@@ -2021,6 +2045,12 @@ fn infer(
                     return Ok(left.clone());
                 }
                 (builtins::POW, [Type::I64, Type::I32]) => return Ok(Type::I64),
+                (
+                    builtins::BIT_AND | builtins::BIT_OR | builtins::BIT_XOR,
+                    [Type::I64, Type::I64],
+                )
+                | (builtins::BIT_NOT, [Type::I64])
+                | (builtins::SHL | builtins::SHR, [Type::I64, Type::I32]) => return Ok(Type::I64),
                 (builtins::POW, [Type::F64, Type::F64]) => return Ok(Type::F64),
                 _ => {}
             }
