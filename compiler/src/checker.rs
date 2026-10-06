@@ -2082,6 +2082,21 @@ fn infer(
             }
             Ok(builtins::map_type(Type::Never, Type::Never))
         }
+        ExprKind::Call(name, args) if name == builtins::SERVE && args.len() == 4 => {
+            let handler = Type::Fn(
+                vec![Type::Named(builtins::REQUEST.to_owned())],
+                Box::new(Type::Named(builtins::RESPONSE.to_owned())),
+            );
+            for (arg, expected) in args
+                .iter()
+                .zip([Type::String, Type::I32, Type::I32, handler])
+            {
+                let actual =
+                    type_expected(arg, Some(&expected), env, signatures, return_type, types)?;
+                require(&expected, &actual, arg.span, "argument")?;
+            }
+            Ok(builtins::write_text_result())
+        }
         ExprKind::Call(name, args) if name == builtins::JOIN && args.len() == 2 => {
             let parts = type_of(&args[0], env, signatures, return_type, types)?;
             let separator = type_of(&args[1], env, signatures, return_type, types)?;

@@ -4,6 +4,7 @@
 struct Request{method:String,path:String,query:String,headers:Map<String,String>,body:String}
 struct Response{status:I,headers:Map<String,String>,body:String}
 serve(addr:String,limit:I,handler:(Request)->Response) -> Result<Unit,IoError>
+serve(addr:String,limit:I,workers:I,handler:(Request)->Response) -> Result<Unit,IoError>
 http_request(method:String,url:String,headers:Map<String,String>,body:String) -> Result<Response,IoError>
 ```
 
@@ -62,6 +63,15 @@ handler. Unknown status codes keep their number with a generic reason
 phrase; codes outside 100–999 become `500`. A runtime failure or `exit` in
 the handler ends the program as usual. Native programs flush standard output
 before serving and after each request.
+
+With a `workers` argument, native programs hand each accepted connection to
+one of `workers` threads (clamped to 1–256), so slow handlers run in
+parallel; `limit` then counts accepted connections, and `serve` returns after
+the last of them is answered. Handlers already receive copies of captured
+values, so they share no mutable state; their output lines may interleave in
+any order. The reference interpreter accepts the same call and answers one
+request at a time, which is one valid schedule. See
+[concurrent_http.tok](../examples/concurrent_http.tok).
 
 `http_request` sends one request to an `http://host[:port]/path?query` URL
 (port 80 by default) with `host`, `connection: close`, and `content-length`

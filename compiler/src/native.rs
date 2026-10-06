@@ -265,6 +265,44 @@ fn http_adapters() -> String {
         Some(__TokHttpResponse {{ status: response.{status}, headers: response.{headers}.into_iter().collect(), body: response.{body} }})
     }}).map_err(__tok_net_error)
 }}
+/// `serve` with a worker pool: the accepting thread hands each connection to
+/// one of `workers` threads, which answer requests concurrently.
+fn __tok_net_serve_pool(addr: String, limit: i32, workers: i32, handler: std::sync::Arc<dyn Fn({request}) -> {response} + Send + Sync>) -> Result<(), __TokIoError> {{
+    if !__tok_http_allowed(__TOK_NET_GRANT.get().map(String::as_str), &addr) {{ return Err(__TokIoError::Denied); }}
+    __tok_flush();
+    let listener = std::net::TcpListener::bind(&addr).map_err(|_| __TokIoError::Other)?;
+    let workers = workers.clamp(1, 256) as usize;
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<std::net::TcpStream>(workers);
+    let receiver = std::sync::Arc::new(std::sync::Mutex::new(receiver));
+    let threads: Vec<_> = (0..workers).map(|_| {{
+        let receiver = receiver.clone();
+        let handler = handler.clone();
+        std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(move || loop {{
+            let next = receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv();
+            let Ok(mut stream) = next else {{ break }};
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+            let response = match __tok_http_read_request(&mut stream) {{
+                Ok(request) => {{
+                    let response = handler({request} {{ {method}: request.method, {path}: request.path, {query}: request.query, {headers}: request.headers.into_iter().collect(), {body}: request.body }});
+                    __TokHttpResponse {{ status: response.{status}, headers: response.{headers}.into_iter().collect(), body: response.{body} }}
+                }}
+                Err(_) => __TokHttpResponse {{ status: 400, headers: Vec::new(), body: "bad request".to_owned() }},
+            }};
+            let _ = __tok_http_write_response(&mut stream, &response);
+            __tok_flush();
+        }}).expect("cannot start server thread")
+    }}).collect();
+    let mut accepted = 0;
+    for stream in listener.incoming() {{
+        let Ok(stream) = stream else {{ continue }};
+        if sender.send(stream).is_err() {{ break; }}
+        accepted += 1;
+        if limit > 0 && accepted >= limit {{ break; }}
+    }}
+    drop(sender);
+    for thread in threads {{ let _ = thread.join(); }}
+    Ok(())
+}}
 fn __tok_net_http_read(conn: __TokConn) -> Result<{request}, __TokIoError> {{
     let request = __tok_http_read(&conn.0).map_err(__tok_net_error)?;
     Ok({request} {{ {method}: request.method, {path}: request.path, {query}: request.query, {headers}: request.headers.into_iter().collect(), {body}: request.body }})
@@ -478,6 +516,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PRINT => "__tok_print".to_owned(),
+                builtins::SERVE if args.len() == 4 => "__tok_net_serve_pool".to_owned(),
                 builtins::SERVE => "__tok_net_serve".to_owned(),
                 builtins::SHA256 => "__tok_c_sha256".to_owned(),
                 builtins::MD5 => "__tok_c_md5".to_owned(),
