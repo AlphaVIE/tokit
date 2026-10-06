@@ -196,7 +196,11 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.operations.insert("HTTP over a connection");
                 facts.effects.insert("net.listen");
             } else if name == builtins::SERVE {
-                facts.operations.insert("HTTP server");
+                facts.operations.insert(if args.len() == 4 {
+                    "concurrent HTTP server"
+                } else {
+                    "HTTP server"
+                });
                 facts.effects.insert("net.listen");
             } else if name == builtins::HTTP_REQUEST {
                 facts.operations.insert("HTTP request");

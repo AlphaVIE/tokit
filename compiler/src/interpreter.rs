@@ -2019,9 +2019,12 @@ fn eval_http(
     match (name, values) {
         (
             builtins::SERVE,
+            // The reference interpreter answers one request at a time, also
+            // when a worker count is given.
             [
                 Value::String(addr),
                 Value::I32(limit),
+                ..,
                 Value::Closure(handler),
             ],
         ) => {

@@ -1,0 +1,5 @@
+// Concurrent HTTP service: `tok build examples/concurrent_http.tok -o api`, then `api --allow-net 127.0.0.1:8080 -- 127.0.0.1:8080 0 8`
+// A pool of workers answers requests in parallel; GET /work?ms=N stands in for N milliseconds of I/O such as a database call.
+reply(status:I,body:String)->Response{let h:Map<String,String>=Map();Response(status,h,body)}
+handle(r:Request)->Response{match r.path{"/work"=>{let parts=split(r.query,"=");let ms=if len(parts)==2&&parts[0]=="ms"{match parse_i32(parts[1]){Ok(n)=>n,Err(e)=>0}}else{0};sleep_ms(i64(ms));reply(200,"worked "+String(ms)+" ms")},"/"=>reply(200,"ok"),_=>reply(404,"not found")}}
+main()->Unit{let a=args();let limit=match parse_i32(a[1]){Ok(n)=>n,Err(e)=>0};let workers=match parse_i32(a[2]){Ok(n)=>n,Err(e)=>8};print("listening on "+a[0]+" with "+String(workers)+" workers");match serve(a[0],limit,workers,|r|handle(r)){Ok(u)=>print("done"),Err(e)=>{print("cannot serve");exit(1);}}}
