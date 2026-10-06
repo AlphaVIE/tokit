@@ -36,10 +36,13 @@ The registry currently contains:
 | `http` | Routing with `:param` segments, 404/405, query and URL decoding, header lookup, `text`/`json`/`redirect` responses on top of `serve`. |
 | `redis` | RESP2 client over `Conn`: `cmd`, `ping`, `auth`, `fetch`, `store`, `incr`, `delete`, nested replies. |
 | `postgres` | PostgreSQL protocol v3: trust, cleartext, MD5, and SCRAM-SHA-256 authentication with server-signature check; `query`, parameterized `query_with`, `execute`, `quote`, `close`; text values with `NULL` as `None`. |
+| `websocket` | RFC 6455 server `upgrade` (after `accept`/`http_read`) and client `connect`; `receive` joins fragments and answers pings; `send_text`, `send_binary`, `close`. |
 
 Each package is tested end to end in both backends: `http` serves a real
-API, and `redis` and `postgres` talk to in-process servers that implement
-their wire protocols (the PostgreSQL server verifies SCRAM proofs). They
+API, `redis` and `postgres` talk to in-process servers that implement
+their wire protocols (the PostgreSQL server verifies SCRAM proofs), and
+`websocket` serves an independent RFC 6455 client in the test suite
+([echo example](../examples/websocket_echo/main.tok)). They
 have not yet been run against production Redis or PostgreSQL deployments in
 CI; TLS (`sslmode=require`) is not supported.
 

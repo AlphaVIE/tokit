@@ -1,0 +1,3 @@
+// WebSocket client for the echo service: `tok run --allow-net 127.0.0.1:8080 examples/websocket_echo/client.tok -- 127.0.0.1:8080`
+import ws="pkg:websocket";talk(addr:String)->Result<[String],String>{let s=ws::connect(addr,"/echo")?;ws::send_text(s,"hi")?;let first=ws::text(ws::receive(s)?);ws::send_binary(s,sha256(utf8_encode("x")))?;let second=ws::receive(s)?;ws::close(s);Ok([first,hex(second.data)])}
+main()->Unit{match talk(args()[0]){Ok(parts)=>print(join(parts,"|")),Err(e)=>{print("failed: "+e);exit(1)}}}

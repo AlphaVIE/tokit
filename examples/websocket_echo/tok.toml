@@ -1,0 +1,2 @@
+[dependencies]
+websocket = { path = "../../packages/websocket", entry = "websocket.tok", sha256 = "6c783e8cd025176dffe3b39a48b5c428d4b16fa2f8b28639b212a909fafed267" }

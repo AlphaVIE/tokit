@@ -89,7 +89,7 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 
 1. `tok check --json file.tok` returns `{"ok":true}` or an error with `code`, `line`, `column`, `message`.
 2. `tok run file.tok -- args`, `tok test file.tok`, `tok build file.tok -o app`, `tok compact --write file.tok`.
-3. Packages: `tok new app`, `tok add json` (also `http`, `redis`, `postgres`; `tok search` lists them), then `import json="pkg:json";` and call `json.parse(text)`.
+3. Packages: `tok new app`, `tok add json` (also `http`, `redis`, `postgres`, `websocket`; `tok search` lists them), then `import json="pkg:json";` and call `json.parse(text)`.
 4. Inspect and polish: `tok lint file.tok` (unused names, `var` never changed, dead private functions), `tok expand file.tok` (readable layout), `tok explain --pseudo file.tok`, `tok doc file.tok`, `tok bench file.tok` (times `bench_*` functions), `tok repl`.
 
 Frequent codes: `E002` syntax, `E101` unknown name, `E102` type mismatch (message shows expected and actual), `E104` invalid operands, `E105` wrong argument count, `E106` duplicate or reserved name, `E109` assigning an immutable binding, `E110` invalid indexing, `E113` unknown field, `E115` add a type annotation, `E116` non-exhaustive or invalid `match`, `E117` effect in a spawned function, `E201` integer overflow or division by zero at runtime, `E205` index out of bounds.
