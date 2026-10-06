@@ -387,12 +387,19 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 }
             }
         }
-        ExprKind::If(condition, yes, no) => format!(
-            "(if {} {} else {})",
-            emit_expr(condition, source, types),
-            emit_expr(yes, source, types),
-            emit_expr(no, source, types)
-        ),
+        ExprKind::If(condition, yes, no) => {
+            // Rust requires a block after `else`; an `else if` branch is an
+            // expression, so wrap it.
+            let no = match no.kind {
+                ExprKind::Block(..) => emit_expr(no, source, types),
+                _ => format!("{{ {} }}", emit_expr(no, source, types)),
+            };
+            format!(
+                "(if {} {} else {no})",
+                emit_expr(condition, source, types),
+                emit_expr(yes, source, types),
+            )
+        }
         ExprKind::Match(value, arms) => {
             let arms = arms
                 .iter()

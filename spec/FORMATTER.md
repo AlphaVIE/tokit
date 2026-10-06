@@ -1,11 +1,14 @@
 # Experimental canonical formatter
 
 `tok compact file.tok` removes optional `fn` keywords from function
-declarations and shortens parsed `i32`/`i64` type names to `I`/`L`.
-`tok compact --write file.tok` applies both changes to the file.
-`--functions-only` and `--types-only` select one transformation for isolated
-measurements. The type transformation leaves names in expressions, conversion
-calls, literal suffixes, strings, and comments untouched. Both transformations
+declarations, shortens parsed `i32`/`i64`/`f64` type names to `I`/`L`/`F`,
+removes empty `else{}` branches, and drops the `;` after a value-less `if`
+chain or block statement when the next token starts a statement or closes the
+block. `tok compact --write file.tok` applies all changes to the file.
+`--functions-only`, `--types-only`, and `--blocks-only` select one
+transformation for isolated measurements. Branches containing comments keep
+their `else`. The type transformation leaves names in expressions, conversion
+calls, literal suffixes, strings, and comments untouched. All transformations
 are deterministic and idempotent.
 
 `tok fmt file.tok` prints a canonical whitespace form. `tok fmt --check file.tok` exits unsuccessfully when the file differs; `tok fmt --write file.tok` replaces it. The formatter parses the input first, preserves every lexer token and line comment, removes unnecessary whitespace, separates top-level declarations by one newline, and writes a final newline. It inserts a space only when concatenating adjacent token spellings would change tokenization. It moves line comments to their own lines so that surrounding syntax remains unchanged.

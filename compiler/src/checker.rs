@@ -1198,11 +1198,12 @@ fn infer(
             let yes_type = type_of(yes, env, signatures, return_type, types)?;
             let no_type = type_of(no, env, signatures, return_type, types)?;
             join(&yes_type, &no_type).ok_or_else(|| {
-                Diagnostic::new(
-                    "E102",
-                    expr.span,
-                    format!("branches have different types: {yes_type} and {no_type}"),
-                )
+                let message = if no.span.start == no.span.end {
+                    format!("if without else must have type Unit, found {yes_type}")
+                } else {
+                    format!("branches have different types: {yes_type} and {no_type}")
+                };
+                Diagnostic::new("E102", expr.span, message)
             })
         }
         ExprKind::Match(value, arms) => {
