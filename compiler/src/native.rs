@@ -22,6 +22,7 @@ const PRELUDE_UTF8: &str = include_str!("native_runtime/utf8.rs.txt");
 const PRELUDE_TASKS: &str = include_str!("native_runtime/tasks.rs.txt");
 const PRELUDE_IO_HELPERS: &str = include_str!("native_runtime/io_helpers.rs.txt");
 const PRELUDE_STRINGS: &str = include_str!("native_runtime/strings.rs.txt");
+const PRELUDE_MAPS: &str = include_str!("native_runtime/maps.rs.txt");
 
 fn runtime_prelude(body: &str) -> String {
     let uses_io = body.contains("__tok_read_") || body.contains("__tok_write_");
@@ -54,6 +55,9 @@ fn runtime_prelude(body: &str) -> String {
     if body.contains("__tok_str") {
         prelude.push_str(PRELUDE_STRINGS);
     }
+    if body.contains("BTreeMap") {
+        prelude.push_str(PRELUDE_MAPS);
+    }
     if body.contains("__TokTask") || body.contains("__tok_spawn") || body.contains("__tok_join") {
         prelude.push_str(PRELUDE_TASKS);
     }
@@ -75,6 +79,11 @@ fn rust_type(ty: &Type) -> String {
         Type::Named(name) if name == builtins::PARSE_ERROR => "__TokParseError".to_owned(),
         Type::Named(name) if name == builtins::TASK_ERROR => "__TokTaskError".to_owned(),
         Type::Named(name) => user_name(name),
+        Type::Applied(name, args) if name == builtins::MAP => format!(
+            "std::collections::BTreeMap<{},{}>",
+            rust_type(&args[0]),
+            rust_type(&args[1])
+        ),
         Type::Applied(name, args) => format!(
             "{}<{}>",
             user_name(name),
@@ -122,6 +131,11 @@ fn rust_type_fallback(ty: &Type) -> String {
             rust_type_fallback(ok),
             rust_type_fallback(err)
         ),
+        Type::Applied(name, args) if name == builtins::MAP => format!(
+            "std::collections::BTreeMap<{},{}>",
+            rust_type_fallback(&args[0]),
+            rust_type_fallback(&args[1])
+        ),
         Type::Applied(name, args) => format!(
             "{}<{}>",
             user_name(name),
@@ -165,6 +179,10 @@ fn borrowed_param(ty: &Type) -> bool {
         ty,
         Type::I32 | Type::I64 | Type::F64 | Type::Bool | Type::Unit | Type::Param(_)
     )
+}
+
+fn is_map(ty: Option<&Type>) -> bool {
+    matches!(ty, Some(Type::Applied(name, _)) if name == builtins::MAP)
 }
 
 fn param_type(ty: &Type) -> String {
@@ -259,6 +277,15 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::LINES => "__tok_lines".to_owned(),
                 builtins::ARGS => "__tok_args".to_owned(),
                 builtins::PRINT => "__tok_print".to_owned(),
+                builtins::MAP => "std::collections::BTreeMap::new".to_owned(),
+                builtins::GET => "__tok_map_get".to_owned(),
+                builtins::GET_OR => "__tok_map_get_or".to_owned(),
+                builtins::KEYS => "__tok_map_keys".to_owned(),
+                builtins::VALUES => "__tok_map_values".to_owned(),
+                builtins::REMOVE => "__tok_map_remove".to_owned(),
+                builtins::CONTAINS if is_map(types.get(&args[0].span)) => {
+                    "__tok_map_contains".to_owned()
+                }
                 builtins::TO_STRING => "__tok_string".to_owned(),
                 builtins::JOIN if args.len() == 2 => "__tok_str_join".to_owned(),
                 builtins::CHARS => "__tok_str_chars".to_owned(),
@@ -294,6 +321,12 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::JOIN => "__tok_join".to_owned(),
                 _ => user_name(name),
             };
+            if name == builtins::LEN && is_map(types.get(&args[0].span)) {
+                return format!(
+                    "__tok_map_len({})",
+                    emit_array_borrow(&args[0], source, types)
+                );
+            }
             if name == builtins::LEN {
                 let (source_id, line, column) = location(source, expr.span);
                 let borrowed = if types.get(&args[0].span) == Some(&Type::Bytes) {
@@ -312,7 +345,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 args.iter()
                     .enumerate()
                     .map(|(index, arg)| {
-                        if borrowed.is_some_and(|modes| modes[index]) {
+                        let lent_map = index == 0 && callee.starts_with("__tok_map_");
+                        if lent_map || borrowed.is_some_and(|modes| modes[index]) {
                             emit_array_borrow(arg, source, types)
                         } else {
                             emit_expr(arg, source, types)
@@ -512,14 +546,19 @@ fn emit_stmt(stmt: &Stmt, source: &SourceMap, types: &EmitContext<'_>) -> String
             for (position, step) in path.iter().enumerate() {
                 match step {
                     PlaceStep::Index(index, span) => {
+                        let map = is_map(types.get(span));
                         write!(
                             out,
-                            "let __tok_i{position}: i32 = {}; ",
+                            "let __tok_i{position}{} = {}; ",
+                            if map { "" } else { ": i32" },
                             emit_expr(index, source, types)
                         )
                         .expect("writing to String cannot fail");
                         let (source_id, line, column) = location(source, *span);
-                        if types.get(span) == Some(&Type::Bytes) {
+                        if map {
+                            byte_store =
+                                Some(format!("{place}.insert(__tok_i{position}, __tok_value);"));
+                        } else if types.get(span) == Some(&Type::Bytes) {
                             byte_store = Some(format!(
                                 "__tok_byte_store(&mut {place}, __tok_i{position}, __tok_value, {source_id}, {line}, {column});"
                             ));

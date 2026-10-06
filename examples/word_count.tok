@@ -1,0 +1,2 @@
+// Counts words from standard input and prints them in key order.
+main()->Unit{let text=match read_stdin(){Ok(text)=>text,Err(error)=>{print("unreadable input");exit(2)}};var counts:Map<String,I>=Map();for line in lines(text){for word in split(lower(line)," "){if word!=""{counts[word]=get_or(counts,word,0)+1;}}}for word in keys(counts){print(word+" "+String(get_or(counts,word,0)));}}
