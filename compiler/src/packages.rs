@@ -196,6 +196,20 @@ fn hash_tree(files: &[TreeFile], manifest: Option<&[u8]>) -> String {
     hex_digest(hasher.finalize())
 }
 
+/// The tree digest of in-memory `.tok` sources (relative paths), as `hash_path` computes for a directory.
+pub fn hash_sources(sources: &[(String, &[u8])], manifest: Option<&[u8]>) -> String {
+    let mut files: Vec<TreeFile> = sources
+        .iter()
+        .map(|(relative, bytes)| TreeFile {
+            path: PathBuf::from(relative),
+            relative: relative.clone(),
+            bytes: bytes.to_vec(),
+        })
+        .collect();
+    files.sort_by(|left, right| left.relative.cmp(&right.relative));
+    hash_tree(&files, manifest)
+}
+
 fn tree_manifest(root: &Path) -> Result<Option<Vec<u8>>, String> {
     match fs::read(root.join("tok.toml")) {
         Ok(bytes) => Ok(Some(bytes)),
@@ -381,19 +395,46 @@ impl GraphBuilder {
             let record = dependencies[name]
                 .as_table()
                 .ok_or_else(|| format!("dependency {name} must be a table"))?;
-            let path = record
-                .get("path")
-                .and_then(toml::Value::as_str)
-                .ok_or_else(|| format!("dependency {name} path must be a string"))?;
             let expected = checked_digest(name, record)?;
-            let relative = Path::new(path);
-            if path.is_empty() || path.contains('\\') || relative.is_absolute() {
-                return Err(format!("dependency {name} path must be relative and use /"));
-            }
-            let canonical = fs::canonicalize(root_dir.join(relative))
-                .map_err(|error| format!("cannot resolve dependency {name}: {error}"))?;
             let mut entry_name = None;
-            if canonical.is_file() {
+            let (path, canonical) = if let Some(version) = record.get("version") {
+                // A registry package: its name, version, and digest select one store tree.
+                let version = version
+                    .as_str()
+                    .ok_or_else(|| format!("dependency {name} version must be a string"))?;
+                if record.len() != 2 {
+                    return Err(format!(
+                        "registry dependency {name} needs only version and sha256 fields"
+                    ));
+                }
+                let package = crate::registry::find(name, Some(version))
+                    .ok_or_else(|| format!("the registry has no package {name}@{version}"))?;
+                if package.sha256 != expected {
+                    return Err(format!(
+                        "dependency {name} sha256 does not match registry package {name}@{version}"
+                    ));
+                }
+                let directory = crate::registry::materialize(&package)?;
+                entry_name = Some(package.entry);
+                (format!("registry:{name}@{version}"), directory)
+            } else {
+                let path = record
+                    .get("path")
+                    .and_then(toml::Value::as_str)
+                    .ok_or_else(|| {
+                        format!("dependency {name} needs a path or a registry version")
+                    })?;
+                let relative = Path::new(path);
+                if path.is_empty() || path.contains('\\') || relative.is_absolute() {
+                    return Err(format!("dependency {name} path must be relative and use /"));
+                }
+                let canonical = fs::canonicalize(root_dir.join(relative))
+                    .map_err(|error| format!("cannot resolve dependency {name}: {error}"))?;
+                (path.to_owned(), canonical)
+            };
+            if entry_name.is_some() {
+                // Registry packages were validated above.
+            } else if canonical.is_file() {
                 if record.len() != 2
                     || !record.contains_key("path")
                     || !record.contains_key("sha256")
@@ -416,7 +457,8 @@ impl GraphBuilder {
                     record
                         .get("entry")
                         .and_then(toml::Value::as_str)
-                        .ok_or_else(|| format!("dependency {name} entry must be a string"))?,
+                        .ok_or_else(|| format!("dependency {name} entry must be a string"))?
+                        .to_owned(),
                 );
             } else {
                 return Err(format!(
@@ -438,7 +480,10 @@ impl GraphBuilder {
                     .packages
                     .get(&owner)
                     .expect("resolved package exists");
-                if entry_name.is_some_and(|entry| package.path != canonical.join(entry)) {
+                if entry_name
+                    .as_deref()
+                    .is_some_and(|entry| package.path != canonical.join(entry))
+                {
                     return Err(format!(
                         "dependency {name} uses one package with conflicting entry files"
                     ));
@@ -454,7 +499,7 @@ impl GraphBuilder {
                     package_tree(
                         &id,
                         canonical,
-                        entry_name.expect("directory entry checked"),
+                        entry_name.as_deref().expect("directory entry checked"),
                         expected,
                     )?
                 };
@@ -490,8 +535,8 @@ impl GraphBuilder {
                 self.entries.push(LockEntry {
                     id,
                     name: name.clone(),
-                    path: path.to_owned(),
-                    entry: entry_name.map(str::to_owned),
+                    path: path.clone(),
+                    entry: entry_name.clone(),
                     sha256: expected.to_owned(),
                     manifest_sha256,
                     owner: owner.clone(),
@@ -710,6 +755,81 @@ pub fn add_local(
     item.insert("sha256", Value::from(digest));
     dependencies.insert(name, Item::Value(Value::InlineTable(item)));
     write_manifest_update(root_dir, &document.to_string(), previous.as_deref())
+}
+
+/// Add `name` or `name@version` from the embedded registry to `tok.toml` and `tok.lock`.
+pub fn add_registry(root_dir: &Path, spec: &str) -> Result<PathBuf, String> {
+    let (name, version) = match spec.split_once('@') {
+        Some((name, version)) => (name, Some(version)),
+        None => (spec, None),
+    };
+    let package = crate::registry::find(name, version).ok_or_else(|| {
+        let known = crate::registry::packages()
+            .iter()
+            .map(|package| format!("{}@{}", package.name, package.version))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("the registry has no package {spec}; available: {known}")
+    })?;
+    let manifest = root_dir.join("tok.toml");
+    check_regular_destination(&manifest)?;
+    let previous = match fs::read_to_string(&manifest) {
+        Ok(source) => Some(source),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("cannot read tok.toml: {error}")),
+    };
+    let mut document = match &previous {
+        Some(source) => source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid tok.toml: {error}"))?,
+        None => DocumentMut::new(),
+    };
+    if document.get("dependencies").is_none() {
+        document["dependencies"] = Item::Table(Table::new());
+    }
+    let dependencies = document["dependencies"]
+        .as_table_mut()
+        .ok_or("tok.toml needs a [dependencies] table")?;
+    if dependencies.contains_key(name) {
+        return Err(format!("dependency {name} already exists"));
+    }
+    let mut item = InlineTable::new();
+    item.insert("version", Value::from(package.version.as_str()));
+    item.insert("sha256", Value::from(package.sha256.as_str()));
+    dependencies.insert(name, Item::Value(Value::InlineTable(item)));
+    write_manifest_update(root_dir, &document.to_string(), previous.as_deref())
+}
+
+/// Create a project directory with `tok.toml`, `main.tok`, and `tok.lock`.
+pub fn new_project(directory: &Path) -> Result<PathBuf, String> {
+    let name = directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| {
+            let mut chars = name.chars();
+            chars
+                .next()
+                .is_some_and(|first| first.is_ascii_alphabetic())
+                && chars.all(|character| {
+                    character.is_ascii_alphanumeric() || character == '_' || character == '-'
+                })
+        })
+        .ok_or("project name must start with a letter and use letters, digits, _ or -")?;
+    if directory.exists() {
+        return Err(format!("{} already exists", directory.display()));
+    }
+    fs::create_dir_all(directory).map_err(|error| format!("cannot create project: {error}"))?;
+    fs::write(
+        directory.join("tok.toml"),
+        format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nentry = \"main.tok\"\n\n[dependencies]\n"),
+    )
+    .map_err(|error| format!("cannot write tok.toml: {error}"))?;
+    fs::write(
+        directory.join("main.tok"),
+        format!("main()->Unit{{print(\"hello from {name}\");}}\n"),
+    )
+    .map_err(|error| format!("cannot write main.tok: {error}"))?;
+    write_lock(directory)
 }
 
 pub fn remove_local(root_dir: &Path, name: &str) -> Result<PathBuf, String> {
