@@ -155,6 +155,15 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) || (name == builtins::JOIN && args.len() == 2)
             {
                 facts.operations.insert("string operation");
+            } else if name == builtins::ENV {
+                facts.operations.insert("environment variable");
+                facts.effects.insert("env.read");
+            } else if name == builtins::NOW_MS || name == builtins::CLOCK_NS {
+                facts.operations.insert("clock");
+                facts.effects.insert("time.read");
+            } else if name == builtins::SLEEP_MS {
+                facts.operations.insert("sleep");
+                facts.effects.insert("time.sleep");
             } else if name == builtins::PRINT {
                 facts.operations.insert("standard output");
                 facts.effects.insert("io.stdout");

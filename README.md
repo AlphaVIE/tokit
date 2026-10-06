@@ -46,7 +46,7 @@ Strings convert from numbers and booleans with `String(value)` and support `spli
 
 Programs talk to the terminal with `print(String)`, `read_line()->Option<String>`, `read_stdin()->Result<String,IoError>`, and `exit(status)`; a `main` returning `Unit` prints nothing extra. [greet.tok](examples/greet.tok) reads names until end of input.
 
-Programs can read their own arguments with `args()->[String]`. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
+Programs can read their own arguments with `args()->[String]`, environment variables with `env(name)`, and clocks with `now_ms()`/`clock_ns()`; `sleep_ms(ms)` pauses. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
 
 The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
 

@@ -88,6 +88,7 @@ thread_local! { static __TOK_READ_ROOT: std::cell::RefCell<Option<std::path::Pat
 thread_local! { static __TOK_WRITE_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) }; }
 thread_local! { static __TOK_ARGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
 fn __tok_configure_runtime() {
+    let _ = __TOK_STARTED.get_or_init(std::time::Instant::now);
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut start = 0;
     let mut saw_read = false;
@@ -146,3 +147,8 @@ fn __tok_stdin_line() -> Option<String> {
         }
     }
 }
+fn __tok_env(key: String) -> Option<String> { std::env::var(key).ok() }
+fn __tok_now_ms() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)) }
+static __TOK_STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+fn __tok_clock_ns() -> i64 { i64::try_from(__TOK_STARTED.get_or_init(std::time::Instant::now).elapsed().as_nanos()).unwrap_or(i64::MAX) }
+fn __tok_sleep_ms(millis: i64) { __tok_flush(); std::thread::sleep(std::time::Duration::from_millis(u64::try_from(millis).unwrap_or(0))); }

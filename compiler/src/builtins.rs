@@ -7,6 +7,10 @@ pub const WRITE_BYTES: &str = "write_bytes";
 pub const LINES: &str = "lines";
 pub const ARGS: &str = "args";
 pub const PRINT: &str = "print";
+pub const ENV: &str = "env";
+pub const NOW_MS: &str = "now_ms";
+pub const CLOCK_NS: &str = "clock_ns";
+pub const SLEEP_MS: &str = "sleep_ms";
 pub const ABS: &str = "abs";
 pub const MIN: &str = "min";
 pub const MAX: &str = "max";
@@ -189,7 +193,11 @@ pub fn equatable(ty: &Type) -> bool {
 pub fn is_call(name: &str) -> bool {
     matches!(
         name,
-        "abs"
+        "env"
+            | "now_ms"
+            | "clock_ns"
+            | "sleep_ms"
+            | "abs"
             | "min"
             | "max"
             | "pow"
