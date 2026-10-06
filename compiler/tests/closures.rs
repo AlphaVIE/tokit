@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -6,10 +8,7 @@ fn native_output(source: &str) -> String {
     let binary = std::env::temp_dir().join(format!(
         "tokit-closures-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&check(source).unwrap(), source, &binary).unwrap();
@@ -131,10 +130,7 @@ fn local_function_values_resolve_inside_imported_modules() {
     let directory = std::env::temp_dir().join(format!(
         "tokit-closure-modules-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(

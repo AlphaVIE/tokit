@@ -1,3 +1,5 @@
+mod common;
+
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -152,10 +154,7 @@ fn lsp_rechecks_open_import_graph_and_clears_stale_diagnostics() {
     let directory = std::env::temp_dir().join(format!(
         "tokit lsp graph {} {}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir(&directory).unwrap();
     let main_path = directory.join("main.tok");
@@ -265,10 +264,7 @@ fn lsp_resolves_new_unsaved_import_file() {
     let directory = std::env::temp_dir().join(format!(
         "tokit-lsp-new-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir(&directory).unwrap();
     let main_path = directory.join("main.tok");

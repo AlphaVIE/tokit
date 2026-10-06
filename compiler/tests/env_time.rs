@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -10,10 +12,7 @@ fn source_file() -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
         "tokit-env-time-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("main.tok");

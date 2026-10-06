@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -73,10 +75,7 @@ fn native_error_location_uses_the_expression_source() {
     let directory = std::env::temp_dir().join(format!(
         "tokit-source-map-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::create_dir(&directory).unwrap();
     for (name, library_source) in [

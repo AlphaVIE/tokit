@@ -1,13 +1,12 @@
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use tokit_compiler::{ai_index, interpreter, modules, native, packages};
 
 fn temporary_directory() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     for attempt in 0..100 {
         let path = std::env::temp_dir().join(format!(
             "tokit-package-{}-{nonce}-{attempt}",

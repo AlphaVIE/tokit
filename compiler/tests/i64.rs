@@ -1,12 +1,11 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, format, native, run, run_with_runtime_args};
 
 fn native_output(source: &str) -> String {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let output = std::env::temp_dir().join(format!(
         "tokit-i64-{}-{nonce}{}",
         std::process::id(),
@@ -139,10 +138,7 @@ fn wide_arithmetic_failures_keep_checked_e201_diagnostics() {
         let error = run(source).unwrap_err().display(source);
         assert!(error.starts_with("E201@"), "{error}");
         if native_available {
-            let nonce = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
+            let nonce = common::nonce();
             let output = std::env::temp_dir().join(format!(
                 "tokit-i64-fail-{}-{nonce}{}",
                 std::process::id(),

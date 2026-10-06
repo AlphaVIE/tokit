@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -6,10 +8,7 @@ fn native_output(source: &str) -> String {
     let binary = std::env::temp_dir().join(format!(
         "tokit-strings-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&check(source).unwrap(), source, &binary).unwrap();

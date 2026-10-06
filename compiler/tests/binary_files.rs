@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -5,10 +7,7 @@ use tokit_compiler::filesystem::{IoError, ReadPolicy, WritePolicy};
 use tokit_compiler::{check, native, run_with_capabilities};
 
 fn temporary_directory() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = common::nonce();
     let directory =
         std::env::temp_dir().join(format!("tokit-binary-{}-{nonce}", std::process::id()));
     std::fs::create_dir(&directory).unwrap();

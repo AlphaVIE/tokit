@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::{check, native, run};
@@ -28,10 +30,7 @@ fn task_values_join_and_match_errors() {
             assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
             continue;
         }
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = common::nonce();
         let output = std::env::temp_dir().join(format!(
             "tokit-task-{}-{nonce}{}",
             std::process::id(),

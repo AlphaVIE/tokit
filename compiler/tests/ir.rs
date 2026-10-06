@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 
 use tokit_compiler::ast::Type;
@@ -34,10 +36,7 @@ fn scalar_ir_has_typed_ordered_values_and_native_parity() {
     let binary = std::env::temp_dir().join(format!(
         "tokit-ir-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&program, source, &binary).unwrap();
@@ -61,10 +60,7 @@ fn scalar_ir_preserves_checked_overflow_diagnostic() {
         let binary = std::env::temp_dir().join(format!(
             "tokit-ir-overflow-{}-{}{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            common::nonce(),
             std::env::consts::EXE_SUFFIX
         ));
         native::build(&tokit_compiler::check(source).unwrap(), source, &binary).unwrap();
@@ -99,10 +95,7 @@ fn scalar_ir_lowers_scoped_immutable_bindings() {
     let binary = std::env::temp_dir().join(format!(
         "tokit-ir-locals-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&program, source, &binary).unwrap();
@@ -142,10 +135,7 @@ fn scalar_ir_branches_are_lazy_scoped_and_match_native_execution() {
         let binary = std::env::temp_dir().join(format!(
             "tokit-ir-branch-scope-{}-{}{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            common::nonce(),
             std::env::consts::EXE_SUFFIX
         ));
         native::build(&program, source, &binary).unwrap();
@@ -179,10 +169,7 @@ fn scalar_ir_branches_are_lazy_scoped_and_match_native_execution() {
         let binary = std::env::temp_dir().join(format!(
             "tokit-ir-branch-{}-{}{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            common::nonce(),
             std::env::consts::EXE_SUFFIX
         ));
         native::build(&program, branch, &binary).unwrap();
@@ -237,10 +224,7 @@ fn scalar_ir_checks_calls_and_keeps_argument_order() {
     let binary = std::env::temp_dir().join(format!(
         "tokit-ir-calls-{}-{}{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        common::nonce(),
         std::env::consts::EXE_SUFFIX
     ));
     native::build(&program, source, &binary).unwrap();

@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -128,10 +130,7 @@ fn cli_check_and_write_use_the_same_canonical_form() {
     let path = std::env::temp_dir().join(format!(
         "tokit-fmt-{}-{}.tok",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::write(&path, "fn main ( ) -> i32 { 1 + 2 }").unwrap();
     let binary = env!("CARGO_BIN_EXE_tok");
@@ -174,10 +173,7 @@ fn compact_cli_writes_keyword_free_declarations() {
     let path = std::env::temp_dir().join(format!(
         "tokit-compact-{}-{}.tok",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        common::nonce()
     ));
     std::fs::write(&path, "fn main()->i32{42}").unwrap();
     for (mode, expected) in [
