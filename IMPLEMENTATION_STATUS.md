@@ -1,6 +1,6 @@
 # Implementation status
 
-Status on 2026-10-06. The project brief defines phases 0–15.
+Status on 2026-10-07. The project brief defines phases 0–15.
 **Eleven of sixteen phases have a runnable partial implementation**
 (5–15). Five earlier phases have research or provisional specification
 artifacts (0–4). This is a count of covered phases, not a percentage
@@ -21,8 +21,8 @@ denominator and revise this inventory when evidence changes.
 | 8 Tokit IR | [Typed scalar IR](compiler/src/ir.rs), [contract](spec/TOKIT_IR.md), [tests](compiler/tests/ir.rs) | Runnable partial implementation; scalar expressions, immutable bindings, lazy conditional regions, and checked non-generic calls |
 | 9 Native backend | [Rust bootstrap backend](compiler/src/native.rs), [contract](spec/NATIVE_BOOTSTRAP.md) | Runnable partial implementation; no independent optimizer/backend |
 | 10 Runtime | [Native runtime helpers](compiler/src/native_runtime/core.rs.txt), [bytes](compiler/src/native_runtime/bytes.rs.txt) | Runnable partial implementation; GC and memory model remain open |
-| 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md), [network capability](spec/NETWORK_CAPABILITY.md), [builtins](spec/EXPERIMENTAL_SUBSET.md) | Runnable partial implementation; strings, maps, arrays, math, standard I/O, environment, clocks, directories, and an HTTP/1.1 server and client; TLS and streaming absent |
-| 12 Toolchain | [CLI](compiler/src/main.rs), [formatter](compiler/src/format.rs), [local packages](spec/LOCAL_PACKAGE_CANDIDATE.md) | Runnable partial implementation; registry/build ecosystem incomplete |
+| 11 Standard library | [Experimental JSON module](examples/json/json.tok), [filesystem capability](spec/FILESYSTEM_CAPABILITY.md), [network capability](spec/NETWORK_CAPABILITY.md), [builtins](spec/EXPERIMENTAL_SUBSET.md) | Runnable partial implementation; strings, maps, arrays, math, standard I/O, environment, clocks, directories, an HTTP/1.1 server and client, raw TCP, hashing/encoding, and bit operations; registry packages `json`, `http`, `redis`, `postgres`; TLS and streaming absent |
+| 12 Toolchain | [CLI](compiler/src/main.rs), [formatter](compiler/src/format.rs), [package registry](spec/PACKAGE_REGISTRY.md), [tools](spec/TOOLS.md) | Runnable partial implementation; `tok new/add/rm/search` with an embedded registry and content-addressed store, `tok doc/lint/bench/repl/expand`; remote registry, signing, and SBOM absent |
 | 13 AI interfaces | [Program index](compiler/src/ai_index.rs), [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md), [structured diagnostics](spec/AI_INDEX.md) | Runnable partial implementation; expression-level and multi-file AST edits absent |
 | 14 IDE | [Experimental LSP server](spec/LSP_BOOTSTRAP.md), [implementation](compiler/src/lsp.rs) | Runnable partial implementation; diagnostics, symbols, definitions, and hover; completion, rename, and bundled editor extension absent |
 | 15 Self-hosting | [Self-hosted lexer](selfhost/lexer.tok), [contract](spec/SELF_HOSTING.md), [equivalence test](compiler/tests/selfhost_lexer.rs) | Runnable partial implementation; lexer only, parser and checker remain in Rust |
