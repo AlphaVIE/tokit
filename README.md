@@ -8,6 +8,8 @@ The project brief is in [PROMPT.txt](PROMPT.txt). Start with [VISION.md](VISION.
 
 An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can parse, type-check, interpret, explain, [format source](spec/FORMATTER.md), [measure structural density](research/STRUCTURAL_METRICS.md), and [build native executables](spec/NATIVE_BOOTSTRAP.md) from a small `.tok` subset. With Rust installed, run `cargo test --workspace`, `cargo run -p tokit-compiler --bin tok -- run examples/answer.tok`, or `cargo run -p tokit-compiler --bin tok -- explain examples/match_result.tok`. The source grammar and bootstrap backend are not yet production language commitments.
 
+For human review, `tok explain --pseudo file.tok` prints pseudocode and `tok expand file.tok` prints readable multi-line Tokit that compiles back to the same program.
+
 An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and provides live diagnostics and document symbols for `.tok` buffers, including unsaved relative imports and pinned package sources.
 
 The first [self-hosted component](spec/SELF_HOSTING.md) is Tokit's lexer written in Tokit; a test requires its token listing to equal the Rust lexer's (`tok tokens`) for every source in the repository.
