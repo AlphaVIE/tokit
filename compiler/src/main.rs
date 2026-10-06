@@ -581,14 +581,18 @@ fn main() {
     }
     let (json, path) = match args.as_slice() {
         [_, command, path]
-            if matches!(command.as_str(), "check" | "explain" | "stats" | "ai-index") =>
+            if matches!(
+                command.as_str(),
+                "check" | "explain" | "stats" | "ai-index" | "expand"
+            ) =>
         {
             (false, path)
         }
         [_, command, flag, path] if command == "check" && flag == "--json" => (true, path),
+        [_, command, flag, path] if command == "explain" && flag == "--pseudo" => (false, path),
         _ => {
             eprintln!(
-                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain|stats|ai-index|tokens> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
+                "usage: tok check [--json] <file.tok> | tok run [--json] [--allow-read <path>] [--allow-write <path>] <file.tok> [-- arguments...] | tok test [--allow-read <path>] [--allow-write <path>] <file.tok> | tok <explain [--pseudo]|expand|stats|ai-index|tokens> <file.tok> | tok fmt [--check|--write] <file.tok> | tok build <file.tok> -o <output> | tok lsp | tok pkg-hash <file.tok|directory> | tok lock <entry.tok> | tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>] | tok rm <entry.tok> <name>"
             );
             process::exit(2);
         }
@@ -609,7 +613,11 @@ fn main() {
     };
     let output = match args[1].as_str() {
         "check" => "ok".to_owned(),
+        "explain" if args.iter().any(|arg| arg == "--pseudo") => {
+            tokit_compiler::expand::pseudocode(&loaded.program)
+        }
         "explain" => tokit_compiler::explain::explain(&loaded.program),
+        "expand" => tokit_compiler::expand::expand(&loaded.program),
         "stats" => tokit_compiler::stats::measure_sources(&loaded.sources, &loaded.program).json(),
         "ai-index" => tokit_compiler::ai_index::index_loaded(&loaded),
         _ => unreachable!("run is handled before this command match"),

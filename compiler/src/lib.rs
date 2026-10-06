@@ -6,6 +6,7 @@ pub mod checker;
 #[doc(hidden)]
 pub mod crypto;
 pub mod diagnostic;
+pub mod expand;
 pub mod explain;
 pub mod filesystem;
 pub mod format;
