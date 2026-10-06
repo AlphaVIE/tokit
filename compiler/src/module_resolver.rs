@@ -61,7 +61,14 @@ impl UseKind {
             Self::Call => builtins::is_call(name),
             Self::Type => matches!(
                 name,
-                "IoError" | "TaskError" | "ParseError" | "Map" | "Request" | "Response" | "Conn"
+                "IoError"
+                    | "TaskError"
+                    | "ParseError"
+                    | "Map"
+                    | "Request"
+                    | "Response"
+                    | "Conn"
+                    | "Listener"
             ),
             Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
@@ -111,6 +118,11 @@ fn reserved(name: &str) -> bool {
             | "tcp_send"
             | "tcp_recv"
             | "tcp_close"
+            | "Listener"
+            | "listen"
+            | "accept"
+            | "http_read"
+            | "http_write"
             | "serve"
             | "http_request"
             | "Request"

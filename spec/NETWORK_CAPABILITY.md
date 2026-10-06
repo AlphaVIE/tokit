@@ -16,6 +16,29 @@ tcp_recv(c:Conn,max:I) -> Result<Bytes,IoError>
 tcp_close(c:Conn) -> Unit
 ```
 
+Servers that keep state between requests, or speak other protocols, accept
+connections themselves:
+
+```text
+listen(addr:String) -> Result<Listener,IoError>
+accept(l:Listener) -> Result<Conn,IoError>
+http_read(c:Conn) -> Result<Request,IoError>
+http_write(c:Conn,r:Response) -> Result<Unit,IoError>
+```
+
+`listen` binds `addr` (port `0` picks a free port) and needs the same grant as
+`serve`; `accept` waits for the next connection and returns an ordinary
+`Conn`. `http_read` reads one request with the limits and `400` rules of
+`serve` (a malformed request yields `IoError::Other`, a non-UTF-8 body
+`IoError::InvalidUtf8`) and waits at most 30 seconds; `http_write` writes one
+response formatted exactly like `serve` does, including `connection: close`.
+Each connection carries one request; close it with `tcp_close`. Because the
+loop is ordinary code, `var` bindings persist across requests (see
+[crud_service.tok](../examples/crud_service.tok)). After reading an upgrade
+request, raw `tcp_send`/`tcp_recv` on the same `Conn` can implement protocols
+such as WebSocket. `Listener` is a reserved opaque type; copies share one
+socket. All four functions are effects (`net.listen`).
+
 Copies of a `Conn` share one socket, like task handles; there is no `==` on
 connections. `tcp_recv` returns between one and `max` bytes, or empty `Bytes`
 when the peer closed the connection; `max` must be positive. After

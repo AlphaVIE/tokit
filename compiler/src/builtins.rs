@@ -27,6 +27,11 @@ pub const TCP_CONNECT: &str = "tcp_connect";
 pub const TCP_SEND: &str = "tcp_send";
 pub const TCP_RECV: &str = "tcp_recv";
 pub const TCP_CLOSE: &str = "tcp_close";
+pub const LISTENER: &str = "Listener";
+pub const LISTEN: &str = "listen";
+pub const ACCEPT: &str = "accept";
+pub const HTTP_READ: &str = "http_read";
+pub const HTTP_WRITE: &str = "http_write";
 pub const SERVE: &str = "serve";
 pub const HTTP_REQUEST: &str = "http_request";
 pub const REQUEST: &str = "Request";
@@ -238,6 +243,10 @@ pub const CALLS: &[&str] = &[
     "tcp_send",
     "tcp_recv",
     "tcp_close",
+    "listen",
+    "accept",
+    "http_read",
+    "http_write",
     "serve",
     "http_request",
     "Request",
