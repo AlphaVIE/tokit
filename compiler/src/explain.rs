@@ -89,6 +89,11 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                 facts.effects.insert("env.args");
             } else if matches!(
                 name.as_str(),
+                builtins::RANGE | builtins::SORT | builtins::REVERSE | builtins::SLICE
+            ) {
+                facts.operations.insert("array operation");
+            } else if matches!(
+                name.as_str(),
                 builtins::MAP
                     | builtins::GET
                     | builtins::GET_OR

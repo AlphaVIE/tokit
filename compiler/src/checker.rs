@@ -90,6 +90,11 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Array(Box::new(Type::String)),
         ),
         (builtins::PRINT, vec![Type::String], Type::Unit),
+        (
+            builtins::RANGE,
+            vec![Type::I32, Type::I32],
+            Type::Array(Box::new(Type::I32)),
+        ),
         (builtins::TO_STRING, vec![Type::I32], Type::String),
         (
             builtins::CHARS,
@@ -279,6 +284,43 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         },
     );
     signatures.insert(
+        builtins::SORT.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Array(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::REVERSE.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Array(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::SLICE.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![
+                Type::Array(Box::new(Type::Param("T".to_owned()))),
+                Type::I32,
+                Type::I32,
+            ],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
         builtins::JOIN.to_owned(),
         Signature {
             type_params: vec!["T".to_owned()],
@@ -312,6 +354,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "range"
+                | "sort"
+                | "reverse"
+                | "slice"
                 | "Map"
                 | "get"
                 | "get_or"
@@ -371,6 +417,10 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "lines"
                 | "args"
                 | "print"
+                | "range"
+                | "sort"
+                | "reverse"
+                | "slice"
                 | "Map"
                 | "get"
                 | "get_or"
@@ -651,6 +701,10 @@ fn expression_is_spawn_safe(
                         | builtins::PARSE_I64
                         | builtins::PARSE_F64
                         | builtins::JOIN
+                        | builtins::RANGE
+                        | builtins::SORT
+                        | builtins::REVERSE
+                        | builtins::SLICE
                         | builtins::MAP
                         | builtins::GET
                         | builtins::GET_OR
@@ -1267,6 +1321,18 @@ fn infer(
                     }
                 }
                 Op::Add if lhs == Type::String && rhs == Type::String => Ok(Type::String),
+                Op::Add
+                    if matches!(lhs, Type::Array(_) | Type::EmptyArray)
+                        && matches!(rhs, Type::Array(_) | Type::EmptyArray) =>
+                {
+                    join(&lhs, &rhs).ok_or_else(|| {
+                        Diagnostic::new(
+                            "E104",
+                            expr.span,
+                            format!("cannot concatenate {lhs} and {rhs}"),
+                        )
+                    })
+                }
                 Op::Lt | Op::Le | Op::Gt | Op::Ge if lhs == Type::String && rhs == Type::String => {
                     Ok(Type::Bool)
                 }
@@ -1341,6 +1407,29 @@ fn infer(
                 .collect::<Result<Vec<_>, _>>()?;
             if name == builtins::LEN && actuals == [Type::Bytes] {
                 return Ok(Type::I32);
+            }
+            if name == builtins::CONTAINS
+                && let Some(Type::Array(element)) = actuals.first()
+            {
+                if !builtins::equatable(element) {
+                    return Err(Diagnostic::new(
+                        "E104",
+                        args[0].span,
+                        format!("contains cannot compare {element} elements"),
+                    ));
+                }
+                require(element, &actuals[1], args[1].span, "argument")?;
+                return Ok(Type::Bool);
+            }
+            if name == builtins::SORT
+                && let Some(Type::Array(element)) = actuals.first()
+                && !builtins::orderable(element)
+            {
+                return Err(Diagnostic::new(
+                    "E104",
+                    args[0].span,
+                    format!("sort cannot order {element} elements"),
+                ));
             }
             if let Some(Type::Applied(map, entry)) = actuals.first()
                 && map == builtins::MAP

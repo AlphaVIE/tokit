@@ -764,6 +764,9 @@ fn eval_builtin(
     if let Some(value) = eval_map_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
+    if let Some(value) = eval_array_builtin(name, &values, expr.span) {
+        return Ok(Flow::Value(value?));
+    }
     if let Some(value) = eval_string_builtin(name, &values) {
         return Ok(Flow::Value(value));
     }
@@ -1045,7 +1048,28 @@ fn eval_block(
                 body,
                 span,
             } => {
-                let iterable = take_value!(eval(iterable, &scope, program, depth, runtime));
+                let iterable = match &iterable.kind {
+                    ExprKind::Call(callee, bounds)
+                        if callee == builtins::RANGE && bounds.len() == 2 =>
+                    {
+                        let start = take_value!(eval(&bounds[0], &scope, program, depth, runtime));
+                        let end = take_value!(eval(&bounds[1], &scope, program, depth, runtime));
+                        let (Value::I32(start), Value::I32(end)) = (start, end) else {
+                            return Err(Diagnostic::new("E204", *span, "invalid runtime range"));
+                        };
+                        for value in range_values(start, end) {
+                            let mut loop_scope = scope.clone();
+                            loop_scope.insert(name.clone(), Rc::new(RefCell::new(value)));
+                            match eval(body, &loop_scope, program, depth, runtime)? {
+                                Flow::Value(_) | Flow::Continue => {}
+                                Flow::Break => break,
+                                Flow::Return(value) => return Ok(Flow::Return(value)),
+                            }
+                        }
+                        continue;
+                    }
+                    _ => take_value!(eval(iterable, &scope, program, depth, runtime)),
+                };
                 let values = match iterable {
                     Value::Array(values) => values,
                     Value::Bytes(bytes) => bytes
@@ -1109,6 +1133,13 @@ fn eval_block(
 fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagnostic> {
     if let (Value::String(a), Op::Add, Value::String(b)) = (&left, op, &right) {
         return Ok(Value::String(format!("{a}{b}")));
+    }
+    if let (Value::Array(_), Op::Add, Value::Array(_)) = (&left, op, &right) {
+        let (Value::Array(mut items), Value::Array(more)) = (left, right) else {
+            unreachable!("matched arrays")
+        };
+        items.extend(more);
+        return Ok(Value::Array(items));
     }
     if let (Value::String(a), Value::String(b)) = (&left, &right) {
         match op {
@@ -1411,4 +1442,63 @@ fn position(index: Option<Value>) -> i32 {
         Some(Value::I32(index)) => index,
         _ => -1,
     }
+}
+
+/// The order used by `sort`; floats use IEEE 754 total order.
+fn value_order(left: &Value, right: &Value) -> std::cmp::Ordering {
+    match (left, right) {
+        (Value::F64(a), Value::F64(b)) => f64::from_bits(*a).total_cmp(&f64::from_bits(*b)),
+        _ => key_order(left, right),
+    }
+}
+
+/// `==` semantics, where NaN differs from itself and both zeros are equal.
+fn values_equal(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::F64(a), Value::F64(b)) => f64::from_bits(*a) == f64::from_bits(*b),
+        _ => left == right,
+    }
+}
+
+fn range_values(start: i32, end: i32) -> impl Iterator<Item = Value> {
+    (start..end).map(Value::I32)
+}
+
+fn eval_array_builtin(
+    name: &str,
+    values: &[Value],
+    span: Span,
+) -> Option<Result<Value, Diagnostic>> {
+    Some(Ok(match (name, values) {
+        (builtins::RANGE, [Value::I32(start), Value::I32(end)]) => {
+            Value::Array(range_values(*start, *end).collect())
+        }
+        (builtins::SORT, [Value::Array(items)]) => {
+            let mut items = items.clone();
+            items.sort_by(value_order);
+            Value::Array(items)
+        }
+        (builtins::REVERSE, [Value::Array(items)]) => {
+            Value::Array(items.iter().rev().cloned().collect())
+        }
+        (builtins::SLICE, [Value::Array(items), Value::I32(from), Value::I32(to)]) => {
+            let bounds = usize::try_from(*from).ok().zip(usize::try_from(*to).ok());
+            match bounds {
+                Some((from, to)) if from <= to && to <= items.len() => {
+                    Value::Array(items[from..to].to_vec())
+                }
+                _ => {
+                    return Some(Err(Diagnostic::new(
+                        "E205",
+                        span,
+                        "slice bounds out of range",
+                    )));
+                }
+            }
+        }
+        (builtins::CONTAINS, [Value::Array(items), wanted]) => {
+            Value::Bool(items.iter().any(|item| values_equal(item, wanted)))
+        }
+        _ => return None,
+    }))
 }
