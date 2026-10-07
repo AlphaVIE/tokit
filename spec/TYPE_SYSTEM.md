@@ -35,12 +35,13 @@ Built-in records `Request`, `Response` and built-in enums `IoError`,
 - **No implicit conversions.** Numeric types never mix; conversions are
   functions named after their target (`i64(x)`, `f64(x)`, `i32(f)` returning
   `Option`). `+` concatenates two `String`s or two arrays of one element type.
-- **Equality** (`==`, `!=`, `contains`) is defined for `i32`, `i64`, `f64`,
-  `bool`, `String`, and `Bytes`. Arrays, records, enums, options, results,
-  maps, functions, tasks, and handles have no `==` (`E104`); compare them with
-  `match` or a field-wise function. Ordering operators (`<`, `<=`, `>`, `>=`)
-  work on numbers and `String`; `sort` and map keys additionally order
-  `bool` (`false` first).
+- **Equality** (`==`, `!=`, `contains`) is structural. It is defined for
+  `i32`, `i64`, `f64`, `bool`, `String`, `Bytes`, `Unit`, and for arrays,
+  options, results, records, and enums whose elements, fields, and payloads
+  all support it; floats keep IEEE semantics at any depth. Maps, function
+  values, tasks, handles, and values of a type parameter have no `==`
+  (`E104`). Ordering operators (`<`, `<=`, `>`, `>=`) work on numbers and
+  `String`; `sort` and map keys additionally order `bool` (`false` first).
 - **Bindings** infer their type from a complete initializer. `[]`, `None`,
   `Ok(x)` without an `Err` type, and `Map()` need an annotation or an expected
   type from context (`E115`). `let` bindings are immutable, `var` bindings may
