@@ -278,7 +278,7 @@ const USAGE: &str = "usage: tok <command> ...
 
 Run and build
   tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- args...]
-  tok build <file.tok> -o <output>
+  tok build <file.tok> -o <output> [--target <triple>]   (e.g. wasm32-wasip1)
   tok test [--allow-read <path>] [--allow-write <path>] <file.tok>
   tok bench [--iterations N] <file.tok>
   tok repl
@@ -610,10 +610,18 @@ fn main() {
         }
         return;
     }
-    if let [_, command, path, flag, output] = args.as_slice()
-        && command == "build"
-        && flag == "-o"
-    {
+    let build = match args.as_slice() {
+        [_, command, path, flag, output] if command == "build" && flag == "-o" => {
+            Some((path, output, None))
+        }
+        [_, command, path, flag, output, target_flag, target]
+            if command == "build" && flag == "-o" && target_flag == "--target" =>
+        {
+            Some((path, output, Some(target.as_str())))
+        }
+        _ => None,
+    };
+    if let Some((path, output, target)) = build {
         let loaded = match tokit_compiler::modules::load(Path::new(path)) {
             Ok(loaded) => loaded,
             Err(error) => {
@@ -621,10 +629,11 @@ fn main() {
                 process::exit(1);
             }
         };
-        if let Err(error) = tokit_compiler::native::build_with_sources(
+        if let Err(error) = tokit_compiler::native::build_for_target(
             &loaded.program,
             &loaded.sources,
             output.as_ref(),
+            target,
         ) {
             eprintln!("{error}");
             process::exit(1);

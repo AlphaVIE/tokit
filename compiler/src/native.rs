@@ -268,6 +268,8 @@ fn http_adapters() -> String {
 /// `serve` with a worker pool: the accepting thread hands each connection to
 /// one of `workers` threads, which answer requests concurrently.
 fn __tok_net_serve_pool(addr: String, limit: i32, workers: i32, handler: std::sync::Arc<dyn Fn({request}) -> {response} + Send + Sync>) -> Result<(), __TokIoError> {{
+    // Without threads, answer one request at a time like the interpreter.
+    if cfg!(target_family = "wasm") {{ let _ = workers; return __tok_net_serve(addr, limit, handler); }}
     if !__tok_http_allowed(__TOK_NET_GRANT.get().map(String::as_str), &addr) {{ return Err(__TokIoError::Denied); }}
     __tok_flush();
     let listener = std::net::TcpListener::bind(&addr).map_err(|_| __TokIoError::Other)?;
@@ -1457,8 +1459,10 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
     }
     writeln!(
         out,
-        "fn main() {{ let program = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(|| {{ __tok_configure_runtime(); {} }}).expect(\"cannot start program thread\"); let failed = program.join().is_err(); __tok_flush(); if failed {{ std::process::exit(101); }} }}",
-        if main.ret == Type::Unit {
+        "#[cfg(not(target_family = \"wasm\"))] fn main() {{ let program = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(|| {{ __tok_configure_runtime(); {run} }}).expect(\"cannot start program thread\"); let failed = program.join().is_err(); __tok_flush(); if failed {{ std::process::exit(101); }} }}
+// WebAssembly has no threads: run on the main stack, sized at link time.
+#[cfg(target_family = \"wasm\")] fn main() {{ __tok_configure_runtime(); {run} __tok_flush(); }}",
+        run = if main.ret == Type::Unit {
             format!("{}();", user_name("main"))
         } else {
             format!("__tok_print({}().tok_render());", user_name("main"))
@@ -1472,7 +1476,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
 
 pub fn build(program: &Program, source: &str, output: &Path) -> Result<(), String> {
     let generated = emit(program, source).map_err(|diagnostic| diagnostic.display(source))?;
-    compile_generated(&generated, output)
+    compile_generated(&generated, output, None)
 }
 
 pub fn build_with_sources(
@@ -1480,15 +1484,37 @@ pub fn build_with_sources(
     sources: &SourceMap,
     output: &Path,
 ) -> Result<(), String> {
-    let generated = emit_with_sources(program, sources)
-        .map_err(|diagnostic| diagnostic.display_with_sources(sources))?;
-    compile_generated(&generated, output)
+    build_for_target(program, sources, output, None)
 }
 
-fn compile_generated(generated: &str, output: &Path) -> Result<(), String> {
+/// Build for a Rust target triple such as `wasm32-wasip1`; `None` is the host.
+pub fn build_for_target(
+    program: &Program,
+    sources: &SourceMap,
+    output: &Path,
+    target: Option<&str>,
+) -> Result<(), String> {
+    let generated = emit_with_sources(program, sources)
+        .map_err(|diagnostic| diagnostic.display_with_sources(sources))?;
+    compile_generated(&generated, output, target)
+}
+
+/// Stack for WebAssembly programs, which run without a separate program thread.
+const WASM_STACK_BYTES: usize = 64 * 1024 * 1024;
+
+fn compile_generated(generated: &str, output: &Path, target: Option<&str>) -> Result<(), String> {
     let generated_path = temporary_source(generated)?;
     let rustc = std::env::var_os("TOKIT_RUSTC").unwrap_or_else(|| "rustc".into());
-    let result = Command::new(rustc)
+    let mut command = Command::new(rustc);
+    if let Some(target) = target {
+        command.arg("--target").arg(target);
+        if target.starts_with("wasm") {
+            command
+                .arg("-C")
+                .arg(format!("link-arg=-zstack-size={WASM_STACK_BYTES}"));
+        }
+    }
+    let result = command
         .arg("--crate-name")
         .arg("tok_native")
         .arg("--edition=2024")

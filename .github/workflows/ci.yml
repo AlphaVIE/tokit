@@ -30,6 +30,22 @@ jobs:
       - name: Verify function patch corpus
         run: python3 scripts/benchmark_function_patches.py benchmarks_version_05102026_105631 --tok target/debug/tok --verify-only --targeted-index
 
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned Rust toolchain with the WASI target
+        run: rustup toolchain install 1.98.1 --profile minimal --target wasm32-wasip1
+      - name: Install wasmtime
+        run: |
+          curl -sSf https://wasmtime.dev/install.sh | bash
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+      - name: Build and run WebAssembly modules
+        run: cargo +1.98.1 test -p tokit-compiler --test wasm
+        env:
+          TOKIT_WASM_RUNNER: wasmtime
+          TOKIT_REQUIRE_WASM: '1'
+
   semantic-baselines:
     runs-on: ubuntu-latest
     steps:
