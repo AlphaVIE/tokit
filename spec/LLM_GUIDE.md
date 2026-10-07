@@ -94,4 +94,4 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 
 Frequent codes: `E002` syntax, `E101` unknown name, `E102` type mismatch (message shows expected and actual), `E104` invalid operands, `E105` wrong argument count, `E106` duplicate or reserved name, `E109` assigning an immutable binding, `E110` invalid indexing, `E113` unknown field, `E115` add a type annotation, `E116` non-exhaustive or invalid `match`, `E117` effect in a spawned function, `E201` integer overflow or division by zero at runtime, `E205` index out of bounds.
 
-Fix diagnostics by changing the smallest region the message names; do not add casts the language lacks or methods other than `.push`.
+Fix diagnostics by changing the smallest region the message names; do not add casts the language lacks or methods other than `.push`. `E113` on `x.len()`-style calls says which function or statement to use instead.

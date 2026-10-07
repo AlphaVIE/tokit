@@ -1923,11 +1923,11 @@ fn infer(
                 return Ok(Type::Never);
             }
             if !matches!(actual, Type::Named(_) | Type::Applied(..)) {
-                return Err(Diagnostic::new(
-                    "E113",
-                    value.span,
-                    "field access requires a record",
-                ));
+                let message = match method_hint(field) {
+                    Some(hint) => format!("{actual} has no fields; {hint}"),
+                    None => format!("{actual} has no fields; field access requires a record"),
+                };
+                return Err(Diagnostic::new("E113", value.span, message));
             }
             field_type(actual, field, signatures, expr.span)
         }
@@ -2676,7 +2676,39 @@ fn field_type(
         .as_ref()
         .and_then(|fields| fields.iter().find(|(candidate, _)| candidate == field))
         .map(|(_, ty)| substitute(ty, &inferred))
-        .ok_or_else(|| Diagnostic::new("E113", span, format!("unknown field {field} on {name}")))
+        .ok_or_else(|| {
+            let hint = method_hint(field).map_or_else(String::new, |hint| format!("; {hint}"));
+            Diagnostic::new(
+                "E113",
+                span,
+                format!("unknown field {field} on {name}{hint}"),
+            )
+        })
+}
+
+/// A repair hint for method-call syntax borrowed from other languages:
+/// Tokit has free functions and a `push` statement instead of methods.
+fn method_hint(name: &str) -> Option<String> {
+    Some(match name {
+        "push" => {
+            "push is a statement: write `xs.push(v);`, or `{xs.push(v);}` as a match arm".to_owned()
+        }
+        "length" | "size" | "count" => "call len(x)".to_owned(),
+        "to_string" | "toString" | "str" => "call String(x)".to_owned(),
+        "unwrap" | "expect" => "match on the value or use `?`".to_owned(),
+        "iter" | "into_iter" | "collect" | "clone" => {
+            "values are copied; use the value directly with for, map, or filter".to_owned()
+        }
+        "append" | "add" | "insert" => {
+            "use `xs.push(v);` for arrays or `m[k]=v;` for maps".to_owned()
+        }
+        "to_lowercase" | "toLowerCase" => "call lower(s)".to_owned(),
+        "to_uppercase" | "toUpperCase" => "call upper(s)".to_owned(),
+        _ if builtins::is_call(name) => {
+            format!("{name} is a function, not a method: pass the value first, as in {name}(x)")
+        }
+        _ => return None,
+    })
 }
 
 /// A lambda whose parameter types come from its context.
