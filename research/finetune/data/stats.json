@@ -1,14 +1,17 @@
 {
   "seed": 20261006,
-  "tok_sha256": "e4f5796e48743dd3017d4de941818a185b16a8b71cd61c08c79c4926b0719f16",
+  "tok_sha256": "0c21d4fc9b97fd0fe578cb4b2987e5aa82698b26e171d844b93d523c0c75a8bd",
   "families": [
     "binary_search",
+    "bits",
     "brackets",
     "bubble_sort",
     "char_freq",
     "cli_args",
     "closures",
     "count_prefix",
+    "crud_server",
+    "digest",
     "dispatch",
     "enum_machine",
     "extreme",
@@ -18,7 +21,10 @@
     "gcd",
     "generic",
     "http_handler",
+    "map_inventory",
     "matrix",
+    "nested_patterns",
+    "option_eq",
     "option_find",
     "palindrome",
     "parse_sum",
@@ -29,10 +35,12 @@
     "sort_records",
     "stdin_lines",
     "string_transform",
+    "structural_eq",
     "sum_filtered",
     "temperature",
     "tree",
-    "word_count"
+    "word_count",
+    "worker_server"
   ],
   "ood_families": [
     "rle",
@@ -43,24 +51,24 @@
   ],
   "splits": {
     "train": {
-      "rows": 1088,
+      "rows": 1398,
       "kinds": {
-        "repair": 246,
-        "generate": 842
+        "generate": 1068,
+        "repair": 330
       }
     },
     "val": {
-      "rows": 60,
+      "rows": 78,
       "kinds": {
-        "generate": 44,
-        "repair": 16
+        "generate": 60,
+        "repair": 18
       }
     },
     "test_iid": {
-      "rows": 61,
+      "rows": 78,
       "kinds": {
-        "repair": 16,
-        "generate": 45
+        "repair": 29,
+        "generate": 49
       }
     },
     "test_ood": {

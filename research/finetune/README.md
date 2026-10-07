@@ -11,10 +11,16 @@ from `tok`, not from string similarity.
 
 | Split | Rows | Generation | Repair | Purpose |
 | --- | ---: | ---: | ---: | --- |
-| `train.jsonl` | 1,088 | 842 | 246 | supervised fine-tuning |
-| `val.jsonl` | 60 | 44 | 16 | early stopping |
-| `test_iid.jsonl` | 61 | 45 | 16 | unseen variants of seen task families |
+| `train.jsonl` | 1,398 | 1,068 | 330 | supervised fine-tuning |
+| `val.jsonl` | 78 | 60 | 18 | early stopping |
+| `test_iid.jsonl` | 78 | 49 | 29 | unseen variants of seen task families |
 | `test_ood.jsonl` | 275 | 200 | 75 | five task families never seen in training |
+
+The 39 task families cover the core language and newer features: nested
+patterns, structural `==`, maps, hashing, bit operations, and stateful and
+worker-pool HTTP servers. Repair mutations include method-call syntax
+(`x.len()`, `x.to_string()`), unqualified enum variants, `->` instead of
+`=>`, and Python operators.
 
 Each row is chat JSONL (`messages` with system, user, assistant) plus
 `meta` (family, kind, expected output, arguments, stdin). Generation rows
@@ -59,7 +65,7 @@ learning rate 2e-4, loss on assistant turns only; one 24 GB GPU suffices.
 ## Recommendation
 
 1. **Start without fine-tuning.** Give a frontier model (Claude, GPT/Codex)
-   `spec/LLM_GUIDE.md` (about 2,000 tokens) as its system prompt and let it
+   `spec/LLM_GUIDE.md` (about 2,500 tokens) as its system prompt and let it
    call `tok check --json` in a loop, as `--repair-rounds` does. Tokit's
    diagnostics name the code, location, and expected versus actual type, so
    most first-attempt errors are repaired in one round. Measure this baseline
