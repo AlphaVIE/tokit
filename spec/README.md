@@ -34,7 +34,7 @@ in both backends; nothing here is a frozen 1.0 guarantee yet.
 | 25 | Compiler diagnostics | [DIAGNOSTICS](DIAGNOSTICS.md), [SOURCE_LOCATIONS](SOURCE_LOCATIONS.md) | implemented |
 | 26 | Canonical formatting | [FORMATTER](FORMATTER.md) | implemented |
 | 27 | Security model | [SECURITY_MODEL](SECURITY_MODEL.md) | implemented |
-| 28 | WebAssembly model | [TARGETS](TARGETS.md) | designed, not yet |
+| 28 | WebAssembly model | [TARGETS](TARGETS.md) | implemented (`wasm32-wasip1`) |
 | 29 | GPU model | [TARGETS](TARGETS.md) | out of scope for now |
 | 30 | Embedded model | [TARGETS](TARGETS.md) | out of scope for now |
 | 31 | Testing model | [TEST_RUNNER](TEST_RUNNER.md) | implemented |

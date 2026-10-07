@@ -35,20 +35,24 @@ interpreter and native results identical.
 | --- | --- |
 | Native executables (Linux, Windows, macOS hosts with Rust) | supported; tested on Linux CI and Windows |
 | Reference interpreter (`tok run`) | supported everywhere the compiler runs |
-| WebAssembly | not yet; see below |
+| WebAssembly (`wasm32-wasip1`) | supported via `tok build file.tok -o app.wasm --target wasm32-wasip1`; tested in CI with wasmtime |
 | GPU | not planned for this version |
 | Embedded / `no_std` | not planned for this version |
 
 ### WebAssembly model
 
-The emitted Rust is plain `std` Rust, so `wasm32-wasip1` is the natural first
-WebAssembly target: a future `tok build --target wasm32-wasip1` would pass the
-target to `rustc` and map capabilities to WASI preopens (files) and
-host-provided sockets. Native tasks use OS threads and `serve` uses a thread
-pool; on WebAssembly without threads they would run with the interpreter's
-schedule (eager pure tasks, one request at a time), which the concurrency
-model already allows. Network capabilities depend on host support for WASI
-sockets. None of this is implemented or tested yet.
+`tok build file.tok -o app.wasm --target wasm32-wasip1` passes the target to
+`rustc` (install it with `rustup target add wasm32-wasip1`) and produces a
+WASI module that runs under any WASI runtime, for example
+`wasmtime run app.wasm args...`. Program arguments may be given without `--`.
+
+Differences from native executables follow the concurrency model's allowed
+schedules: there are no threads, so `main` runs on the module's own stack
+(64 MiB, enough for the 10,000-call limit), `spawn` evaluates its pure
+function at the spawn site, and `serve` with workers answers one request at a
+time. Files need both a Tokit grant and a runtime preopen (`wasmtime run
+--dir=. app.wasm --allow-read data.txt`). Network functions depend on the
+runtime's WASI socket support and otherwise return `IoError::Other`.
 
 ### GPU and embedded
 
