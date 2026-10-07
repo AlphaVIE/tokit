@@ -214,14 +214,6 @@ pub fn orderable(ty: &Type) -> bool {
     )
 }
 
-/// Element types whose `==` is defined.
-pub fn equatable(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::I32 | Type::I64 | Type::F64 | Type::Bool | Type::String | Type::Bytes | Type::Never
-    )
-}
-
 /// Every builtin that is invoked with call syntax.
 pub const CALLS: &[&str] = &[
     "bit_and",

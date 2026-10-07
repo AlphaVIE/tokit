@@ -1376,15 +1376,8 @@ fn binary(left: Value, op: Op, right: Value, span: Span) -> Result<Value, Diagno
         }
     }
     if matches!(op, Op::Eq | Op::Ne) {
-        if let (Value::F64(a), Value::F64(b)) = (&left, &right) {
-            let equal = f64::from_bits(*a) == f64::from_bits(*b);
-            return Ok(Value::Bool(if op == Op::Eq { equal } else { !equal }));
-        }
-        return Ok(Value::Bool(if op == Op::Eq {
-            left == right
-        } else {
-            left != right
-        }));
+        let equal = values_equal(&left, &right);
+        return Ok(Value::Bool(if op == Op::Eq { equal } else { !equal }));
     }
     let number = match (left, right) {
         (Value::F64(a), Value::F64(b)) => {
@@ -1678,9 +1671,31 @@ fn value_order(left: &Value, right: &Value) -> std::cmp::Ordering {
 }
 
 /// `==` semantics, where NaN differs from itself and both zeros are equal.
+/// Structural `==`, with IEEE semantics for floats at any depth.
 fn values_equal(left: &Value, right: &Value) -> bool {
+    let all = |left: &[Value], right: &[Value]| {
+        left.len() == right.len() && left.iter().zip(right).all(|(a, b)| values_equal(a, b))
+    };
     match (left, right) {
         (Value::F64(a), Value::F64(b)) => f64::from_bits(*a) == f64::from_bits(*b),
+        (Value::Array(a), Value::Array(b)) => all(a, b),
+        (Value::Record(a_name, a), Value::Record(b_name, b)) => {
+            a_name == b_name
+                && a.len() == b.len()
+                && a.iter().zip(b).all(|((_, x), (_, y))| values_equal(x, y))
+        }
+        (Value::Enum(a_name, a_variant, a), Value::Enum(b_name, b_variant, b)) => {
+            a_name == b_name
+                && a_variant == b_variant
+                && match (a, b) {
+                    (Some(a), Some(b)) => values_equal(a, b),
+                    (None, None) => true,
+                    _ => false,
+                }
+        }
+        (Value::Ok(a), Value::Ok(b))
+        | (Value::Err(a), Value::Err(b))
+        | (Value::Some(a), Value::Some(b)) => values_equal(a, b),
         _ => left == right,
     }
 }

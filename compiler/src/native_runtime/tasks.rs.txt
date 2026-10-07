@@ -1,4 +1,4 @@
-#[derive(Clone)] enum __TokTaskError { Failed }
+#[derive(Clone, PartialEq)] enum __TokTaskError { Failed }
 impl __TokRender for __TokTaskError {
     fn tok_render(&self) -> String { "TaskError::Failed".to_owned() }
 }
