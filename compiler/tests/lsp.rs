@@ -513,3 +513,55 @@ fn lsp_resolves_nested_and_bare_pattern_bindings() {
     assert_eq!(start(1), json!({"line":1,"character":36}));
     assert_eq!(start(2), json!({"line":1,"character":43}));
 }
+
+#[test]
+fn lsp_navigates_into_imported_modules() {
+    let directory = std::env::temp_dir().join(format!(
+        "tokit-lsp-cross-{}-{}",
+        std::process::id(),
+        common::nonce()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let main_path = directory.join("main.tok");
+    let shapes_path = directory.join("shapes.tok");
+    // The local `area` must not capture the imported one.
+    let main_text = "import s=\"shapes.tok\";\narea(x:I)->I{x}\nmain()->I{let c=s::Shape::Circle(2);s::area(c)+area(1)}";
+    std::fs::write(&main_path, main_text).unwrap();
+    // Saved text differs from the open buffer: navigation must use the buffer.
+    std::fs::write(&shapes_path, "pub enum Shape{Circle(I)}").unwrap();
+    let shapes_text = "pub enum Shape{Circle(I)}\n// area of a shape\npub area(s:Shape)->I{match s{Shape::Circle(r)=>3*r*r}}";
+    let main_uri = file_uri(&main_path);
+    let shapes_uri = file_uri(&shapes_path);
+    let at = |id: i64, method: &str, character: u64| json!({"jsonrpc":"2.0","id":id,"method":method,"params":{"textDocument":{"uri":main_uri},"position":{"line":2,"character":character}}});
+    let messages = [
+        json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":main_uri,"version":1,"text":main_text}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":shapes_uri,"version":1,"text":shapes_text}}}),
+        at(1, "textDocument/definition", 39),
+        at(2, "textDocument/hover", 39),
+        at(3, "textDocument/definition", 26),
+        at(4, "textDocument/definition", 47),
+        json!({"jsonrpc":"2.0","id":9,"method":"shutdown"}),
+        json!({"jsonrpc":"2.0","method":"exit"}),
+    ];
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut output = Vec::new();
+    assert!(tokit_compiler::lsp::serve(&mut input.as_slice(), &mut output).unwrap());
+    let output = decode(&output);
+    let result =
+        |id: i64| output.iter().find(|message| message["id"] == id).unwrap()["result"].clone();
+    // `s::area` → `area` in the open shapes buffer, line 2.
+    assert_eq!(result(1)["uri"], shapes_uri);
+    assert_eq!(result(1)["range"]["start"], json!({"line":2,"character":4}));
+    assert_eq!(
+        result(2)["contents"]["value"],
+        "```tokit\narea(s:Shape)->I\n```"
+    );
+    // `s::Shape::Circle` → the enum declaration.
+    assert_eq!(result(3)["uri"], shapes_uri);
+    assert_eq!(result(3)["range"]["start"], json!({"line":0,"character":9}));
+    // The unqualified local `area` stays in main.tok.
+    assert_eq!(result(4)["uri"], main_uri);
+    assert_eq!(result(4)["range"]["start"], json!({"line":1,"character":0}));
+    std::fs::remove_dir_all(directory).unwrap();
+}

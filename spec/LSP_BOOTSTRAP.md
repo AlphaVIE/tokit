@@ -40,9 +40,14 @@ the current function (nearest first), then top-level declarations, builtins,
 and keywords. Items carry `sortText` in that order; the client filters by
 prefix.
 
-Cross-file definitions and renames, member completion that knows the
-receiver's type, incremental text edits, and editor-specific integration are
-future work.
+Qualified names reach into other files: definition and hover on `alias::name`
+or `alias::Enum::Variant` resolve the alias through the module graph
+(relative imports and `pkg:` dependencies), using unsaved text of open
+buffers, and return the declaration in the imported file. A local
+declaration with the same name is never chosen for a qualified use.
+
+Cross-file references and renames, member completion that knows the
+receiver's type, and incremental text edits are future work.
 This is an IDE bootstrap, not a full language-service implementation.
 
 The protocol behavior follows the [Language Server Protocol specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/).
