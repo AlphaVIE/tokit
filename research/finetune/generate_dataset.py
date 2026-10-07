@@ -518,6 +518,105 @@ def fam_http_handler(rng):
     return instr, code, None, {"check_only": True}
 
 
+def fam_nested_patterns(rng):
+    pool = ["0", "7", "-3", "42", "x1", "", "99999999999", "15", "-8", "abc"]
+    items = [pick(rng, pool) for _ in range(rng.randint(3, 6))]
+    fname = pick(rng, ["classify", "kind", "label"])
+    code = (f"{fname}(s:String)->String{{match parse_i32(s){{Ok(0)=>\"zero\",Ok(n)=>if n<0{{\"negative\"}}else{{\"positive\"}},"
+            "Err(ParseError::Invalid)=>\"invalid\",Err(e)=>\"out of range\"}}\n"
+            f"main()->[String]{{map({slit(items)},|s|{fname}(s))}}")
+
+    def classify(text):
+        try:
+            n = int(text)
+        except ValueError:
+            return "invalid"
+        if not -2**31 <= n < 2**31:
+            return "out of range"
+        return "zero" if n == 0 else ("negative" if n < 0 else "positive")
+    instr = (f"In Tokit, classify each of {slit(items)} with `{fname}`: parse it with `parse_i32` and use one nested "
+             "`match` that answers \"zero\", \"negative\", \"positive\", \"invalid\" for `ParseError::Invalid`, "
+             "and \"out of range\" for other errors.")
+    return instr, code, show([classify(t) for t in items]), {}
+
+
+def fam_structural_eq(rng):
+    points = [(rng.randint(0, 3), rng.randint(0, 3)) for _ in range(rng.randint(4, 8))]
+    target = pick(rng, points) if rng.random() < 0.8 else (9, 9)
+    rendered = ",".join(f"P({x},{y})" for x, y in points)
+    code = ("struct P{x:I,y:I}\n"
+            f"main()->I{{let ps=[{rendered}];len(filter(ps,|p|p==P({target[0]},{target[1]})))}}")
+    instr = (f"Count in Tokit how many points in [{rendered}] equal P({target[0]},{target[1]}), "
+             "using a record `P{x:I,y:I}` and `==` on records.")
+    return instr, code, show(sum(1 for p in points if p == target)), {}
+
+
+def fam_option_eq(rng):
+    xs = ints(rng, rng.randint(3, 7), 0, 30)
+    v = pick(rng, xs) if rng.random() < 0.6 else 99
+    code = ("index_of(xs:[I],v:I)->Option<I>{var i=0;while i<len(xs){if xs[i]==v{return Some(i);}i=i+1;}None}\n"
+            f"main()->bool{{index_of({lit(xs)},{v})==None}}")
+    instr = (f"Write `index_of(xs,v)->Option<I>` in Tokit and return whether {v} is missing from {lit(xs)} "
+             "by comparing the result with `None`.")
+    return instr, code, show(v not in xs), {}
+
+
+def fam_map_inventory(rng):
+    words = [pick(rng, WORDS[:6]) for _ in range(rng.randint(4, 9))]
+    code = ("count(ws:[String])->Map<String,I>{var m:Map<String,I>=Map();for w in ws{m[w]=get_or(m,w,0)+1;}m}\n"
+            f"main()->Map<String,I>{{count({slit(words)})}}")
+    counts = {}
+    for w in words:
+        counts[w] = counts.get(w, 0) + 1
+    instr = f"Count how often each word occurs in {slit(words)} with a Tokit `Map<String,I>` and return the map."
+    return instr, code, show(counts), {}
+
+
+def fam_digest(rng):
+    import hashlib
+    text = pick(rng, WORDS) + str(rng.randint(0, 99))
+    algo = pick(rng, ["sha256", "sha1", "md5"])
+    code = f"main()->String{{hex({algo}(utf8_encode({show_str(text)})))}}"
+    instr = f"Return the lowercase hex {algo.upper()} digest of the text {show_str(text)} in Tokit."
+    return instr, code, show(hashlib.new(algo, text.encode()).hexdigest()), {}
+
+
+def fam_bits(rng):
+    a, b = rng.randint(0, 255), rng.randint(0, 255)
+    k = rng.randint(0, 4)
+    code = f"main()->[I]{{let a={a};let b={b};[bit_and(a,b),bit_or(a,b),bit_xor(a,b),shl(a,{k}),shr(b,{k})]}}"
+    instr = (f"In Tokit, return [a AND b, a OR b, a XOR b, a shifted left by {k}, b shifted right by {k}] "
+             f"for a={a}, b={b} (Tokit has bit functions, not operators).")
+    return instr, code, show([a & b, a | b, a ^ b, a << k, b >> k]), {}
+
+
+def fam_crud_server(rng):
+    prefix = pick(rng, ["items", "notes", "keys"])
+    code = ("reply(s:I,b:String)->Response{let h:Map<String,String>=Map();Response(s,h,b)}\n"
+            "main()->Unit{let l=match listen(\"127.0.0.1:8080\"){Ok(l)=>l,Err(e)=>{print(\"cannot listen\");exit(1)}};"
+            "var store:Map<String,String>=Map();while true{let c=match accept(l){Ok(c)=>c,Err(e)=>{continue;}};"
+            f"match http_read(c){{Ok(r)=>{{let parts=split(r.path,\"/\");if len(parts)==3&&parts[1]=={show_str(prefix)}{{"
+            "let k=parts[2];match r.method{\"PUT\"=>{store[k]=r.body;http_write(c,reply(201,\"stored\"));},"
+            "\"GET\"=>{http_write(c,match get(store,k){Some(v)=>reply(200,v),None=>reply(404,\"not found\")});},"
+            "_=>{http_write(c,reply(405,\"method not allowed\"));}}}else{http_write(c,reply(404,\"not found\"));}},"
+            "Err(e)=>{http_write(c,reply(400,\"bad request\"));}}tcp_close(c);}}")
+    instr = (f"Write a Tokit server on 127.0.0.1:8080 that keeps an in-memory `Map<String,String>`: PUT /{prefix}/<key> "
+             f"stores the body (201), GET /{prefix}/<key> returns it or 404, other methods get 405. Use "
+             "`listen`, `accept`, `http_read`, `http_write`, and close each connection.")
+    return instr, code, None, {"check_only": True}
+
+
+def fam_worker_server(rng):
+    workers = pick(rng, [4, 8, 16])
+    code = ("handle(r:Request)->Response{let h:Map<String,String>=Map();match r.path{\"/work\"=>{sleep_ms(50i64);"
+            "Response(200,h,\"done\")},_=>Response(404,h,\"not found\")}}\n"
+            f"main()->Unit{{match serve(\"127.0.0.1:8080\",0,{workers},|r|handle(r)){{Ok(u)=>{{}},"
+            "Err(e)=>{print(\"cannot serve\");exit(1);}}}")
+    instr = (f"Write a concurrent Tokit HTTP service on 127.0.0.1:8080 with {workers} workers: /work sleeps 50 ms and "
+             "answers \"done\", anything else is 404.")
+    return instr, code, None, {"check_only": True}
+
+
 FAMILIES: dict[str, Callable] = {name[4:]: fn for name, fn in globals().items() if name.startswith("fam_")}
 # Held out entirely for the out-of-distribution test split.
 OOD_FAMILIES = ["rle", "brackets", "binary_search", "tree", "dispatch"]
@@ -580,6 +679,12 @@ def mutations(code: str, rng: random.Random) -> list[tuple[str, str]]:
         out.append(("method call syntax", code[:match.start()] + f"{match.group(1)}.len()" + code[match.end():]))
     if "&&" in code:
         out.append(("Python boolean operator", code.replace("&&", " and ", 1)))
+    if match := re.search(r"String\((\w+)\)", code):
+        out.append(("to_string method", code[:match.start()] + f"{match.group(1)}.to_string()" + code[match.end():]))
+    if match := re.search(r"\b[A-Z]\w*::(\w+)", code):
+        out.append(("unqualified variant", code[:match.start()] + match.group(1) + code[match.end():]))
+    if "=>" in code:
+        out.append(("arrow instead of fat arrow", code.replace("=>", "->", 1)))
     rng.shuffle(out)
     return out
 

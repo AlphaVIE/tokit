@@ -1,81 +1,98 @@
 # Tokit
 
-Tokit explores a machine-first programming language optimized for the total cost of producing, checking, and repairing programs with language models. The language design is experimental; no source syntax has been selected yet.
+Tokit (Token + Kit) is a statically typed programming language designed for
+the total cost of writing, checking, and repairing programs with language
+models: few tokens, one canonical form, precise diagnostics, and native
+executables.
 
-To write Tokit with a language model, start from the [LLM guide](spec/LLM_GUIDE.md): about 2,000 tokens covering the whole language, with every example checked by the test suite.
+```tokit
+struct Item{name:String,price:F}
+total(items:[Item])->F{fold(items,0.0,|sum,i|sum+i.price)}
+main()->String{let cart=[Item("tea",3.5),Item("cake",4.25)];"total "+String(total(cart))}
+```
 
-The project brief is in [PROMPT.txt](PROMPT.txt). Start with [VISION.md](VISION.md), [DESIGN_GOALS.md](DESIGN_GOALS.md), [RESEARCH_PLAN.md](RESEARCH_PLAN.md), and the [current implementation status](IMPLEMENTATION_STATUS.md). The [candidate comparison](LANGUAGE_CANDIDATES.md) and [initial measurements](research/INITIAL_RESULTS.md) are experiments, not a frozen syntax.
+```text
+$ tok run cart.tok
+"total 7.75"
+$ tok build cart.tok -o cart && ./cart
+"total 7.75"
+```
 
-An [experimental candidate A compiler slice](spec/EXPERIMENTAL_SUBSET.md) can parse, type-check, interpret, explain, [format source](spec/FORMATTER.md), [measure structural density](research/STRUCTURAL_METRICS.md), and [build native executables](spec/NATIVE_BOOTSTRAP.md) from a small `.tok` subset. With Rust installed, run `cargo test --workspace`, `cargo run -p tokit-compiler --bin tok -- run examples/answer.tok`, or `cargo run -p tokit-compiler --bin tok -- explain examples/match_result.tok`. The source grammar and bootstrap backend are not yet production language commitments.
+## Quick start
 
-[Developer tools](spec/TOOLS.md) include `tok doc`, `tok lint`, `tok bench`, and `tok repl`. For human review, `tok explain --pseudo file.tok` prints pseudocode and `tok expand file.tok` prints readable multi-line Tokit that compiles back to the same program.
+With Rust 1.98 installed:
 
-An [experimental language server](spec/LSP_BOOTSTRAP.md) runs as `tok lsp` and provides live diagnostics and document symbols for `.tok` buffers, including unsaved relative imports and pinned package sources.
+```text
+cargo build --release -p tokit-compiler       # builds target/release/tok
+tok new app && cd app && tok run main.tok      # a new project
+tok add json                                   # a registry package
+tok check --json main.tok                      # machine-readable diagnostics
+```
 
-The first [self-hosted component](spec/SELF_HOSTING.md) is Tokit's lexer written in Tokit; a test requires its token listing to equal the Rust lexer's (`tok tokens`) for every source in the repository.
+Editors: the [VS Code extension](editors/vscode/README.md) and any LSP client
+via `tok lsp`.
 
-An experimental [function patch protocol](spec/AI_PATCH_BOOTSTRAP.md) lets agents submit hash-guarded, checked changes to named functions without resending their surrounding source file.
+## The language
 
-The native bootstrap uses an initial [typed scalar IR](spec/TOKIT_IR.md) for `i32`, `i64`, `f64`, and `bool` functions with immutable local bindings, conditional expressions, and non-generic scalar calls. Other checked functions still use the AST emitter while the IR grows.
+- Types: `i32`/`I`, `i64`/`L`, `f64`/`F`, `bool`, `String`, `Bytes`, arrays,
+  ordered maps, `Option`, `Result`, records, enums, generics, and function
+  values ([type system](spec/TYPE_SYSTEM.md)).
+- Control flow: expression-oriented `if`, exhaustive `match` with nested
+  patterns, `for`, `while`, `?` for errors, lambdas with `map`, `filter`,
+  `fold`, `sort_by`.
+- Values, not references: no null, no `unsafe`, no data races, no tracing GC;
+  overflow, bounds, and other runtime failures stop with a code
+  ([runtime model](spec/RUNTIME_MODEL.md)).
+- Capabilities: files and network need explicit `--allow-read`,
+  `--allow-write`, and `--allow-net` grants; `tok explain` lists a program's
+  effects ([security model](spec/SECURITY_MODEL.md)).
+- Library: text, maps, math, bit operations, hashing and Base64, standard
+  I/O, environment and clocks, files, HTTP server and client, raw TCP,
+  listeners, pure parallel tasks, and a worker-pool HTTP server.
+- Packages: `json`, `http`, `redis`, `postgres`, `websocket` from the built-in
+  [registry](spec/PACKAGE_REGISTRY.md), pinned by content hash.
 
-Direct [record field reads](research/RECORD_FIELD_PROJECTION.md) now copy only the selected field in both execution paths; a versioned fixture records the focused runtime measurements.
+The whole language fits in the [LLM guide](spec/LLM_GUIDE.md) (about 2,500
+tokens), whose examples are checked by the test suite. All specifications are
+indexed in [spec/README.md](spec/README.md); the grammar is in
+[spec/GRAMMAR.md](spec/GRAMMAR.md) and every diagnostic in
+[spec/DIAGNOSTICS.md](spec/DIAGNOSTICS.md).
 
-Function declarations may omit `fn`, and `I`/`L`/`F` abbreviate `i32`/`i64`/`f64` in type positions: `add(a:I,b:I)->I{a+b}`. `tok compact file.tok` prints both shorter forms and shorter type names, and `tok compact --write file.tok` applies them. [Token experiments](research/COMPACT_INTEGER_TYPES.md) measure the earlier integer changes across 43 examples.
+## Tools
 
-`if` may omit `else` when its branch returns `Unit`, and `if`/`match`/block statements need no trailing `;`: `if x<0{x=0;}`. `tok compact` removes existing `else{}` and redundant `;`; [measurements](research/COMPACT_BLOCKS.md) show 2.8–3.0% fewer tokens across the examples.
+| Command | Purpose |
+| --- | --- |
+| `tok run`, `tok build`, `tok test`, `tok bench`, `tok repl` | run, compile natively, test, benchmark, explore |
+| `tok check`, `tok lint`, `tok explain [--pseudo]`, `tok doc` | diagnostics, warnings, effects, human-readable views |
+| `tok fmt`, `tok compact`, `tok expand` | canonical form and readable layout |
+| `tok new`, `tok add`, `tok rm`, `tok search`, `tok lock` | projects and packages |
+| `tok lsp` | language server: diagnostics, definitions, hover, references, rename, completion |
 
-Boolean expressions support `!`, lazy `&&`, and lazy `||`; [boolean_logic.tok](examples/boolean_logic.tok) shows the provisional syntax and [token counts](research/BOOLEAN_LOGIC_TOKENS.md) compare it with equivalent branches.
+`tok --help` lists every option ([tools](spec/TOOLS.md)).
 
-Local `let` and `var` bindings can infer complete initializer types. A [versioned benchmark experiment](research/INFERRED_BINDINGS.md) measures the source-token savings and records its limits.
+## Examples
 
-Programs can serve and call HTTP APIs with `serve(addr,limit,|r|...)` and `http_request(...)` under an `--allow-net` grant; see the [network capability](spec/NETWORK_CAPABILITY.md) and [http_server.tok](examples/http_server.tok).
+[CLI calculator](examples/calculator.tok), [file processing](examples/csv_summary.tok),
+[word count](examples/word_count.tok), [binary copy](examples/binary_copy.tok),
+[JSON](examples/package_json/main.tok), [HTTP API](examples/http_server.tok),
+[in-memory CRUD service](examples/crud_service.tok),
+[concurrent HTTP service](examples/concurrent_http.tok),
+[WebSocket echo](examples/websocket_echo/main.tok), [parallel tasks](examples/task_square.tok),
+[closures](examples/closures.tok), and more in [examples/](examples/).
 
-Experimental [filesystem capabilities](spec/FILESYSTEM_CAPABILITY.md) let Tokit read and write UTF-8 files through separate path grants. See [file_copy.tok](examples/file_copy.tok) for a two-grant example.
+## Models
 
-The same grants also protect `read_bytes` and `write_bytes` for exact binary data, plus `list_dir`, `exists`, `make_dir`, and `remove_file`. [binary_copy.tok](examples/binary_copy.tok) copies a file even when it is not valid UTF-8.
+[research/finetune](research/finetune/README.md) holds a compiler-verified
+dataset (train/validation/test splits), a LoRA training script, and an
+evaluation harness that judges any model with `tok` itself, plus a
+recommendation for getting good Tokit from Claude, GPT/Codex, or a local
+model.
 
-An experimental typed task primitive lets `spawn f(args)` start a pure function and `join(task)` recover its result. See [the task example](examples/task_square.tok) and [subset contract](spec/EXPERIMENTAL_SUBSET.md).
+## Status
 
-Experimental file imports let the CLI load relative `.tok` files inside the entry directory. [The multi-file example](examples/modules/main.tok) uses an explicit alias (`import math="math.tok";`), a public declaration (`pub fn triple...`), and a qualified call (`math::triple(7)`). Other declarations stay private to their file. See the [module contract](spec/MODULE_SYSTEM_CANDIDATE.md).
-
-An experimental [local package import](spec/LOCAL_PACKAGE_CANDIDATE.md) can load a `.tok` file or module tree declared with a SHA-256 content pin in `tok.toml` and a matching `tok.lock`. Local packages can declare their own pinned dependencies; the lockfile records the complete graph. [The JSON package example](examples/package_json/main.tok) and [module tree example](examples/package_tree/app/main.tok) demonstrate the provisional `pkg:` syntax.
-
-`tok new app` creates a project; inside it, `tok add json` adds a package from the built-in [registry](spec/PACKAGE_REGISTRY.md) (`tok search` lists them) through a content-addressed store. `tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>]` and `tok rm <entry.tok> <name>` manage local package declarations and refresh `tok.lock`. They preserve comments in `tok.toml`; registry packages and version resolution are not yet supported.
-
-`Option<T>` now provides typed `Some(value)`/`None` values and exhaustive matching; [option_lookup.tok](examples/option_lookup.tok) shows the provisional syntax.
-
-Experimental `Bytes` values store packed byte data, with UTF-8 and checked `[i32]` conversions. [byte_values.tok](examples/byte_values.tok) shows encoding, indexing, and decoding. The earlier pure `utf8_bytes(String)->[i32]` and `utf8_decode([i32])->Option<String>` remain available for existing parser experiments; [utf8_roundtrip.tok](examples/utf8_roundtrip.tok) shows that path.
-
-An experimental [JSON module](spec/JSON_MODULE_CANDIDATE.md) parses and renders recursive JSON values in Tokit. Its parser reports byte offsets and has an explicit nesting limit; packaging and performance work remain open.
-
-Math builtins cover `abs`, `min`, `max`, checked integer `pow`, and `f64` `sqrt`, `floor`, `ceil`, `round`, `exp`, `ln`, trigonometry, and `pi()`.
-
-Strings convert from numbers and booleans with `String(value)` and support `split`, `join`, `trim`, `chars`, `contains`, `starts_with`, `ends_with`, `replace`, `lower`, `upper`, and ordering comparisons. [csv_summary.tok](examples/csv_summary.tok) normalizes rows from standard input.
-
-Programs talk to the terminal with `print(String)`, `read_line()->Option<String>`, `read_stdin()->Result<String,IoError>`, and `exit(status)`; a `main` returning `Unit` prints nothing extra. [greet.tok](examples/greet.tok) reads names until end of input.
-
-Programs can read their own arguments with `args()->[String]`, environment variables with `env(name)`, and clocks with `now_ms()`/`clock_ns()`; `sleep_ms(ms)` pauses. For example, `tok run examples/arguments.tok -- hello world` and a binary built from that file both print the program arguments without launcher options.
-
-The provisional library also provides `len<T>([T])->i32` and `parse_i32(String)->Result<i32,ParseError>`. [parse_argument.tok](examples/parse_argument.tok) uses both to accept a numeric CLI argument with typed parse errors.
-
-Experimental `i64` values use explicit literals such as `3000000000i64`, checked arithmetic, and `parse_i64(String)->Result<i64,ParseError>`. `i64(value)` widens an `i32`; `i32(value)` narrows an `i64` with an `Option` result. [i64_counter.tok](examples/i64_counter.tok) reads a wide CLI integer. The types do not mix implicitly.
-
-Integer and float arithmetic supports `%` as a truncated remainder; integer remainder by zero reports `E201`.
-
-Experimental `f64` values use decimal or exponent literals such as `1.25`, `1e3`, and `-0.0`. Arithmetic follows IEEE 754, including infinities and NaN; literal overflow is rejected. [float64.tok](examples/float64.tok) shows a typed function. There is no implicit conversion between float and integer types; `f64(n)` converts integers, `i32(x)`/`i64(x)` truncate floats with an `Option` result, and `parse_f64(String)` reads decimal text.
-
-`Map<K,V>` stores ordered entries with `i32`, `i64`, `String`, or `bool` keys: `var m:Map<String,I>=Map();m[w]=get_or(m,w,0)+1;`. [word_count.tok](examples/word_count.tok) counts words from standard input.
-
-Mutable bindings support element and field assignment such as `xs[i]=v;` and `grid.rows[y][x].alive=true;`, with bounds checks in both backends.
-
-Lambdas such as `|x|x*k` capture copies of locals and work with `map`, `filter`, `any`, `all`, `fold`, and `sort_by`; function types are written `(I)->I`. [closures.tok](examples/closures.tok) sorts and filters records.
-
-Arrays concatenate with `+` and provide `range`, `sort`, `reverse`, `slice`, and `contains`. `for i in range(0,n){...}` saves 5 of 21 tokens against the equivalent `while` loop in all three measured tokenizers and runs as a native range loop without allocation.
-
-Mutable arrays support `xs.push(value);`; [parse_numbers.tok](examples/parse_numbers.tok) builds an array of checked integers from any number of CLI arguments.
-
-Mutable strings support `text.push(piece);` with a `String` piece. [string_builder.tok](examples/string_builder.tok) demonstrates append without rebuilding the accumulated text on each step.
-
-The experimental `while` statement handles iterative control flow beyond array traversal; [iterative_factorial.tok](examples/iterative_factorial.tok) shows its current syntax.
-
-Both `for` and `while` support loop-local `break;` and `continue;`; [loop_control.tok](examples/loop_control.tok) combines them.
+The implementation covers all sixteen phases of the [project brief](PROMPT.txt)
+at least partially; see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
+for evidence and remaining gaps (WebAssembly target, FFI, TLS, a remote
+registry, and a self-hosted parser). Nothing is frozen as 1.0 yet. Design
+background: [VISION](VISION.md), [design goals](DESIGN_GOALS.md),
+[research plan](RESEARCH_PLAN.md), [measurements](research/).
