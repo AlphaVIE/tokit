@@ -62,7 +62,7 @@ indexed in [spec/README.md](spec/README.md); the grammar is in
 
 | Command | Purpose |
 | --- | --- |
-| `tok run`, `tok build`, `tok test`, `tok bench`, `tok repl` | run, compile natively, test, benchmark, explore |
+| `tok run`, `tok build`, `tok test`, `tok bench`, `tok repl` | run, compile natively or to WebAssembly (`--target wasm32-wasip1`), test, benchmark, explore |
 | `tok check`, `tok lint`, `tok explain [--pseudo]`, `tok doc` | diagnostics, warnings, effects, human-readable views |
 | `tok fmt`, `tok compact`, `tok expand` | canonical form and readable layout |
 | `tok new`, `tok add`, `tok rm`, `tok search`, `tok lock` | projects and packages |
@@ -92,7 +92,7 @@ model.
 
 The implementation covers all sixteen phases of the [project brief](PROMPT.txt)
 at least partially; see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
-for evidence and remaining gaps (WebAssembly target, FFI, TLS, a remote
-registry, and a self-hosted parser). Nothing is frozen as 1.0 yet. Design
+for evidence and remaining gaps (FFI, TLS, a remote registry, cross-file
+editor navigation, and a self-hosted parser). Nothing is frozen as 1.0 yet. Design
 background: [VISION](VISION.md), [design goals](DESIGN_GOALS.md),
 [research plan](RESEARCH_PLAN.md), [measurements](research/).
