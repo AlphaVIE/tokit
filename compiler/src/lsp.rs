@@ -429,6 +429,113 @@ fn completions(text: &str, offset: usize) -> Json {
     )
 }
 
+/// A declaration in another file, reached through an import alias.
+struct ImportedDeclaration {
+    uri: String,
+    text: String,
+    /// The declaration's name in `text`.
+    name: Span,
+    /// The declaration up to its body, for hover.
+    signature: String,
+    /// The qualified name at the cursor in the current document.
+    usage: Span,
+}
+
+/// The declaration that `alias::name` (or `alias::Enum::Variant`) at `offset`
+/// refers to, resolved through the module graph with unsaved editor text.
+fn imported_declaration(
+    documents: &HashMap<String, Document>,
+    uri: &str,
+    text: &str,
+    offset: usize,
+) -> Option<ImportedDeclaration> {
+    use crate::lexer::Kind;
+    let tokens = crate::lexer::lex(text).ok()?;
+    let at = tokens.iter().position(|token| {
+        token.span.start <= offset
+            && offset <= token.span.end
+            && matches!(token.kind, Kind::Ident(_))
+    })?;
+    // Walk back over `ident ::` pairs to the first segment of the path.
+    let mut first = at;
+    while first >= 2
+        && tokens[first - 1].kind == Kind::ColonColon
+        && matches!(tokens[first - 2].kind, Kind::Ident(_))
+    {
+        first -= 2;
+    }
+    let Kind::Ident(alias) = &tokens[first].kind else {
+        return None;
+    };
+    let Kind::Ident(member) = &tokens.get(first + 2)?.kind else {
+        return None;
+    };
+    if first == at || tokens.get(first + 1)?.kind != Kind::ColonColon {
+        return None;
+    }
+    let path = file_uri_path(uri)?;
+    let mut overrides = HashMap::new();
+    let mut uri_for_path = HashMap::new();
+    for (open_uri, document) in documents {
+        if let Some(open_path) = file_uri_path(open_uri) {
+            overrides.insert(open_path.clone(), document.text.clone());
+            uri_for_path.insert(open_path, open_uri.clone());
+        }
+    }
+    let loaded = crate::modules::load_with_overrides(&path, &overrides).ok()?;
+    let canonical = std::fs::canonicalize(&path).unwrap_or(path);
+    let module = loaded.modules.iter().find(|module| {
+        loaded
+            .sources
+            .get(module.source_id)
+            .is_some_and(|source| source.path == canonical)
+    })?;
+    let target_id = module
+        .imports
+        .iter()
+        .find(|(name, _)| name == alias)
+        .map(|(_, id)| *id)?;
+    let target = loaded.sources.get(target_id)?;
+    let program = crate::parse(&target.text).ok()?;
+    let (span, body_start) = program
+        .functions
+        .iter()
+        .find(|function| function.name == *member)
+        .map(|function| (function.span, function.body.span.start))
+        .or_else(|| {
+            program
+                .records
+                .iter()
+                .find(|record| record.name == *member)
+                .map(|record| (record.span, record.span.end))
+        })
+        .or_else(|| {
+            program
+                .enums
+                .iter()
+                .find(|declaration| declaration.name == *member)
+                .map(|declaration| (declaration.span, declaration.span.end))
+        })?;
+    let name = crate::lexer::lex(&target.text)
+        .ok()?
+        .into_iter()
+        .find(|token| {
+            span.start <= token.span.start
+                && matches!(&token.kind, Kind::Ident(candidate) if candidate == member)
+        })?
+        .span;
+    Some(ImportedDeclaration {
+        uri: uri_for_path
+            .get(&target.path)
+            .cloned()
+            .or_else(|| path_uri(&target.path))?,
+        signature: target.text[span.start..body_start].trim().to_owned(),
+        text: target.text.clone(),
+        name,
+        usage: tokens[first].span.join(tokens[at].span),
+    })
+}
+
 /// Markdown for the declaration or checked type at `offset`.
 fn hover_text(text: &str, offset: usize) -> Option<(String, Span)> {
     let (name, usage) = identifier_at(text, offset)?;
@@ -733,6 +840,18 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                             params["position"]["line"].as_u64()?,
                             params["position"]["character"].as_u64()?,
                         );
+                        if let Some(target) = imported_declaration(&documents, uri, &document.text, offset) {
+                            return Some(if method == "textDocument/definition" {
+                                json!({"uri": target.uri, "range": range(&target.text, target.name)})
+                            } else {
+                                json!({
+                                    "contents": {"kind": "markdown", "value": format!("```tokit
+{}
+```", target.signature)},
+                                    "range": range(&document.text, target.usage),
+                                })
+                            });
+                        }
                         if method == "textDocument/definition" {
                             let span = definition_span(&document.text, offset)?;
                             Some(json!({"uri": uri, "range": range(&document.text, span)}))
