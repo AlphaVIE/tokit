@@ -56,6 +56,7 @@ first_even(xs:[I])->Option<I>{for x in xs{if x%2==0{return Some(x);}}None}
 main()->String{match parse_pair("4","x"){Ok(n)=>String(n),Err(ParseError::Invalid)=>"invalid",Err(e)=>"range"}}
 ```
 
+- `==` compares structurally (records, enums, arrays, `Option`, `Result`): `x==None`, `p==P(1,2)`; maps and functions have no `==`.
 - `?` propagates `Err` (in `Result` functions) or `None` (in `Option` functions).
 - Patterns nest: `Ok(Some(Shape::Circle(r)))`, `Err(IoError::NotFound)`, literals inside (`Some(0)`, `Some("x")`); a bare name such as `other=>` binds the whole value. Arms must be exhaustive and reachable (`E116` names the missing case).
 

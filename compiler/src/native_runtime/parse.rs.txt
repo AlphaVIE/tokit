@@ -1,4 +1,4 @@
-#[derive(Clone)] enum __TokParseError { Invalid, OutOfRange }
+#[derive(Clone, PartialEq)] enum __TokParseError { Invalid, OutOfRange }
 impl __TokRender for __TokParseError {
     fn tok_render(&self) -> String {
         match self {

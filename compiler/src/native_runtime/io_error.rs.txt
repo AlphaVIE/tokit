@@ -1,4 +1,4 @@
-#[derive(Clone)] enum __TokIoError { Denied, NotFound, InvalidUtf8, Other }
+#[derive(Clone, PartialEq)] enum __TokIoError { Denied, NotFound, InvalidUtf8, Other }
 impl __TokRender for __TokIoError {
     fn tok_render(&self) -> String {
         match self {

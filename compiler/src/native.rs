@@ -382,6 +382,81 @@ fn rust_pattern(pattern: &Pattern, top_level_str: bool, guards: &mut Vec<String>
     }
 }
 
+/// Records and enums that can derive `PartialEq`: every field or payload is
+/// comparable, transitively. Function values and handles are not.
+fn comparable_types(program: &Program) -> std::collections::HashSet<String> {
+    let builtin_records = builtins::http_records();
+    let parts: Vec<(String, Vec<Type>)> = program
+        .records
+        .iter()
+        .chain(&builtin_records)
+        .map(|record| {
+            (
+                record.name.clone(),
+                record.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+            )
+        })
+        .chain(program.enums.iter().map(|decl| {
+            (
+                decl.name.clone(),
+                decl.variants
+                    .iter()
+                    .filter_map(|variant| variant.payload.clone())
+                    .collect(),
+            )
+        }))
+        .collect();
+    let declared: std::collections::HashSet<String> =
+        parts.iter().map(|(name, _)| name.clone()).collect();
+    // Start optimistic and remove types until nothing changes, so mutually
+    // recursive types through arrays stay comparable.
+    let mut comparable = declared.clone();
+    loop {
+        let before = comparable.len();
+        let snapshot = comparable.clone();
+        comparable.retain(|name| {
+            parts
+                .iter()
+                .find(|(candidate, _)| candidate == name)
+                .is_some_and(|(_, types)| {
+                    types
+                        .iter()
+                        .all(|ty| type_comparable(ty, &snapshot, &declared))
+                })
+        });
+        if comparable.len() == before {
+            return comparable;
+        }
+    }
+}
+
+fn type_comparable(
+    ty: &Type,
+    comparable: &std::collections::HashSet<String>,
+    declared: &std::collections::HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Fn(..) | Type::Task(_) => false,
+        Type::Array(inner) | Type::Option(inner) => type_comparable(inner, comparable, declared),
+        Type::Result(ok, err) => {
+            type_comparable(ok, comparable, declared) && type_comparable(err, comparable, declared)
+        }
+        Type::Named(name) | Type::Applied(name, _)
+            if name == builtins::CONN || name == builtins::LISTENER =>
+        {
+            false
+        }
+        Type::Applied(name, args) => {
+            (!declared.contains(name) || comparable.contains(name))
+                && args
+                    .iter()
+                    .all(|arg| type_comparable(arg, comparable, declared))
+        }
+        Type::Named(name) => !declared.contains(name) || comparable.contains(name),
+        _ => true,
+    }
+}
+
 fn is_map(ty: Option<&Type>) -> bool {
     matches!(ty, Some(Type::Applied(name, _)) if name == builtins::MAP)
 }
@@ -1173,6 +1248,7 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
         .join(",");
     writeln!(out, "const __TOK_SOURCES: &[&str] = &[{paths}];")
         .expect("writing to String cannot fail");
+    let comparable = comparable_types(program);
     for enum_decl in &program.enums {
         let name = user_name(&enum_decl.name);
         let generic_names = enum_decl
@@ -1208,7 +1284,12 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             .join(",");
         writeln!(
             out,
-            "#[derive(Clone)] enum {name}{generics} {{ {variants} }}"
+            "#[derive(Clone{})] enum {name}{generics} {{ {variants} }}",
+            if comparable.contains(&enum_decl.name) {
+                ", PartialEq"
+            } else {
+                ""
+            }
         )
         .expect("writing to String cannot fail");
         let arms = enum_decl
@@ -1273,7 +1354,12 @@ pub fn emit_with_sources(program: &Program, source: &SourceMap) -> Result<String
             .join(",");
         writeln!(
             out,
-            "#[derive(Clone)] struct {name}{generics} {{ {fields} }}"
+            "#[derive(Clone{})] struct {name}{generics} {{ {fields} }}",
+            if comparable.contains(&record.name) {
+                ", PartialEq"
+            } else {
+                ""
+            }
         )
         .expect("writing to String cannot fail");
         let params = record

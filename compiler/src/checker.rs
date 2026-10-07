@@ -2052,16 +2052,9 @@ fn infer(
                     Ok(Type::Bool)
                 }
                 Op::Eq | Op::Ne
-                    if lhs == rhs
-                        && matches!(
-                            lhs,
-                            Type::I32
-                                | Type::I64
-                                | Type::F64
-                                | Type::Bool
-                                | Type::String
-                                | Type::Bytes
-                        ) =>
+                    if join(&lhs, &rhs).is_some_and(|ty| {
+                        ty != Type::Never && equatable(&ty, signatures, &mut Vec::new())
+                    }) =>
                 {
                     Ok(Type::Bool)
                 }
@@ -2205,7 +2198,7 @@ fn infer(
             if name == builtins::CONTAINS
                 && let Some(Type::Array(element)) = actuals.first()
             {
-                if !builtins::equatable(element) {
+                if !equatable(element, signatures, &mut Vec::new()) {
                     return Err(Diagnostic::new(
                         "E104",
                         args[0].span,
@@ -2684,6 +2677,63 @@ fn field_type(
                 format!("unknown field {field} on {name}{hint}"),
             )
         })
+}
+
+/// Whether `==` is defined for `ty`: scalars, text, bytes, and arrays,
+/// options, results, records, and enums built only from such types.
+/// `visiting` cuts recursion through types that contain themselves.
+fn equatable(ty: &Type, signatures: &HashMap<String, Signature>, visiting: &mut Vec<Type>) -> bool {
+    match ty {
+        Type::I32
+        | Type::I64
+        | Type::F64
+        | Type::Bool
+        | Type::String
+        | Type::Bytes
+        | Type::Unit
+        | Type::Never
+        | Type::EmptyArray => true,
+        Type::Array(inner) | Type::Option(inner) => equatable(inner, signatures, visiting),
+        Type::Result(ok, err) => {
+            equatable(ok, signatures, visiting) && equatable(err, signatures, visiting)
+        }
+        Type::Named(name) | Type::Applied(name, _) => {
+            if visiting.contains(ty) {
+                return true;
+            }
+            let Some(signature) = signatures.get(name) else {
+                return false;
+            };
+            if name == builtins::MAP || name == builtins::CONN || name == builtins::LISTENER {
+                return false;
+            }
+            let args = match ty {
+                Type::Applied(_, args) => args.clone(),
+                _ => Vec::new(),
+            };
+            let inferred: HashMap<String, Type> =
+                signature.type_params.iter().cloned().zip(args).collect();
+            visiting.push(ty.clone());
+            let parts: Vec<Type> = match (&signature.fields, &signature.variants) {
+                (Some(fields), _) => fields
+                    .iter()
+                    .map(|(_, ty)| substitute(ty, &inferred))
+                    .collect(),
+                (_, Some(variants)) => variants
+                    .iter()
+                    .filter_map(|variant| variant.payload.as_ref())
+                    .map(|ty| substitute(ty, &inferred))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let result = parts
+                .iter()
+                .all(|part| equatable(part, signatures, visiting));
+            visiting.pop();
+            result
+        }
+        _ => false,
+    }
 }
 
 /// A repair hint for method-call syntax borrowed from other languages:

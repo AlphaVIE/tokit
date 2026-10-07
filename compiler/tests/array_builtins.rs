@@ -92,7 +92,7 @@ fn invalid_array_operations_are_rejected() {
     }
     for (source, code) in [
         ("main()->[[I]]{sort([[1]])}", "E104"),
-        ("main()->bool{contains([[1]],[1])}", "E104"),
+        ("main()->bool{let f=|x:I|x;contains([f],f)}", "E104"),
         ("main()->bool{contains([1],\"a\")}", "E102"),
         ("main()->[I]{[1]+[\"a\"]}", "E104"),
         ("main()->[I]{range(0,1i64)}", "E102"),
