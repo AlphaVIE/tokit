@@ -417,6 +417,23 @@ impl GraphBuilder {
                 let directory = crate::registry::materialize(&package)?;
                 entry_name = Some(package.entry);
                 (format!("registry:{name}@{version}"), directory)
+            } else if let Some(url) = record.get("git") {
+                // A Git package: the commit and digest select one store tree.
+                let url = url
+                    .as_str()
+                    .ok_or_else(|| format!("dependency {name} git must be a string"))?;
+                let rev = record
+                    .get("rev")
+                    .and_then(toml::Value::as_str)
+                    .ok_or_else(|| format!("git dependency {name} needs a rev"))?;
+                if record.len() != 3 {
+                    return Err(format!(
+                        "git dependency {name} needs only git, rev, and sha256 fields"
+                    ));
+                }
+                let (directory, entry) = crate::git_packages::materialize(url, rev, expected)?;
+                entry_name = Some(entry);
+                (format!("git:{url}@{rev}"), directory)
             } else {
                 let path = record
                     .get("path")
@@ -796,6 +813,45 @@ pub fn add_registry(root_dir: &Path, spec: &str) -> Result<PathBuf, String> {
     let mut item = InlineTable::new();
     item.insert("version", Value::from(package.version.as_str()));
     item.insert("sha256", Value::from(package.sha256.as_str()));
+    dependencies.insert(name, Item::Value(Value::InlineTable(item)));
+    write_manifest_update(root_dir, &document.to_string(), previous.as_deref())
+}
+
+/// Add `name` from a Git repository, pinned to the commit `rev` resolves to
+/// (default branch when omitted) and to its package tree digest.
+pub fn add_git(
+    root_dir: &Path,
+    name: &str,
+    url: &str,
+    rev: Option<&str>,
+) -> Result<PathBuf, String> {
+    let fetched = crate::git_packages::fetch(url, rev)?;
+    let manifest = root_dir.join("tok.toml");
+    check_regular_destination(&manifest)?;
+    let previous = match fs::read_to_string(&manifest) {
+        Ok(source) => Some(source),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("cannot read tok.toml: {error}")),
+    };
+    let mut document = match &previous {
+        Some(source) => source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid tok.toml: {error}"))?,
+        None => DocumentMut::new(),
+    };
+    if document.get("dependencies").is_none() {
+        document["dependencies"] = Item::Table(Table::new());
+    }
+    let dependencies = document["dependencies"]
+        .as_table_mut()
+        .ok_or("tok.toml needs a [dependencies] table")?;
+    if dependencies.contains_key(name) {
+        return Err(format!("dependency {name} already exists"));
+    }
+    let mut item = InlineTable::new();
+    item.insert("git", Value::from(url));
+    item.insert("rev", Value::from(fetched.rev.as_str()));
+    item.insert("sha256", Value::from(fetched.sha256.as_str()));
     dependencies.insert(name, Item::Value(Value::InlineTable(item)));
     write_manifest_update(root_dir, &document.to_string(), previous.as_deref())
 }

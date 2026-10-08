@@ -333,6 +333,7 @@ Format
 Projects and packages
   tok new <name>
   tok add <name> | tok rm <name> | tok search [term]
+  tok add <name> --git <url> [--rev <commit|tag|branch>]
   tok add <entry.tok> <name> <relative-path> [--entry <relative.tok>]
   tok rm <entry.tok> <name>
   tok lock <entry.tok>
@@ -464,6 +465,24 @@ fn main() {
     match args.as_slice() {
         [_, command, name] if command == "new" => {
             exit_with(tokit_compiler::packages::new_project(Path::new(name)));
+        }
+        [_, command, name, flag, url] if command == "add" && flag == "--git" => {
+            exit_with(tokit_compiler::packages::add_git(
+                Path::new("."),
+                name,
+                url,
+                None,
+            ));
+        }
+        [_, command, name, flag, url, rev_flag, rev]
+            if command == "add" && flag == "--git" && rev_flag == "--rev" =>
+        {
+            exit_with(tokit_compiler::packages::add_git(
+                Path::new("."),
+                name,
+                url,
+                Some(rev),
+            ));
         }
         [_, command, spec] if command == "add" => {
             exit_with(tokit_compiler::packages::add_registry(Path::new("."), spec));
