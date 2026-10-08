@@ -1,7 +1,10 @@
 """LoRA supervised fine-tuning on the Tokit dataset (chat JSONL).
 
 Requires a CUDA GPU and: pip install -r research/finetune/requirements.txt
-Defaults fit Qwen2.5-Coder-7B-Instruct with 4-bit QLoRA on a single 24 GB GPU.
+Defaults fit Qwen2.5-Coder-7B-Instruct with 4-bit QLoRA on a single 16 GB GPU
+(for example an RTX 5060 Ti 16 GB): the dataset's longest sample is under
+1,024 tokens, gradients are checkpointed, and the optimizer is paged 8-bit.
+Peak memory is about 11-13 GB.
 
 Example:
   python research/finetune/train_lora.py --data data/tokit --out runs/qwen7b-tokit
@@ -22,10 +25,10 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--epochs", type=float, default=3.0)
     parser.add_argument("--lr", type=float, default=2e-4)
-    parser.add_argument("--rank", type=int, default=32)
+    parser.add_argument("--rank", type=int, default=16)
     parser.add_argument("--batch", type=int, default=4)
     parser.add_argument("--grad-accum", type=int, default=4)
-    parser.add_argument("--max-length", type=int, default=2048)
+    parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--no-4bit", action="store_true", help="train in bf16 instead of 4-bit QLoRA")
     parser.add_argument("--merge", action="store_true", help="also save a merged full model for serving")
     args = parser.parse_args()
@@ -63,6 +66,9 @@ def main() -> None:
         save_strategy="epoch",
         bf16=True,
         max_length=args.max_length,
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        optim="paged_adamw_8bit" if quantization is not None else "adamw_torch",
         assistant_only_loss=True,  # learn the answers, not the prompts
         report_to="none",
     )
@@ -73,7 +79,12 @@ def main() -> None:
     tokenizer.save_pretrained(str(args.out / "adapter"))
     if args.merge:
         from peft import AutoPeftModelForCausalLM
-        merged = AutoPeftModelForCausalLM.from_pretrained(str(args.out / "adapter"), torch_dtype=torch.bfloat16)
+        # Merge on the CPU: a 7B model in bf16 (about 15 GB) does not fit next to
+        # training state on a 16 GB GPU. Needs about 16 GB of system RAM.
+        del trainer, model
+        torch.cuda.empty_cache()
+        merged = AutoPeftModelForCausalLM.from_pretrained(str(args.out / "adapter"), torch_dtype=torch.bfloat16,
+                                                          device_map="cpu", low_cpu_mem_usage=True)
         merged = merged.merge_and_unload()
         merged.save_pretrained(str(args.out / "merged"), safe_serialization=True)
         tokenizer.save_pretrained(str(args.out / "merged"))
