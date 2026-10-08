@@ -423,7 +423,7 @@ impl Resolver<'_> {
                     }
                     self.locals.borrow_mut().push(name.clone());
                 }
-                let result = self.expr(body);
+                let result = self.expr(std::sync::Arc::make_mut(body));
                 self.locals.borrow_mut().truncate(depth);
                 result?;
             }

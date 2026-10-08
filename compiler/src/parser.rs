@@ -685,7 +685,7 @@ impl Parser {
                 let body = body?;
                 Ok(Expr {
                     span: token.span.join(body.span),
-                    kind: ExprKind::Lambda(params, Box::new(body)),
+                    kind: ExprKind::Lambda(params, std::sync::Arc::new(body)),
                 })
             }
             Kind::Bang => {

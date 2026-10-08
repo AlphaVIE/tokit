@@ -319,7 +319,10 @@ pub const CALLS: &[&str] = &[
 ];
 
 pub fn is_call(name: &str) -> bool {
-    CALLS.contains(&name)
+    static SET: std::sync::OnceLock<std::collections::HashSet<&'static str>> =
+        std::sync::OnceLock::new();
+    SET.get_or_init(|| CALLS.iter().copied().collect())
+        .contains(name)
 }
 
 /// The built-in HTTP message records, in constructor field order.

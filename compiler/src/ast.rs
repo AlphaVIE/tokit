@@ -201,7 +201,7 @@ pub enum ExprKind {
     Match(Box<Expr>, Vec<(Pattern, Expr)>),
     Block(Vec<Stmt>, Option<Box<Expr>>),
     /// `|x,y:T|body`: parameters with optional types, captured by value.
-    Lambda(Vec<(String, Option<Type>)>, Box<Expr>),
+    Lambda(Vec<(String, Option<Type>)>, std::sync::Arc<Expr>),
     /// Calling a function value read from a field or element: `op.run(x)`.
     Apply(Box<Expr>, Vec<Expr>),
 }
