@@ -32,7 +32,7 @@ def modelfile(gguf: Path, guide: str, temperature: float, context: int) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--gguf", type=Path, required=True, help="quantized model file from llama.cpp")
+    parser.add_argument("--gguf", type=Path, required=True, help="quantized GGUF model file")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--guide", type=Path, default=ROOT / "spec" / "LLM_GUIDE.md")
     parser.add_argument("--temperature", type=float, default=0.2)

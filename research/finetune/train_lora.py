@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--no-4bit", action="store_true", help="train in bf16 instead of 4-bit QLoRA")
     parser.add_argument("--merge", action="store_true", help="also save a merged full model for serving")
+    parser.add_argument("--max-steps", type=int, default=-1, help="stop early (smoke tests)")
     args = parser.parse_args()
 
     import torch
@@ -41,14 +42,18 @@ def main() -> None:
 
     dataset = load_dataset("json", data_files={"train": str(args.data / "train.jsonl"),
                                                "validation": str(args.data / "val.jsonl")})
-    # Only the chat messages are trained on; metadata stays out of the prompt.
-    dataset = dataset.map(lambda row: {"messages": row["messages"]}, remove_columns=["meta"])
+    # Prompt/completion form: the loss covers only the assistant's answer,
+    # independent of whether the chat template marks assistant turns.
+    dataset = dataset.map(
+        lambda row: {"prompt": row["messages"][:-1], "completion": row["messages"][-1:]},
+        remove_columns=["messages", "meta"],
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     quantization = None if args.no_4bit else BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_use_double_quant=True)
-    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16,
-                                                 quantization_config=quantization, device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16,
+                                                 quantization_config=quantization, device_map={"": 0})
     if quantization is not None:
         model = prepare_model_for_kbit_training(model)
     lora = LoraConfig(r=args.rank, lora_alpha=args.rank * 2, lora_dropout=0.05, task_type="CAUSAL_LM",
@@ -60,7 +65,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch,
         gradient_accumulation_steps=args.grad_accum,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=10,
         logging_steps=10,
         eval_strategy="epoch",
         save_strategy="epoch",
@@ -69,7 +74,8 @@ def main() -> None:
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         optim="paged_adamw_8bit" if quantization is not None else "adamw_torch",
-        assistant_only_loss=True,  # learn the answers, not the prompts
+        completion_only_loss=True,  # learn the answers, not the prompts
+        max_steps=args.max_steps,
         report_to="none",
     )
     trainer = SFTTrainer(model=model, args=config, train_dataset=dataset["train"],
@@ -83,7 +89,7 @@ def main() -> None:
         # training state on a 16 GB GPU. Needs about 16 GB of system RAM.
         del trainer, model
         torch.cuda.empty_cache()
-        merged = AutoPeftModelForCausalLM.from_pretrained(str(args.out / "adapter"), torch_dtype=torch.bfloat16,
+        merged = AutoPeftModelForCausalLM.from_pretrained(str(args.out / "adapter"), dtype=torch.bfloat16,
                                                           device_map="cpu", low_cpu_mem_usage=True)
         merged = merged.merge_and_unload()
         merged.save_pretrained(str(args.out / "merged"), safe_serialization=True)
