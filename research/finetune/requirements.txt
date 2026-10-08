@@ -1,7 +1,9 @@
-torch>=2.4
+# RTX 50-series (Blackwell) GPUs need PyTorch built for CUDA 12.8 or newer:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch>=2.7
 transformers>=4.46
 datasets>=3.0
 peft>=0.13
 trl>=0.12
-bitsandbytes>=0.44
+bitsandbytes>=0.46
 accelerate>=1.0

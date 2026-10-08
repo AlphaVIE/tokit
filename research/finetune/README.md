@@ -51,16 +51,55 @@ python research/finetune/evaluate.py --data research/finetune/data/test_ood.json
 The summary reports `pass@1` (first answer correct), `compile@1`, the pass
 rate after the repair rounds, and token usage.
 
-## Fine-tune an open model
+## Fine-tune an open model on a 16 GB GPU
 
-```text
-pip install -r research/finetune/requirements.txt
-python research/finetune/train_lora.py --data research/finetune/data --out runs/qwen7b-tokit --merge
-vllm serve runs/qwen7b-tokit/merged --served-model-name tokit-7b
-```
+Tested settings target one 16 GB card such as an RTX 5060 Ti; peak memory is
+about 11–13 GB. The longest training sample is under 1,024 tokens.
 
-Defaults: Qwen2.5-Coder-7B-Instruct, 4-bit QLoRA, rank 32, 3 epochs,
-learning rate 2e-4, loss on assistant turns only; one 24 GB GPU suffices.
+1. **Environment** (Windows natively or WSL2). RTX 50-series cards need
+   PyTorch built for CUDA 12.8 or newer:
+
+   ```text
+   python -m venv .venv-ft && .venv-ft\Scriptsctivate
+   pip install torch --index-url https://download.pytorch.org/whl/cu128
+   pip install -r research/finetune/requirements.txt
+   ```
+
+2. **Train** Qwen2.5-Coder-7B-Instruct with 4-bit QLoRA (rank 16, batch 4 ×
+   accumulation 4, 1,024 tokens, gradient checkpointing, paged 8-bit Adam).
+   Three epochs over the 1,398 training rows take roughly 30–60 minutes:
+
+   ```text
+   python research/finetune/train_lora.py --data research/finetune/data --out runs/qwen7b-tokit --merge
+   ```
+
+   `--merge` writes a full bf16 model to `runs/qwen7b-tokit/merged`, merged
+   on the CPU (needs about 16 GB of system RAM). If memory runs short, use
+   `--batch 2 --grad-accum 8`. The 14B model
+   (`--model Qwen/Qwen2.5-Coder-14B-Instruct --batch 1 --grad-accum 16`) fits
+   only tightly and is worth trying after 7B works.
+
+3. **Quantize and serve with Ollama.** A merged 7B model needs about 15 GB in
+   bf16, too much to serve comfortably on 16 GB, so convert it to GGUF with
+   [llama.cpp](https://github.com/ggml-org/llama.cpp) and quantize to Q5_K_M
+   (about 5.4 GB):
+
+   ```text
+   python llama.cpp/convert_hf_to_gguf.py runs/qwen7b-tokit/merged --outfile runs/qwen7b-tokit/tokit-7b-f16.gguf
+   llama.cpp/build/bin/llama-quantize runs/qwen7b-tokit/tokit-7b-f16.gguf runs/qwen7b-tokit/tokit-7b-q5_k_m.gguf Q5_K_M
+   python research/finetune/make_modelfile.py --gguf runs/qwen7b-tokit/tokit-7b-q5_k_m.gguf --out runs/qwen7b-tokit/Modelfile
+   ollama create tokit-7b -f runs/qwen7b-tokit/Modelfile
+   ```
+
+   The Modelfile embeds `spec/LLM_GUIDE.md` as the system prompt and sets a
+   low temperature.
+
+4. **Evaluate** through Ollama's OpenAI-compatible endpoint, with and without
+   compiler feedback, and compare with the untuned base model:
+
+   ```text
+   python research/finetune/evaluate.py --data research/finetune/data/test_ood.jsonl --tok target/release/tok      --provider openai --base-url http://localhost:11434/v1 --model tokit-7b --repair-rounds 2 --out runs/tokit7b.jsonl
+   ```
 
 ## Recommendation
 
@@ -77,8 +116,8 @@ learning rate 2e-4, loss on assistant turns only; one 24 GB GPU suffices.
    families and is the main lever for quality. Mix in about 10–20% general
    code data to avoid forgetting.
 3. **Then fine-tune** Qwen2.5-Coder (7B for speed, 14B/32B for quality) with
-   `train_lora.py`, serve it, and compare against step 1 on `test_ood` with
-   the same harness. Keep the guide in the system prompt at inference even
+   `train_lora.py`, serve it through Ollama, and compare against step 1 on
+   `test_ood` with the same harness. Keep the guide in the system prompt at inference even
    after fine-tuning; it costs little and anchors newer builtins.
 
 The template dataset is intentionally narrow: it teaches syntax, canonical
