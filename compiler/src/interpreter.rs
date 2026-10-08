@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
@@ -74,7 +73,7 @@ impl std::fmt::Debug for ListenerHandle {
 #[derive(Debug)]
 pub struct Closure {
     params: Vec<String>,
-    body: Expr,
+    body: Arc<Expr>,
     captured: Vec<(String, Value)>,
 }
 
@@ -153,7 +152,45 @@ enum Flow {
     Continue,
 }
 
-type Env = HashMap<String, Rc<RefCell<Value>>>;
+/// Local bindings as a persistent list. Cloning is O(1) and a binding added to
+/// a clone stays invisible to the original, which is exactly the behavior of
+/// the copied maps this replaces; lookups find the innermost binding first.
+#[derive(Clone, Default)]
+struct Env(Option<Rc<EnvNode>>);
+
+struct EnvNode {
+    name: String,
+    cell: Rc<RefCell<Value>>,
+    parent: Env,
+}
+
+impl Env {
+    fn get(&self, name: &str) -> Option<&Rc<RefCell<Value>>> {
+        let mut current = &self.0;
+        while let Some(node) = current {
+            if node.name == name {
+                return Some(&node.cell);
+            }
+            current = &node.parent.0;
+        }
+        None
+    }
+
+    fn insert(&mut self, name: String, cell: Rc<RefCell<Value>>) {
+        let parent = std::mem::take(self);
+        *self = Env(Some(Rc::new(EnvNode { name, cell, parent })));
+    }
+}
+
+impl FromIterator<(String, Rc<RefCell<Value>>)> for Env {
+    fn from_iter<T: IntoIterator<Item = (String, Rc<RefCell<Value>>)>>(items: T) -> Self {
+        let mut env = Env::default();
+        for (name, cell) in items {
+            env.insert(name, cell);
+        }
+        env
+    }
+}
 const MAX_CALL_DEPTH: usize = 10_000;
 /// Each evaluator thread runs at most this many nested calls; deeper calls
 /// continue on a fresh thread so recursion never depends on one host stack.
@@ -179,6 +216,9 @@ struct Runtime<'a> {
     started: std::time::Instant,
     /// `--allow-net` grant: one `host:port`, or `*`.
     net: Option<String>,
+    /// Declared functions and records by name, so calls do not scan the program.
+    functions: std::collections::HashMap<&'a str, &'a Function>,
+    records: std::collections::HashSet<&'a str>,
 }
 
 /// Capability grants for one program run.
@@ -265,6 +305,16 @@ fn run_entry(
     args: &[String],
 ) -> Result<Value, Diagnostic> {
     let runtime = Runtime {
+        functions: program
+            .functions
+            .iter()
+            .map(|function| (function.name.as_str(), function))
+            .collect(),
+        records: program
+            .records
+            .iter()
+            .map(|record| record.name.as_str())
+            .collect(),
         read: ReadPolicy::from_root(grants.read),
         write: WritePolicy::from_root(grants.write),
         args,
@@ -512,7 +562,7 @@ fn eval(
                 .collect();
             Value::Closure(Arc::new(Closure {
                 params: params.iter().map(|(name, _)| name.clone()).collect(),
-                body: (**body).clone(),
+                body: Arc::clone(body),
                 captured,
             }))
         }
@@ -777,12 +827,9 @@ fn eval_call(
         values.push(take_value!(eval(arg, env, program, depth, runtime)));
     }
     // Functions, records, and builtins take precedence over local values.
-    let declared = builtins::is_call(name)
-        || program
-            .functions
-            .iter()
-            .any(|function| function.name == *name)
-        || program.records.iter().any(|record| record.name == *name);
+    let function = runtime.functions.get(name.as_str()).copied();
+    let declared =
+        function.is_some() || builtins::is_call(name) || runtime.records.contains(name.as_str());
     if !declared && let Some(binding) = env.get(name) {
         let Value::Closure(closure) = binding.borrow().clone() else {
             return Err(Diagnostic::new(
@@ -801,11 +848,7 @@ fn eval_call(
     if let Some(result) = eval_http(name, &values, program, depth, runtime, expr.span) {
         return Ok(Flow::Value(result?));
     }
-    let Some(function) = program
-        .functions
-        .iter()
-        .find(|function| function.name == *name)
-    else {
+    let Some(function) = function else {
         return eval_builtin(expr, name, values, program, runtime);
     };
     Ok(Flow::Value(invoke(
