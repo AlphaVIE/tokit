@@ -2,9 +2,8 @@
 
 The brief asks for an open-source license suitable for broad compiler and
 ecosystem adoption, evaluating MIT, Apache 2.0, and a dual license, with the
-reasoning documented before the final selection. The repository has **no
-license yet**: until the owner selects one, all rights are reserved and
-nobody else may legally use, modify, or redistribute the code.
+reasoning documented before the final selection. The owner selected the recommendation below: Tokit is licensed under
+`MIT OR Apache-2.0` ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)).
 
 ## What needs a license
 

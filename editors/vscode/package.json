@@ -4,6 +4,7 @@
   "description": "Tokit language support: syntax highlighting and the tok language server.",
   "version": "0.0.1",
   "publisher": "alphavie",
+  "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
     "url": "https://github.com/AlphaVIE/tokit"
