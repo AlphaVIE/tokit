@@ -21,8 +21,8 @@ in both backends; nothing here is a frozen 1.0 guarantee yet.
 | 12 | Generics | [TYPE_SYSTEM](TYPE_SYSTEM.md) | implemented |
 | 13 | Traits / interfaces | [TYPE_SYSTEM](TYPE_SYSTEM.md) — none, by decision | decided |
 | 14 | Unsafe model | [RUNTIME_MODEL](RUNTIME_MODEL.md) — no `unsafe` | decided |
-| 15 | Capability model | [SECURITY_MODEL](SECURITY_MODEL.md), [filesystem](FILESYSTEM_CAPABILITY.md), [network](NETWORK_CAPABILITY.md) | implemented |
-| 16 | FFI | [RUNTIME_MODEL](RUNTIME_MODEL.md) | not yet |
+| 15 | Capability model | [SECURITY_MODEL](SECURITY_MODEL.md), [filesystem](FILESYSTEM_CAPABILITY.md), [network](NETWORK_CAPABILITY.md), [process](PROCESS_CAPABILITY.md) | implemented |
+| 16 | FFI | [RUNTIME_MODEL](RUNTIME_MODEL.md), [process](PROCESS_CAPABILITY.md) | process interop via `exec`; no in-process FFI by decision |
 | 17 | Compiler architecture | [COMPILER_ARCHITECTURE](../COMPILER_ARCHITECTURE.md), [NATIVE_BOOTSTRAP](NATIVE_BOOTSTRAP.md) | implemented |
 | 18 | Tokit IR | [TOKIT_IR](TOKIT_IR.md) | partial (scalar functions) |
 | 19 | Optimization pipeline | [TARGETS](TARGETS.md) | implemented |

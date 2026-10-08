@@ -23,6 +23,7 @@ write standard output — nothing else.
 | `fs.write` | `write_text`, `write_bytes`, `make_dir`, `remove_file` | `--allow-write <path>` |
 | `net.connect` | `http_request`, `tcp_connect` | `--allow-net <host:port>` or `*` |
 | `net.listen` | `serve`, `listen`, `accept` | `--allow-net <host:port>` or `*` |
+| `process.run` | `exec` | `--allow-run <program>` or `*` ([process capability](PROCESS_CAPABILITY.md)) |
 
 A missing grant returns `Err(IoError::Denied)` before any system call, so
 programs handle it like any other error. Grants apply to `tok run` and to

@@ -91,9 +91,10 @@ values.
 
 ## FFI
 
-There is no foreign function interface yet. Interoperability today goes
-through processes and protocols: standard input and output, files, HTTP,
-TCP, and libraries written in Tokit on top of them (JSON, Redis, PostgreSQL,
+There is no in-process foreign function interface. Interoperability goes
+through processes and protocols: `exec` runs any granted program and
+captures its output ([process capability](PROCESS_CAPABILITY.md)), plus
+standard input and output, files, HTTP, TCP, and libraries written in Tokit on top of them (JSON, Redis, PostgreSQL,
 WebSocket in the [registry](PACKAGE_REGISTRY.md)). A future FFI would bind
 Rust or C functions through declared signatures and an explicit capability
 grant, so that foreign code stays visible in `tok explain` effect reports;

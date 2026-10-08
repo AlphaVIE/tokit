@@ -69,6 +69,7 @@ impl UseKind {
                     | "Response"
                     | "Conn"
                     | "Listener"
+                    | "Process"
             ),
             Self::Enum => matches!(name, "IoError" | "TaskError" | "ParseError"),
         }
@@ -118,6 +119,8 @@ fn reserved(name: &str) -> bool {
             | "tcp_send"
             | "tcp_recv"
             | "tcp_close"
+            | "exec"
+            | "Process"
             | "Listener"
             | "listen"
             | "accept"

@@ -216,6 +216,8 @@ struct Runtime<'a> {
     started: std::time::Instant,
     /// `--allow-net` grant: one `host:port`, or `*`.
     net: Option<String>,
+    /// `--allow-run` grant: one program, or `*`.
+    run: Option<String>,
     /// Declared functions and records by name, so calls do not scan the program.
     functions: std::collections::HashMap<&'a str, &'a Function>,
     records: std::collections::HashSet<&'a str>,
@@ -227,6 +229,8 @@ pub struct Grants<'a> {
     pub read: Option<&'a Path>,
     pub write: Option<&'a Path>,
     pub net: Option<&'a str>,
+    /// `--allow-run` grant: one program name or path, or `*`.
+    pub run: Option<&'a str>,
 }
 
 macro_rules! take_value {
@@ -266,6 +270,7 @@ pub fn run_with_capabilities(
         read: read_root,
         write: write_root,
         net: None,
+        run: None,
     };
     run_entry(program, "main", grants, args)
 }
@@ -294,6 +299,7 @@ pub fn run_named_with_capabilities(
         read: read_root,
         write: write_root,
         net: None,
+        run: None,
     };
     run_entry(program, name, grants, &[])
 }
@@ -320,6 +326,7 @@ fn run_entry(
         args,
         started: std::time::Instant::now(),
         net: grants.net.map(str::to_owned),
+        run: grants.run.map(str::to_owned),
     };
     let function = program
         .functions
@@ -2132,6 +2139,35 @@ fn eval_http(
         (builtins::TCP_CLOSE, [Value::Conn(socket)]) => {
             crate::http::__tok_tcp_close(&socket.0);
             Some(Ok(Value::Unit))
+        }
+        (
+            builtins::EXEC,
+            [
+                Value::String(program),
+                Value::Array(arguments),
+                Value::String(input),
+            ],
+        ) => {
+            let arguments: Vec<String> = arguments
+                .iter()
+                .map(|argument| match argument {
+                    Value::String(text) => text.clone(),
+                    _ => String::new(),
+                })
+                .collect();
+            Some(Ok(
+                match crate::http::__tok_exec(runtime.run.as_deref(), program, &arguments, input) {
+                    Ok((status, stdout, stderr)) => Value::Ok(Box::new(Value::Record(
+                        builtins::PROCESS.to_owned(),
+                        vec![
+                            ("status".to_owned(), Value::I32(status)),
+                            ("stdout".to_owned(), Value::String(stdout)),
+                            ("stderr".to_owned(), Value::String(stderr)),
+                        ],
+                    ))),
+                    Err(variant) => io_error_value(variant),
+                },
+            ))
         }
         (builtins::LISTEN, [Value::String(addr)]) => Some(Ok(match crate::http::__tok_tcp_listen(
             runtime.net.as_deref(),

@@ -189,6 +189,9 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
             ) {
                 facts.operations.insert("TCP transfer");
                 facts.effects.insert("net.connect");
+            } else if name == builtins::EXEC {
+                facts.operations.insert("process execution");
+                facts.effects.insert("process.run");
             } else if name == builtins::LISTEN || name == builtins::ACCEPT {
                 facts.operations.insert("TCP listener");
                 facts.effects.insert("net.listen");

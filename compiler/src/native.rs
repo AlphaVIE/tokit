@@ -87,6 +87,7 @@ fn runtime_prelude(body: &str) -> String {
         if body.contains("__tok_net_serve")
             || body.contains("__tok_net_request")
             || body.contains("__tok_net_http_")
+            || body.contains("__tok_net_exec")
         {
             prelude.push_str(&http_adapters());
         }
@@ -239,7 +240,9 @@ fn borrowed_param(ty: &Type) -> bool {
 
 fn mentions_http_record(ty: &Type) -> bool {
     match ty {
-        Type::Named(name) => name == builtins::REQUEST || name == builtins::RESPONSE,
+        Type::Named(name) => {
+            name == builtins::REQUEST || name == builtins::RESPONSE || name == builtins::PROCESS
+        }
         Type::Applied(_, args) => args.iter().any(mentions_http_record),
         Type::Array(inner) | Type::Option(inner) | Type::Task(inner) => mentions_http_record(inner),
         Type::Result(ok, err) => mentions_http_record(ok) || mentions_http_record(err),
@@ -305,6 +308,11 @@ fn __tok_net_serve_pool(addr: String, limit: i32, workers: i32, handler: std::sy
     for thread in threads {{ let _ = thread.join(); }}
     Ok(())
 }}
+fn __tok_net_exec(program: String, args: Vec<String>, stdin: String) -> Result<{process}, __TokIoError> {{
+    __tok_flush();
+    let (status, stdout, stderr) = __tok_exec(__TOK_RUN_GRANT.get().map(String::as_str), &program, &args, &stdin).map_err(__tok_net_error)?;
+    Ok({process} {{ {status}: status, {stdout}: stdout, {stderr}: stderr }})
+}}
 fn __tok_net_http_read(conn: __TokConn) -> Result<{request}, __TokIoError> {{
     let request = __tok_http_read(&conn.0).map_err(__tok_net_error)?;
     Ok({request} {{ {method}: request.method, {path}: request.path, {query}: request.query, {headers}: request.headers.into_iter().collect(), {body}: request.body }})
@@ -325,6 +333,9 @@ fn __tok_net_request(method: String, url: String, headers: std::collections::BTr
         headers = field("headers"),
         body = field("body"),
         status = field("status"),
+        process = user_name(builtins::PROCESS),
+        stdout = field("stdout"),
+        stderr = field("stderr"),
     )
 }
 
@@ -608,6 +619,7 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::TCP_SEND => "__tok_net_send".to_owned(),
                 builtins::TCP_RECV => "__tok_net_recv".to_owned(),
                 builtins::TCP_CLOSE => "__tok_net_close".to_owned(),
+                builtins::EXEC => "__tok_net_exec".to_owned(),
                 builtins::LISTEN => "__tok_net_listen".to_owned(),
                 builtins::ACCEPT => "__tok_net_accept".to_owned(),
                 builtins::HTTP_READ => "__tok_net_http_read".to_owned(),

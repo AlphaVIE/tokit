@@ -290,6 +290,31 @@ pub(crate) fn __tok_tcp_close(socket: &__TokSocket) {
     }
 }
 
+/// Run `program` with `args` when the `--allow-run` grant names it (or is `*`),
+/// feeding `stdin` and capturing up to 16 MiB of each output stream.
+pub(crate) fn __tok_exec(grant: Option<&str>, program: &str, args: &[String], stdin: &str) -> Result<(i32, String, String), &'static str> {
+    use std::io::{Read, Write};
+    if !grant.is_some_and(|grant| grant == "*" || grant == program) { return Err("Denied"); }
+    if program.is_empty() { return Err("NotFound"); }
+    let mut child = std::process::Command::new(program).args(args)
+        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped())
+        .spawn().map_err(|error| if error.kind() == std::io::ErrorKind::NotFound { "NotFound" } else { "Other" })?;
+    let input = stdin.as_bytes().to_vec();
+    let mut pipe = child.stdin.take().ok_or("Other")?;
+    let writer = std::thread::spawn(move || { let _ = pipe.write_all(&input); });
+    let limit = __TOK_HTTP_BODY_LIMIT as u64;
+    let mut out = child.stdout.take().ok_or("Other")?;
+    let mut err = child.stderr.take().ok_or("Other")?;
+    let errors = std::thread::spawn(move || { let mut buffer = Vec::new(); let _ = (&mut err).take(limit).read_to_end(&mut buffer); buffer });
+    let mut stdout = Vec::new();
+    (&mut out).take(limit).read_to_end(&mut stdout).map_err(|_| "Other")?;
+    let stderr = errors.join().map_err(|_| "Other")?;
+    let _ = writer.join();
+    let status = child.wait().map_err(|_| "Other")?;
+    let text = |bytes: Vec<u8>| String::from_utf8(bytes).map_err(|_| "InvalidUtf8");
+    Ok((status.code().unwrap_or(-1), text(stdout)?, text(stderr)?))
+}
+
 // Listening sockets. Accepted connections are ordinary `Conn` sockets.
 pub(crate) type __TokListener = std::sync::Arc<std::net::TcpListener>;
 
