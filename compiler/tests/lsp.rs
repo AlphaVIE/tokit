@@ -565,3 +565,122 @@ fn lsp_navigates_into_imported_modules() {
     assert_eq!(result(4)["range"]["start"], json!({"line":1,"character":0}));
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn lsp_renames_public_declarations_across_files() {
+    let directory = std::env::temp_dir().join(format!(
+        "tokit-lsp-rename-{}-{}",
+        std::process::id(),
+        common::nonce()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let main_path = directory.join("main.tok");
+    let shapes_path = directory.join("shapes.tok");
+    let main_text =
+        "import s=\"shapes.tok\";\narea(x:I)->I{x}\nmain()->I{s::area(2)+s::area(3)+area(1)}";
+    let shapes_text = "pub area(r:I)->I{3*r*r}\npub twice(r:I)->I{area(r)*2}\nhelper()->I{1}";
+    std::fs::write(&main_path, main_text).unwrap();
+    std::fs::write(&shapes_path, shapes_text).unwrap();
+    let main_uri = file_uri(&main_path);
+    let shapes_uri = file_uri(&shapes_path);
+    let request = |id: i64, uri: &str, method: &str, line: u64, character: u64, extra: Value| {
+        let mut message = json!({"jsonrpc":"2.0","id":id,"method":method,"params":{"textDocument":{"uri":uri},"position":{"line":line,"character":character}}});
+        for (key, value) in extra.as_object().unwrap() {
+            message["params"][key] = value.clone();
+        }
+        message
+    };
+    let messages = [
+        json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"capabilities":{}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":main_uri,"version":1,"text":main_text}}}),
+        json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":shapes_uri,"version":1,"text":shapes_text}}}),
+        // From the qualified use in main.tok.
+        request(
+            1,
+            &main_uri,
+            "textDocument/rename",
+            2,
+            13,
+            json!({"newName":"surface"}),
+        ),
+        // From the declaration in shapes.tok, without the declaration itself.
+        request(
+            2,
+            &shapes_uri,
+            "textDocument/references",
+            0,
+            5,
+            json!({"context":{"includeDeclaration":false}}),
+        ),
+        // The local `area` in main.tok stays local.
+        request(
+            3,
+            &main_uri,
+            "textDocument/references",
+            1,
+            0,
+            json!({"context":{"includeDeclaration":true}}),
+        ),
+        // A private declaration is not searched in other files.
+        request(
+            4,
+            &shapes_uri,
+            "textDocument/references",
+            2,
+            0,
+            json!({"context":{"includeDeclaration":true}}),
+        ),
+        json!({"jsonrpc":"2.0","id":9,"method":"shutdown"}),
+        json!({"jsonrpc":"2.0","method":"exit"}),
+    ];
+    let input = messages.iter().flat_map(frame).collect::<Vec<_>>();
+    let mut output = Vec::new();
+    assert!(tokit_compiler::lsp::serve(&mut input.as_slice(), &mut output).unwrap());
+    let output = decode(&output);
+    let result =
+        |id: i64| output.iter().find(|message| message["id"] == id).unwrap()["result"].clone();
+    let starts = |edits: &Value| {
+        let mut positions = edits
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|edit| {
+                (
+                    edit["range"]["start"]["line"].as_u64().unwrap(),
+                    edit["range"]["start"]["character"].as_u64().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        positions.sort();
+        positions
+    };
+    let changes = result(1)["changes"].clone();
+    assert_eq!(starts(&changes[&main_uri]), [(2, 13), (2, 24)]);
+    assert_eq!(starts(&changes[&shapes_uri]), [(0, 4), (1, 18)]);
+    assert!(
+        changes[&main_uri]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|edit| edit["newText"] == "surface")
+    );
+    let references = result(2);
+    let by_uri = |uri: &str| {
+        let filtered: Vec<Value> = references
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|location| location["uri"] == uri)
+            .cloned()
+            .collect();
+        starts(&json!(filtered))
+    };
+    assert_eq!(by_uri(&shapes_uri), [(1, 18)]);
+    assert_eq!(by_uri(&main_uri), [(2, 13), (2, 24)]);
+    let local = result(3).as_array().unwrap().clone();
+    assert!(local.iter().all(|location| location["uri"] == main_uri));
+    assert_eq!(starts(&json!(local)), [(1, 0), (2, 32)]);
+    let private = result(4).as_array().unwrap().clone();
+    assert_eq!(private.len(), 1);
+    std::fs::remove_dir_all(directory).unwrap();
+}

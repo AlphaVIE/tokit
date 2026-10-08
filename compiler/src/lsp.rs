@@ -536,6 +536,157 @@ fn imported_declaration(
     })
 }
 
+/// One use of a binding somewhere in the project.
+struct Location {
+    uri: String,
+    range: Json,
+    declaration: bool,
+}
+
+/// The editor text for every open document by canonical path, and the URI
+/// each path is open under.
+fn open_buffers(
+    documents: &HashMap<String, Document>,
+) -> (HashMap<PathBuf, String>, HashMap<PathBuf, String>) {
+    let mut overrides = HashMap::new();
+    let mut uris = HashMap::new();
+    for (uri, document) in documents {
+        if let Some(path) = file_uri_path(uri) {
+            let path = fs::canonicalize(&path).unwrap_or(path);
+            overrides.insert(path.clone(), document.text.clone());
+            uris.insert(path, uri.clone());
+        }
+    }
+    (overrides, uris)
+}
+
+/// Every use of the binding at `offset`. Local bindings and private
+/// declarations stay within the document; a public top-level declaration is
+/// also found as `alias::name` in every module of the open documents' module
+/// graphs that imports its file.
+fn project_references(
+    documents: &HashMap<String, Document>,
+    uri: &str,
+    text: &str,
+    offset: usize,
+) -> Option<(String, Vec<Location>)> {
+    use crate::lexer::Kind;
+    // Resolve to the declaring file and the declaration's name token.
+    let (home_uri, home_text, declaration, name) =
+        if let Some(target) = imported_declaration(documents, uri, text, offset) {
+            let name = target.text[target.name.start..target.name.end].to_owned();
+            (target.uri, target.text, target.name, name)
+        } else {
+            let (identifier, _) = identifier_at(text, offset)?;
+            let (target, _) = references(text, offset)?;
+            (uri.to_owned(), text.to_owned(), target, identifier)
+        };
+    let (_, home_spans) = references(&home_text, declaration.start)?;
+    let mut found: Vec<Location> = home_spans
+        .into_iter()
+        .map(|span| Location {
+            uri: home_uri.clone(),
+            range: range(&home_text, span),
+            declaration: span == declaration,
+        })
+        .collect();
+    // Only public top-level declarations are reachable from other files.
+    let program = crate::parse(&home_text).ok()?;
+    let tokens = crate::lexer::lex(&home_text).ok()?;
+    let is_public_declaration = |span: Span| {
+        program
+            .functions
+            .iter()
+            .map(|function| (function.public, function.span))
+            .chain(
+                program
+                    .records
+                    .iter()
+                    .map(|record| (record.public, record.span)),
+            )
+            .chain(
+                program
+                    .enums
+                    .iter()
+                    .map(|declaration| (declaration.public, declaration.span)),
+            )
+            .any(|(public, declared)| {
+                public
+                    && tokens
+                        .iter()
+                        .find(|token| {
+                            declared.start <= token.span.start
+                                && matches!(token.kind, Kind::Ident(_))
+                        })
+                        .is_some_and(|token| token.span == span)
+            })
+    };
+    if !is_public_declaration(declaration) {
+        return Some((name, found));
+    }
+    let home_path = file_uri_path(&home_uri)?;
+    let home_path = fs::canonicalize(&home_path).unwrap_or(home_path);
+    let (overrides, uris) = open_buffers(documents);
+    let mut seen = HashSet::new();
+    for entry in documents.keys().filter_map(|open| file_uri_path(open)) {
+        let Ok(loaded) = crate::modules::load_with_overrides(&entry, &overrides) else {
+            continue;
+        };
+        let Some(home_id) = (0..loaded.sources.len())
+            .map(crate::ast::SourceId)
+            .find(|id| {
+                loaded
+                    .sources
+                    .get(*id)
+                    .is_some_and(|source| source.path == home_path)
+            })
+        else {
+            continue;
+        };
+        for module in &loaded.modules {
+            let Some(source) = loaded.sources.get(module.source_id) else {
+                continue;
+            };
+            if !seen.insert(source.path.clone()) {
+                continue;
+            }
+            let aliases: Vec<&str> = module
+                .imports
+                .iter()
+                .filter(|(_, id)| *id == home_id)
+                .map(|(alias, _)| alias.as_str())
+                .collect();
+            if aliases.is_empty() {
+                continue;
+            }
+            let Ok(module_tokens) = crate::lexer::lex(&source.text) else {
+                continue;
+            };
+            let Some(module_uri) = uris
+                .get(&source.path)
+                .cloned()
+                .or_else(|| path_uri(&source.path))
+            else {
+                continue;
+            };
+            for window in module_tokens.windows(3) {
+                if let (Kind::Ident(alias), Kind::ColonColon, Kind::Ident(member)) =
+                    (&window[0].kind, &window[1].kind, &window[2].kind)
+                    && aliases.contains(&alias.as_str())
+                    && *member == name
+                {
+                    found.push(Location {
+                        uri: module_uri.clone(),
+                        range: range(&source.text, window[2].span),
+                        declaration: false,
+                    });
+                }
+            }
+        }
+    }
+    Some((name, found))
+}
+
 /// Markdown for the declaration or checked type at `offset`.
 fn hover_text(text: &str, offset: usize) -> Option<(String, Span)> {
     let (name, usage) = identifier_at(text, offset)?;
@@ -879,20 +1030,19 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                             params["position"]["line"].as_u64()?,
                             params["position"]["character"].as_u64()?,
                         );
-                        let (target, spans) = references(&document.text, offset)?;
-                        Some((uri, document, target, spans))
+                        project_references(&documents, uri, &document.text, offset)
                     });
                 let message = if method == "textDocument/references" {
                     let include_declaration = params["context"]["includeDeclaration"]
                         .as_bool()
                         .unwrap_or(true);
                     let result = found
-                        .map(|(uri, document, target, spans)| {
+                        .map(|(_, locations)| {
                             json!(
-                                spans
+                                locations
                                     .into_iter()
-                                    .filter(|span| include_declaration || *span != target)
-                                    .map(|span| json!({"uri": uri, "range": range(&document.text, span)}))
+                                    .filter(|location| include_declaration || !location.declaration)
+                                    .map(|location| json!({"uri": location.uri, "range": location.range}))
                                     .collect::<Vec<_>>()
                             )
                         })
@@ -905,12 +1055,18 @@ pub fn serve<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<
                             error_response(id, -32602, "new name must be a non-reserved identifier")
                         }
                         None => error_response(id, -32602, "nothing to rename here"),
-                        Some((uri, document, _, spans)) => {
-                            let edits: Vec<_> = spans
-                                .into_iter()
-                                .map(|span| json!({"range": range(&document.text, span), "newText": new_name}))
-                                .collect();
-                            response(id, json!({"changes": {uri: edits}}))
+                        Some((_, locations)) => {
+                            let mut changes = serde_json::Map::new();
+                            for location in locations {
+                                let edits =
+                                    changes.entry(location.uri).or_insert_with(|| json!([]));
+                                if let Some(list) = edits.as_array_mut() {
+                                    list.push(
+                                        json!({"range": location.range, "newText": new_name}),
+                                    );
+                                }
+                            }
+                            response(id, json!({"changes": changes}))
                         }
                     }
                 };

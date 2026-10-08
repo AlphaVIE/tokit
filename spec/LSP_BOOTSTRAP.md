@@ -46,8 +46,13 @@ or `alias::Enum::Variant` resolve the alias through the module graph
 buffers, and return the declaration in the imported file. A local
 declaration with the same name is never chosen for a qualified use.
 
-Cross-file references and renames, member completion that knows the
-receiver's type, and incremental text edits are future work.
+References and rename of a public top-level declaration cover its file and
+every `alias::name` use in the module graphs of all open documents,
+returning one `WorkspaceEdit` with changes per file; local bindings and
+private declarations stay within their document.
+
+Member completion that knows the receiver's type and incremental text edits
+are future work.
 This is an IDE bootstrap, not a full language-service implementation.
 
 The protocol behavior follows the [Language Server Protocol specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/).
