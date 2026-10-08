@@ -96,3 +96,13 @@ for evidence and remaining gaps (FFI, TLS, a remote registry, cross-file
 editor navigation, and a self-hosted parser). Nothing is frozen as 1.0 yet. Design
 background: [VISION](VISION.md), [design goals](DESIGN_GOALS.md),
 [research plan](RESEARCH_PLAN.md), [measurements](research/).
+
+## License
+
+Tokit is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE),
+at your option. This covers the compiler, the runtime code embedded in
+compiled programs, the registry packages, the specifications, and the
+fine-tuning dataset. Programs you write in Tokit and the binaries `tok build`
+produces from them are yours; the embedded runtime adds no obligations beyond
+these permissive terms. Contributions are accepted under the same dual
+license.
