@@ -8,6 +8,8 @@ fn __tok_range(start: i32, end: i32) -> Vec<i32> { (start..end).collect() }
 fn __tok_concat<T>(mut left: Vec<T>, right: Vec<T>) -> Vec<T> { left.extend(right); left }
 fn __tok_arr_sort<T: Clone + __TokOrder>(items: &[T]) -> Vec<T> { let mut sorted = items.to_vec(); sorted.sort_by(|a, b| a.tok_cmp(b)); sorted }
 fn __tok_arr_reverse<T: Clone>(items: &[T]) -> Vec<T> { items.iter().rev().cloned().collect() }
+fn __tok_arr_last<T: Clone>(items: &[T]) -> Option<T> { items.last().cloned() }
+fn __tok_arr_pop<T: Clone>(items: &[T]) -> Vec<T> { items[..items.len().saturating_sub(1)].to_vec() }
 fn __tok_arr_contains<T: PartialEq>(items: &[T], wanted: T) -> bool { items.contains(&wanted) }
 fn __tok_arr_slice<T: Clone>(items: &[T], from: i32, to: i32, source_id: usize, line: usize, column: usize) -> Vec<T> {
     match (usize::try_from(from), usize::try_from(to)) {

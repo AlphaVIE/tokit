@@ -38,6 +38,28 @@ impl Parser {
             std::mem::discriminant(&token.kind) == std::mem::discriminant(kind)
         })
     }
+    /// `name.pop();`, which removes the last element of a mutable array.
+    fn at_pop_statement(&self) -> bool {
+        matches!(&self.current().kind, Kind::Ident(_))
+            && self.next_is(&Kind::Dot)
+            && self
+                .tokens
+                .get(self.pos + 2)
+                .is_some_and(|token| matches!(&token.kind, Kind::Ident(method) if method == "pop"))
+            && self
+                .tokens
+                .get(self.pos + 3)
+                .is_some_and(|token| token.kind == Kind::LParen)
+            && self
+                .tokens
+                .get(self.pos + 4)
+                .is_some_and(|token| token.kind == Kind::RParen)
+            && self
+                .tokens
+                .get(self.pos + 5)
+                .is_some_and(|token| token.kind == Kind::Semicolon)
+    }
+
     fn at_push_statement(&self) -> bool {
         matches!(&self.current().kind, Kind::Ident(_))
             && self.next_is(&Kind::Dot)
@@ -472,6 +494,26 @@ impl Parser {
                     name,
                     path: Vec::new(),
                     value,
+                    span: first.join(end),
+                });
+            } else if self.at_pop_statement() {
+                let (name, first) = self.ident()?;
+                self.expect(Kind::Dot)?;
+                let method = self.ident()?.1;
+                self.expect(Kind::LParen)?;
+                self.expect(Kind::RParen)?;
+                let end = self.expect(Kind::Semicolon)?.span;
+                let target = Expr {
+                    kind: ExprKind::Var(name.clone()),
+                    span: first,
+                };
+                stmts.push(Stmt::Assign {
+                    name,
+                    path: Vec::new(),
+                    value: Expr {
+                        kind: ExprKind::Call("pop".to_owned(), vec![target]),
+                        span: first.join(method),
+                    },
                     span: first.join(end),
                 });
             } else if self.at_push_statement() {

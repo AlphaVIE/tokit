@@ -1771,6 +1771,13 @@ fn eval_array_builtin(
         (builtins::REVERSE, [Value::Array(items)]) => {
             Value::Array(items.iter().rev().cloned().collect())
         }
+        (builtins::LAST, [Value::Array(items)]) => match items.last() {
+            Some(item) => Value::Some(Box::new(item.clone())),
+            None => Value::None,
+        },
+        (builtins::POP, [Value::Array(items)]) => {
+            Value::Array(items[..items.len().saturating_sub(1)].to_vec())
+        }
         (builtins::SLICE, [Value::Array(items), Value::I32(from), Value::I32(to)]) => {
             let bounds = usize::try_from(*from).ok().zip(usize::try_from(*to).ok());
             match bounds {

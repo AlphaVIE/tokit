@@ -489,6 +489,28 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
         },
     );
     signatures.insert(
+        builtins::LAST.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Array(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::Option(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
+        builtins::POP.to_owned(),
+        Signature {
+            type_params: vec!["T".to_owned()],
+            params: vec![Type::Array(Box::new(Type::Param("T".to_owned())))],
+            ret: Type::Array(Box::new(Type::Param("T".to_owned()))),
+            fields: None,
+            variants: None,
+            spawn_safe: false,
+        },
+    );
+    signatures.insert(
         builtins::SLICE.to_owned(),
         Signature {
             type_params: vec!["T".to_owned()],
@@ -695,6 +717,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "sort"
                 | "reverse"
                 | "slice"
+                | "last"
+                | "pop"
                 | "Map"
                 | "get"
                 | "get_or"
@@ -818,6 +842,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "sort"
                 | "reverse"
                 | "slice"
+                | "last"
+                | "pop"
                 | "Map"
                 | "get"
                 | "get_or"
@@ -1185,6 +1211,8 @@ fn expression_is_spawn_safe(
                         | builtins::SORT
                         | builtins::REVERSE
                         | builtins::SLICE
+                        | builtins::LAST
+                        | builtins::POP
                         | builtins::MAP
                         | builtins::GET
                         | builtins::GET_OR
@@ -2761,6 +2789,8 @@ fn method_hint(name: &str) -> Option<String> {
             "push is a statement: write `xs.push(v);`, or `{xs.push(v);}` as a match arm".to_owned()
         }
         "length" | "size" | "count" => "call len(x)".to_owned(),
+        "pop" => "read the last element with last(xs), then remove it with `xs.pop();`".to_owned(),
+        "peek" | "top" | "back" => "call last(xs)".to_owned(),
         "to_string" | "toString" | "str" => "call String(x)".to_owned(),
         "unwrap" | "expect" => "match on the value or use `?`".to_owned(),
         "iter" | "into_iter" | "collect" | "clone" => {

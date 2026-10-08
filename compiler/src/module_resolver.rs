@@ -163,6 +163,8 @@ fn reserved(name: &str) -> bool {
             | "sort"
             | "reverse"
             | "slice"
+            | "last"
+            | "pop"
             | "Map"
             | "get"
             | "get_or"

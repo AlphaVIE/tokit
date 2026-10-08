@@ -73,7 +73,7 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 
 ## Built-in functions
 
-- Arrays: `len`, `push` (statement `xs.push(v);`), `+`, `range(a,b)`, `sort`, `reverse`, `slice(xs,a,b)`, `contains(xs,v)`, `map`, `filter`, `any`, `all`, `fold(xs,init,|acc,x|...)`, `sort_by(xs,|x|key)`.
+- Arrays: `len`, `push` (statement `xs.push(v);`), `+`, `range(a,b)`, `sort`, `reverse`, `slice(xs,a,b)`, `last(xs)->Option<T>`, `pop(xs)` (copy without the last element; statement `xs.pop();`), `contains(xs,v)`, `map`, `filter`, `any`, `all`, `fold(xs,init,|acc,x|...)`, `sort_by(xs,|x|key)`.
 - Strings: `String(n)`, `chars`, `split(s,sep)`, `join(parts,sep)`, `trim`, `contains`, `starts_with`, `ends_with`, `replace(s,from,to)`, `lower`, `upper`, `lines`, `utf8_encode`, `utf8_decode_bytes`, `parse_i32`, `parse_i64`, `parse_f64` (each returns `Result<_,ParseError>`).
 - Maps: `var m:Map<String,I>=Map();` `m[k]=v;` `get(m,k)->Option<V>`, `get_or(m,k,d)`, `contains(m,k)`, `keys`, `values`, `len`, `remove(m,k)`. Keys: `I`, `L`, `String`, `bool`; iteration order is sorted.
 - Math: `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `exp`, `ln`, `sin`, `cos`, `tan`, `atan2`, `pi()`.
