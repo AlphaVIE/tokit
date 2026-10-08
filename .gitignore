@@ -5,3 +5,5 @@ research/results/*.json
 research/.cache/
 target/
 benchmarks_*/
+.venv-ft/
+runs/
