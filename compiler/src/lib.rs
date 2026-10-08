@@ -11,6 +11,7 @@ pub mod expand;
 pub mod explain;
 pub mod filesystem;
 pub mod format;
+pub mod git_packages;
 mod http;
 pub mod interpreter;
 pub mod ir;

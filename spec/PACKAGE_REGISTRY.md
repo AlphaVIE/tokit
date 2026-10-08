@@ -55,3 +55,33 @@ This registry is a curated, versioned set shipped with the compiler. Remote
 registries, version ranges, publishing, signatures, SBOM output, and
 vulnerability metadata are not implemented yet; the content digests already
 make every resolved graph reproducible and tamper-evident.
+
+## Git packages
+
+Anyone can publish a package as a Git repository whose root holds a
+`tok.toml` with a `[package]` table (`name`, `version`, `entry`,
+`description`) and the package's `.tok` files:
+
+```text
+tok add greet --git https://github.com/someone/greet            # default branch
+tok add greet --git https://github.com/someone/greet --rev v1.2.0
+```
+
+`tok add` clones the repository with byte-exact line endings, checks out the
+revision, and records the resolved **full commit id** and the package tree
+digest:
+
+```toml
+[dependencies]
+greet = { git = "https://github.com/someone/greet", rev = "3f2c…", sha256 = "9a41…" }
+```
+
+Only `tok.toml` and `.tok` files are copied into the content-addressed store
+(`$TOK_HOME/store/<sha256>`), so builds after the first one work offline.
+When the store entry is missing, the pinned commit is fetched again and must
+produce the pinned digest; a moved tag, a force-pushed branch, or tampered
+content is rejected. `rev` in `tok.toml` must be a full commit id, never a
+branch or tag name. Git packages may themselves depend on registry, path, or
+Git packages; `tok.lock` records them as `git:<url>@<rev>`. Fetching runs the
+system `git` (or `TOKIT_GIT`) without prompting for credentials; private
+repositories work through the user's normal Git credential setup.

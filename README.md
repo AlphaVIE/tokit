@@ -66,7 +66,8 @@ via `tok lsp`.
   I/O, environment and clocks, files, HTTP server and client, raw TCP,
   listeners, pure parallel tasks, and a worker-pool HTTP server.
 - Packages: `json`, `http`, `redis`, `postgres`, `websocket` from the built-in
-  [registry](spec/PACKAGE_REGISTRY.md), pinned by content hash.
+  [registry](spec/PACKAGE_REGISTRY.md), and any Git repository with
+  `tok add name --git <url>`, pinned by commit and content hash.
 
 The whole language fits in the [LLM guide](spec/LLM_GUIDE.md) (about 2,500
 tokens), whose examples are checked by the test suite. All specifications are
