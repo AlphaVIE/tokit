@@ -4,7 +4,7 @@
 models.** Few tokens, one canonical form, diagnostics a model can act on, and
 native executables as fast as Rust.
 
-[Website](https://tokit-lang.org) · [Language guide](spec/LLM_GUIDE.md) ·
+[Language guide](spec/LLM_GUIDE.md) ·
 [Specifications](spec/README.md) · [Examples](examples/) ·
 [Releases](https://github.com/AlphaVIE/tokit/releases)
 

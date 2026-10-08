@@ -91,7 +91,7 @@ def main() -> None:
         shutil.rmtree(OUTPUT)
     OUTPUT.mkdir()
     (OUTPUT / "index.html").write_text(page, encoding="utf-8", newline="\n")
-    for asset in ("style.css", "favicon.svg", "404.html", "CNAME", "robots.txt"):
+    for asset in ("style.css", "favicon.svg", "404.html", "robots.txt"):
         shutil.copy(SOURCE / asset, OUTPUT / asset)
     total = sum(path.stat().st_size for path in OUTPUT.iterdir())
     print(f"built {OUTPUT} ({total / 1024:.1f} KiB)")
