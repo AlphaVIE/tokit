@@ -53,6 +53,7 @@ fn run_command(args: &[String]) {
     let mut read_root = None;
     let mut write_root = None;
     let mut net = None;
+    let mut run = None;
     while let Some(flag) = args.get(index) {
         match flag.as_str() {
             "--json" if !json => {
@@ -71,6 +72,10 @@ fn run_command(args: &[String]) {
                 write_root = args.get(index + 1).map(String::as_str);
                 index += 2;
             }
+            "--allow-run" if run.is_none() && args.get(index + 1).is_some() => {
+                run = args.get(index + 1).map(String::as_str);
+                index += 2;
+            }
             "--allow-net" if net.is_none() && args.get(index + 1).is_some() => {
                 net = args.get(index + 1).map(String::as_str);
                 index += 2;
@@ -80,7 +85,7 @@ fn run_command(args: &[String]) {
     }
     let Some(path) = args.get(index) else {
         eprintln!(
-            "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
+            "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] [--allow-run <program|*>] <file.tok> [-- arguments...]"
         );
         process::exit(2);
     };
@@ -90,7 +95,7 @@ fn run_command(args: &[String]) {
         [separator, rest @ ..] if separator == "--" => rest,
         _ => {
             eprintln!(
-                "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
+                "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] [--allow-run <program|*>] <file.tok> [-- arguments...]"
             );
             process::exit(2);
         }
@@ -126,6 +131,7 @@ fn run_command(args: &[String]) {
             ("--allow-read", read_root),
             ("--allow-write", write_root),
             ("--allow-net", net),
+            ("--allow-run", run),
         ] {
             if let Some(value) = value {
                 command.arg(flag).arg(value);
@@ -146,6 +152,7 @@ fn run_command(args: &[String]) {
             read: read_root.map(Path::new),
             write: write_root.map(Path::new),
             net,
+            run,
         },
         program_args,
     );
@@ -313,7 +320,7 @@ fn patch_command(entry: &Path, request_path: &Path, write: bool) -> Result<Strin
 const USAGE: &str = "usage: tok <command> ...
 
 Run and build
-  tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- args...]
+  tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] [--allow-run <program|*>] <file.tok> [-- args...]
   tok build <file.tok> -o <output> [--target <triple>]   (e.g. wasm32-wasip1)
   tok test [--allow-read <path>] [--allow-write <path>] <file.tok>
   tok bench [--iterations N] <file.tok>

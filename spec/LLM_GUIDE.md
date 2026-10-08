@@ -84,6 +84,7 @@ main()->[String]{let people=[Person("bo",30),Person("al",25)];let add=adder(1);m
 - Bytes and crypto: `sha256`, `sha1`, `md5`, `hmac_sha256(key,data)`, `pbkdf2_sha256(pw,salt,iterations)`, `base64_encode`, `base64_decode->Option<Bytes>`, `hex`, `random_bytes(n)`.
 - Bits (no `|`/`&` operators): `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(x,n)`, `shr(x,n)` on `I` or `L`.
 - Unit value: `()`, e.g. `Ok(())` in a `Result<Unit,E>` function.
+- Processes (needs `--allow-run prog`): `exec(prog,[args],stdin)->Result<Process,IoError>`, record `Process{status,stdout,stderr}`; no shell.
 - Tasks: `let t=spawn f(x);` then `join(t)->Result<T,TaskError>`; spawned functions must be pure.
 
 ## Workflow and diagnostics

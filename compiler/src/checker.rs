@@ -163,6 +163,18 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
             Type::Unit,
         ),
         (
+            builtins::EXEC,
+            vec![
+                Type::String,
+                Type::Array(Box::new(Type::String)),
+                Type::String,
+            ],
+            Type::Result(
+                Box::new(Type::Named(builtins::PROCESS.to_owned())),
+                Box::new(Type::Named(builtins::IO_ERROR.to_owned())),
+            ),
+        ),
+        (
             builtins::LISTEN,
             vec![Type::String],
             Type::Result(
@@ -639,6 +651,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "tcp_send"
                 | "tcp_recv"
                 | "tcp_close"
+                | "exec"
+                | "Process"
                 | "Listener"
                 | "listen"
                 | "accept"
@@ -760,6 +774,8 @@ pub fn check_with_types(program: &Program) -> Result<HashMap<Span, Type>, Diagno
                 | "tcp_send"
                 | "tcp_recv"
                 | "tcp_close"
+                | "exec"
+                | "Process"
                 | "Listener"
                 | "listen"
                 | "accept"
@@ -1102,6 +1118,7 @@ fn expression_is_spawn_safe(
                 && name != builtins::TCP_SEND
                 && name != builtins::TCP_RECV
                 && name != builtins::TCP_CLOSE
+                && name != builtins::EXEC
                 && name != builtins::LISTEN
                 && name != builtins::ACCEPT
                 && name != builtins::HTTP_READ

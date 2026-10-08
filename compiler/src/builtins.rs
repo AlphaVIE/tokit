@@ -27,6 +27,8 @@ pub const TCP_CONNECT: &str = "tcp_connect";
 pub const TCP_SEND: &str = "tcp_send";
 pub const TCP_RECV: &str = "tcp_recv";
 pub const TCP_CLOSE: &str = "tcp_close";
+pub const EXEC: &str = "exec";
+pub const PROCESS: &str = "Process";
 pub const LISTENER: &str = "Listener";
 pub const LISTEN: &str = "listen";
 pub const ACCEPT: &str = "accept";
@@ -235,6 +237,8 @@ pub const CALLS: &[&str] = &[
     "tcp_send",
     "tcp_recv",
     "tcp_close",
+    "exec",
+    "Process",
     "listen",
     "accept",
     "http_read",
@@ -345,6 +349,14 @@ pub fn http_records() -> Vec<crate::ast::Record> {
                 ("status", Type::I32),
                 ("headers", headers),
                 ("body", Type::String),
+            ],
+        ),
+        (
+            PROCESS,
+            vec![
+                ("status", Type::I32),
+                ("stdout", Type::String),
+                ("stderr", Type::String),
             ],
         ),
     ]
