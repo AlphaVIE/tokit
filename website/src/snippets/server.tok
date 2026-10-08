@@ -1,0 +1,3 @@
+// GET /hello?name answers in parallel on eight workers.
+handle(r:Request)->Response{let h:Map<String,String>=Map();match r.path{"/hello"=>Response(200,h,"hello "+r.query),_=>Response(404,h,"not found")}}
+main()->Unit{match serve("127.0.0.1:8080",0,8,|r|handle(r)){Ok(u)=>{},Err(e)=>{print("cannot serve");exit(1);}}}

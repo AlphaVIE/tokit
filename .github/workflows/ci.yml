@@ -26,6 +26,10 @@ jobs:
           TOKIT_NETWORK_TESTS: '1'
       - name: Run Tokit example suite
         run: cargo +1.98.1 run --quiet -p tokit-compiler --bin tok -- test examples/tests.tok
+      - name: Website is built from compiling snippets
+        run: |
+          python3 website/build.py --tok target/debug/tok
+          git diff --exit-code website/public
       - name: Research script tests
         run: python3 -m unittest discover -s tests -v
       - name: Verify function patch corpus

@@ -18,3 +18,7 @@ tok.lock text eol=lf
 *.json text eol=lf
 *.jsonl text eol=lf
 *.sh text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.svg text eol=lf
+CNAME text eol=lf

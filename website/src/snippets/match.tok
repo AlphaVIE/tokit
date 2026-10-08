@@ -1,0 +1,3 @@
+enum Shape{Circle(F),Square(F)}
+area(s:Option<Shape>)->F{match s{Some(Shape::Circle(r))=>pi()*r*r,Some(Shape::Square(a))=>a*a,None=>0.0}}
+main()->F{area(Some(Shape::Square(3.0)))}
