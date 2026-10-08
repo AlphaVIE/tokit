@@ -18,9 +18,25 @@ $ tok build cart.tok -o cart && ./cart
 "total 7.75"
 ```
 
+## Install
+
+Prebuilt `tok` for Linux (x86_64, arm64), macOS (Apple silicon, Intel), and
+Windows comes with each [release](https://github.com/AlphaVIE/tokit/releases),
+checksum-verified by the installers:
+
+```text
+curl -sSf https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.sh | sh
+irm https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.ps1 | iex
+```
+
+`tok run`, `tok check`, the formatter, tools, packages, and the language
+server work right away. `tok build` and `tok run --native` compile through
+Rust, so they also need [rustup](https://rustup.rs). The VS Code extension
+(`tokit-vscode.vsix`) is attached to every release.
+
 ## Quick start
 
-With Rust 1.98 installed:
+From source, with Rust 1.98 installed:
 
 ```text
 cargo build --release -p tokit-compiler       # builds target/release/tok
