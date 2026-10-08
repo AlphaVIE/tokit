@@ -109,8 +109,7 @@ model.
 
 The implementation covers all sixteen phases of the [project brief](PROMPT.txt)
 at least partially; see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
-for evidence and remaining gaps (FFI, TLS, a remote registry, cross-file
-editor navigation, and a self-hosted parser). Nothing is frozen as 1.0 yet. Design
+for evidence and remaining gaps (a self-hosted parser and loop lowering in the IR). Nothing is frozen as 1.0 yet. Design
 background: [VISION](VISION.md), [design goals](DESIGN_GOALS.md),
 [research plan](RESEARCH_PLAN.md), [measurements](research/).
 
