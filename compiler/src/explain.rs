@@ -102,6 +102,8 @@ pub(crate) fn visit(expr: &Expr, facts: &mut Facts) {
                     | builtins::SORT
                     | builtins::REVERSE
                     | builtins::SLICE
+                    | builtins::LAST
+                    | builtins::POP
                     | builtins::MAP_FN
                     | builtins::FILTER
                     | builtins::ANY

@@ -689,6 +689,8 @@ fn emit_expr(expr: &Expr, source: &SourceMap, types: &EmitContext<'_>) -> String
                 builtins::SORT_BY => "__tok_arr_sort_by".to_owned(),
                 builtins::SORT => "__tok_arr_sort".to_owned(),
                 builtins::REVERSE => "__tok_arr_reverse".to_owned(),
+                builtins::LAST => "__tok_arr_last".to_owned(),
+                builtins::POP => "__tok_arr_pop".to_owned(),
                 builtins::TO_STRING => "__tok_string".to_owned(),
                 builtins::JOIN if args.len() == 2 => "__tok_str_join".to_owned(),
                 builtins::CHARS => "__tok_str_chars".to_owned(),

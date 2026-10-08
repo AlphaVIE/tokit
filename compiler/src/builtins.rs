@@ -72,6 +72,8 @@ pub const RANGE: &str = "range";
 pub const SORT: &str = "sort";
 pub const REVERSE: &str = "reverse";
 pub const SLICE: &str = "slice";
+pub const LAST: &str = "last";
+pub const POP: &str = "pop";
 pub const GET: &str = "get";
 pub const GET_OR: &str = "get_or";
 pub const KEYS: &str = "keys";
@@ -287,6 +289,8 @@ pub const CALLS: &[&str] = &[
     "sort",
     "reverse",
     "slice",
+    "last",
+    "pop",
     "Map",
     "get",
     "get_or",
