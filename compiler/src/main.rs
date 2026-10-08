@@ -347,10 +347,16 @@ Projects and packages
   tok pkg-hash <file.tok|directory>
 
 Editors
-  tok lsp";
+  tok lsp
+
+  tok --version";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() == 2 && matches!(args[1].as_str(), "version" | "--version" | "-V") {
+        println!("tok {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     if args.len() == 1 || (args.len() == 2 && matches!(args[1].as_str(), "help" | "--help" | "-h"))
     {
         println!("{USAGE}");

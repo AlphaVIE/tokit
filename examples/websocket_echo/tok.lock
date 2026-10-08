@@ -1,4 +1,4 @@
-compiler = "tokit-compiler/0.0.1"
+compiler = "tokit-compiler/0.1.0"
 format = 2
 manifest_sha256 = "603a85c946a93e8f600821c1409696a4c37941b6550de0cb90f77bc829314bac"
 target = "portable-source"

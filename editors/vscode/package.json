@@ -2,7 +2,7 @@
   "name": "tokit",
   "displayName": "Tokit",
   "description": "Tokit language support: syntax highlighting and the tok language server.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "alphavie",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
