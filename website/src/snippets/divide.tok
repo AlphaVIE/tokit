@@ -1,0 +1,4 @@
+enum DivError{DivZero}
+divide(a:I,b:I)->Result<I,DivError>{
+  if b==0{Err(DivError::DivZero)}else{Ok(a/b)}
+}
