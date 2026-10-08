@@ -53,8 +53,9 @@ rate after the repair rounds, and token usage.
 
 ## Fine-tune an open model on a 16 GB GPU
 
-Tested settings target one 16 GB card such as an RTX 5060 Ti; peak memory is
-about 11–13 GB. The longest training sample is under 1,024 tokens.
+Measured on an RTX 5060 Ti 16 GB under Windows: peak GPU memory 11.9 GB,
+about 7 seconds per optimizer step, so three epochs take roughly half an
+hour. The longest training sample is under 1,024 tokens.
 
 1. **Environment** (Windows natively or WSL2). RTX 50-series cards need
    PyTorch built for CUDA 12.8 or newer:
@@ -67,7 +68,7 @@ about 11–13 GB. The longest training sample is under 1,024 tokens.
 
 2. **Train** Qwen2.5-Coder-7B-Instruct with 4-bit QLoRA (rank 16, batch 4 ×
    accumulation 4, 1,024 tokens, gradient checkpointing, paged 8-bit Adam).
-   Three epochs over the 1,398 training rows take roughly 30–60 minutes:
+   Training uses prompt/completion pairs, so only the answers carry loss:
 
    ```text
    python research/finetune/train_lora.py --data research/finetune/data --out runs/qwen7b-tokit --merge
@@ -79,20 +80,24 @@ about 11–13 GB. The longest training sample is under 1,024 tokens.
    (`--model Qwen/Qwen2.5-Coder-14B-Instruct --batch 1 --grad-accum 16`) fits
    only tightly and is worth trying after 7B works.
 
-3. **Quantize and serve with Ollama.** A merged 7B model needs about 15 GB in
-   bf16, too much to serve comfortably on 16 GB, so convert it to GGUF with
-   [llama.cpp](https://github.com/ggml-org/llama.cpp) and quantize to Q5_K_M
-   (about 5.4 GB):
+3. **Quantize and serve with Ollama.** A merged 7B model needs about 15 GB
+   in bf16, too much to serve comfortably on 16 GB, so convert it to GGUF and
+   quantize it to Q5_K_M (5.4 GB). Ollama 0.35 cannot import Qwen2
+   safetensors directly, so use [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
+   converter (in its own virtual environment: its requirements pin older
+   `transformers`) and a prebuilt `llama-quantize` from its releases:
 
    ```text
-   python llama.cpp/convert_hf_to_gguf.py runs/qwen7b-tokit/merged --outfile runs/qwen7b-tokit/tokit-7b-f16.gguf
-   llama.cpp/build/bin/llama-quantize runs/qwen7b-tokit/tokit-7b-f16.gguf runs/qwen7b-tokit/tokit-7b-q5_k_m.gguf Q5_K_M
+   git clone --depth 1 https://github.com/ggml-org/llama.cpp
+   python llama.cpp/convert_hf_to_gguf.py runs/qwen7b-tokit/merged --outfile runs/qwen7b-tokit/tokit-7b-f16.gguf --outtype f16
+   llama-quantize runs/qwen7b-tokit/tokit-7b-f16.gguf runs/qwen7b-tokit/tokit-7b-q5_k_m.gguf Q5_K_M
    python research/finetune/make_modelfile.py --gguf runs/qwen7b-tokit/tokit-7b-q5_k_m.gguf --out runs/qwen7b-tokit/Modelfile
    ollama create tokit-7b -f runs/qwen7b-tokit/Modelfile
    ```
 
-   The Modelfile embeds `spec/LLM_GUIDE.md` as the system prompt and sets a
-   low temperature.
+   Converting takes about a minute and quantizing another. The Modelfile
+   embeds `spec/LLM_GUIDE.md` as the system prompt and sets a low
+   temperature.
 
 4. **Evaluate** through Ollama's OpenAI-compatible endpoint, with and without
    compiler feedback, and compare with the untuned base model:
@@ -100,6 +105,38 @@ about 11–13 GB. The longest training sample is under 1,024 tokens.
    ```text
    python research/finetune/evaluate.py --data research/finetune/data/test_ood.jsonl --tok target/release/tok      --provider openai --base-url http://localhost:11434/v1 --model tokit-7b --repair-rounds 2 --out runs/tokit7b.jsonl
    ```
+
+## First local result
+
+Qwen2.5-Coder-7B-Instruct, trained with the defaults above on an RTX 5060 Ti
+16 GB (27.7 minutes, 3 epochs), served through Ollama at Q5_K_M, and
+evaluated on `test_ood` (275 rows, five task families never seen in
+training) with up to two compiler-feedback rounds. The base model received
+`spec/LLM_GUIDE.md` as its system prompt; the fine-tuned model only the
+dataset's one-line prompt.
+
+| Model | pass@1 | compile@1 | after repair | input tokens |
+| --- | ---: | ---: | ---: | ---: |
+| Qwen2.5-Coder-7B + guide | 23.6% | 29.5% | 25.1% | 1,992,441 |
+| **tokit-7b (fine-tuned)** | **49.1%** | **50.2%** | **50.2%** | **102,873** |
+
+Per family, generation / repair rows passed:
+
+| Family | base + guide | tokit-7b |
+| --- | --- | --- |
+| binary_search | 40/40 · 14/15 | 40/40 · 15/15 |
+| dispatch | 1/40 · 0/15 | 30/40 · 15/15 |
+| rle | 0/40 · 10/15 | 0/40 · 15/15 |
+| tree | 0/40 · 0/15 | 0/40 · 15/15 |
+| brackets | 0/40 · 4/15 | 0/40 · 8/15 |
+
+Fine-tuning doubles the pass rate at a twentieth of the prompt tokens and
+makes repair from diagnostics nearly reliable (68 of 75 repair rows). It
+does not yet generalize to unseen problem shapes: on `rle`, `tree`, and
+`brackets` both models fall back to Rust idioms (`let mut`, `char`, `&mut`,
+`pop`). Broadening the training data with verified, model-generated
+programs (recommendation 2 below) is the next lever; validation loss near
+zero shows the template families alone are learned completely.
 
 ## Recommendation
 
