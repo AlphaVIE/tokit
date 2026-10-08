@@ -58,9 +58,10 @@ at all (`E117`), so parallel tasks cannot leak data or race on resources.
 - Denial of service is out of scope: a program may loop forever or allocate
   until memory runs out. HTTP servers cap heads at 64 KiB, bodies at 16 MiB,
   and idle reads at 30 seconds; WebSocket messages are capped at 16 MiB.
-- There is no TLS. `http_request`, `serve`, and the Redis, PostgreSQL, and
-  WebSocket packages speak plaintext; put a TLS-terminating proxy in front of
-  services and use them on trusted networks only.
+- HTTPS clients use the system `curl` and its TLS stack and certificate
+  store. `serve`, `listen`, and the Redis, PostgreSQL, and WebSocket packages
+  speak plaintext: put a TLS-terminating proxy in front of services and use
+  database connections on trusted networks only.
 - `sha1` and `md5` exist for protocol compatibility only. `random_bytes` is
   OS-seeded and suitable for nonces and identifiers but is not a vetted
   CSPRNG for long-term keys. There is no constant-time comparison builtin.

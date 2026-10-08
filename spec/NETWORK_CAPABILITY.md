@@ -73,10 +73,32 @@ any order. The reference interpreter accepts the same call and answers one
 request at a time, which is one valid schedule. See
 [concurrent_http.tok](../examples/concurrent_http.tok).
 
+`http_request` also accepts `https://host[:port]/path?query` URLs (port 443
+by default). HTTPS requests run through the system `curl` executable, or the
+one named by `TOKIT_CURL`, which brings the platform's TLS implementation and
+certificate store (Schannel on Windows, Secure Transport or OpenSSL on macOS,
+OpenSSL or similar on Linux; `curl` ships with Windows 10 and later and with
+macOS). Tokit checks the `--allow-net host:port` grant before starting it,
+passes arguments without a shell, restricts curl to HTTPS (`--proto =https`),
+applies the same 30-second and 16 MiB limits, and does not follow redirects.
+A missing `curl`, a TLS or certificate failure, or a timeout yields
+`IoError::Other`. WebAssembly modules cannot start processes, so HTTPS is
+unavailable there.
+
+Servers and the Redis, PostgreSQL, and WebSocket packages speak plaintext.
+Expose services through a TLS-terminating reverse proxy, for example Caddy,
+which obtains certificates automatically:
+
+```text
+api.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
 `http_request` sends one request to an `http://host[:port]/path?query` URL
 (port 80 by default) with `host`, `connection: close`, and `content-length`
 set by the runtime, then reads the whole response. It decodes
-`transfer-encoding: chunked` and honors `content-length`. HTTPS, redirects,
+`transfer-encoding: chunked` and honors `content-length`. Redirects,
 proxies, and keep-alive are not supported; other URLs and protocol errors
 yield `IoError::Other`.
 
