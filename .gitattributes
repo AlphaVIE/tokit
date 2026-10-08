@@ -17,3 +17,4 @@ tok.lock text eol=lf
 *.tok linguist-language=Tokit
 *.json text eol=lf
 *.jsonl text eol=lf
+*.sh text eol=lf

@@ -1,0 +1,125 @@
+name: Release
+
+# A pushed tag such as v0.1.0 builds tok for every platform and publishes a
+# GitHub release with the archives, checksums, and the VS Code extension.
+# Pull requests that change this workflow build everything without publishing.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/install.sh
+      - scripts/install.ps1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+            cross: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --target ${{ matrix.target }}
+      - name: Build tok
+        run: cargo +1.98.1 build --release --locked -p tokit-compiler --target ${{ matrix.target }}
+      - name: Smoke test
+        if: ${{ !matrix.cross }}
+        shell: bash
+        run: |
+          bin=target/${{ matrix.target }}/release/tok
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          "$bin" run examples/answer.tok
+          "$bin" check examples/calculator.tok
+      - name: Package
+        shell: bash
+        run: |
+          name="tok-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          bin=target/${{ matrix.target }}/release/tok
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          cp "$bin" README.md LICENSE-MIT LICENSE-APACHE "dist/$name/"
+          cp spec/LLM_GUIDE.md "dist/$name/LLM_GUIDE.md"
+          cd dist
+          if [ "${{ matrix.archive }}" = zip ]; then
+            7z a -tzip "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tok-${{ matrix.target }}
+          path: dist/tok-${{ matrix.target }}.${{ matrix.archive }}
+
+  vscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Package the extension
+        working-directory: editors/vscode
+        run: |
+          cp ../../LICENSE-MIT ../../LICENSE-APACHE .
+          echo 'MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.' > LICENSE
+          npm install --no-audit --no-fund
+          npx vsce package --out ../../tokit-vscode.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tokit-vscode
+          path: tokit-vscode.vsix
+
+  installers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check installer scripts
+        run: |
+          sh -n scripts/install.sh
+          grep -q 'tok-' scripts/install.ps1
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, vscode, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* scripts/install.sh scripts/install.ps1 \
+            --title "Tokit ${GITHUB_REF_NAME}" --generate-notes
