@@ -19,7 +19,7 @@ and completion.
    ```
 
    ```bash
-   code --install-extension editors/vscode/tokit-0.0.1.vsix
+   code --install-extension editors/vscode/tokit-0.1.0.vsix
    ```
 
 3. If `tok` is not on your `PATH`, set **Tokit: Server Path**

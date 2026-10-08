@@ -595,7 +595,10 @@ fn lockfile_is_required_and_cli_regenerates_it() {
     let (entry, module, manifest) = fixture(&directory);
     let lock = entry.parent().unwrap().join("tok.lock");
     let original = std::fs::read_to_string(&lock).unwrap();
-    assert!(original.contains("compiler = \"tokit-compiler/0.0.1\""));
+    assert!(original.contains(&format!(
+        "compiler = \"tokit-compiler/{}\"",
+        env!("CARGO_PKG_VERSION")
+    )));
     assert!(original.contains("target = \"portable-source\""));
     assert!(original.contains("sources = [\"pkg/math.tok\"]"));
     assert!(!original.contains(&directory.to_string_lossy().to_string()));
