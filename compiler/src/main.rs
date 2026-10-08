@@ -49,6 +49,7 @@ fn package_entry_root(path: &str) -> Result<std::path::PathBuf, String> {
 fn run_command(args: &[String]) {
     let mut index = 0;
     let mut json = false;
+    let mut native = false;
     let mut read_root = None;
     let mut write_root = None;
     let mut net = None;
@@ -56,6 +57,10 @@ fn run_command(args: &[String]) {
         match flag.as_str() {
             "--json" if !json => {
                 json = true;
+                index += 1;
+            }
+            "--native" if !native => {
+                native = true;
                 index += 1;
             }
             "--allow-read" if read_root.is_none() && args.get(index + 1).is_some() => {
@@ -75,7 +80,7 @@ fn run_command(args: &[String]) {
     }
     let Some(path) = args.get(index) else {
         eprintln!(
-            "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
+            "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
         );
         process::exit(2);
     };
@@ -85,7 +90,7 @@ fn run_command(args: &[String]) {
         [separator, rest @ ..] if separator == "--" => rest,
         _ => {
             eprintln!(
-                "usage: tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
+                "usage: tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- arguments...]"
             );
             process::exit(2);
         }
@@ -104,6 +109,37 @@ fn run_command(args: &[String]) {
             process::exit(1);
         }
     };
+    if native {
+        if json {
+            eprintln!("tok run: --native and --json cannot be combined");
+            process::exit(2);
+        }
+        let binary = match tokit_compiler::native::cached_build(&loaded.program, &loaded.sources) {
+            Ok(binary) => binary,
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        };
+        let mut command = process::Command::new(binary);
+        for (flag, value) in [
+            ("--allow-read", read_root),
+            ("--allow-write", write_root),
+            ("--allow-net", net),
+        ] {
+            if let Some(value) = value {
+                command.arg(flag).arg(value);
+            }
+        }
+        let status = command.arg("--").args(program_args).status();
+        process::exit(match status {
+            Ok(status) => status.code().unwrap_or(1),
+            Err(error) => {
+                eprintln!("cannot start the compiled program: {error}");
+                1
+            }
+        });
+    }
     let result = tokit_compiler::interpreter::run_with_grants(
         &loaded.program,
         tokit_compiler::interpreter::Grants {
@@ -277,7 +313,7 @@ fn patch_command(entry: &Path, request_path: &Path, write: bool) -> Result<Strin
 const USAGE: &str = "usage: tok <command> ...
 
 Run and build
-  tok run [--json] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- args...]
+  tok run [--json|--native] [--allow-read <path>] [--allow-write <path>] [--allow-net <host:port|*>] <file.tok> [-- args...]
   tok build <file.tok> -o <output> [--target <triple>]   (e.g. wasm32-wasip1)
   tok test [--allow-read <path>] [--allow-write <path>] <file.tok>
   tok bench [--iterations N] <file.tok>

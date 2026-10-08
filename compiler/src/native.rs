@@ -1499,6 +1499,51 @@ pub fn build_for_target(
     compile_generated(&generated, output, target)
 }
 
+/// A host executable for the program, built once per distinct generated
+/// source and compiler and kept in `$TOK_HOME/cache/native/`.
+pub fn cached_build(program: &Program, sources: &SourceMap) -> Result<PathBuf, String> {
+    use sha2::{Digest, Sha256};
+    let generated = emit_with_sources(program, sources)
+        .map_err(|diagnostic| diagnostic.display_with_sources(sources))?;
+    let rustc = std::env::var_os("TOKIT_RUSTC").unwrap_or_else(|| "rustc".into());
+    let version = Command::new(&rustc)
+        .arg("-vV")
+        .output()
+        .map_err(|e| format!("E302: could not start rustc: {e}"))?
+        .stdout;
+    let mut hasher = Sha256::new();
+    hasher.update(&version);
+    hasher.update(generated.as_bytes());
+    let key: String = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let directory = crate::registry::tok_home()?.join("cache").join("native");
+    let binary = directory.join(format!("{key}{}", std::env::consts::EXE_SUFFIX));
+    if binary.is_file() {
+        return Ok(binary);
+    }
+    std::fs::create_dir_all(&directory)
+        .map_err(|e| format!("E301: cannot create {}: {e}", directory.display()))?;
+    // Build next to the final name, then rename, so a concurrent or
+    // interrupted build never leaves a partial executable under the key.
+    let partial = directory.join(format!(
+        "{key}.{}.partial{}",
+        std::process::id(),
+        std::env::consts::EXE_SUFFIX
+    ));
+    compile_generated(&generated, &partial, None)?;
+    match std::fs::rename(&partial, &binary) {
+        Ok(()) => Ok(binary),
+        Err(_) if binary.is_file() => {
+            let _ = std::fs::remove_file(&partial);
+            Ok(binary)
+        }
+        Err(e) => Err(format!("E301: cannot store {}: {e}", binary.display())),
+    }
+}
+
 /// Stack for WebAssembly programs, which run without a separate program thread.
 const WASM_STACK_BYTES: usize = 64 * 1024 * 1024;
 

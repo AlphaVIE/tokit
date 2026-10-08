@@ -11,3 +11,16 @@
 
 Warnings never fail a build; they use the same `code@line:column message`
 format and JSON shape as diagnostics.
+
+## tok run --native
+
+`tok run --native [grants] file.tok [-- args]` compiles the program with the
+native backend and runs the executable, passing the same `--allow-read`,
+`--allow-write`, and `--allow-net` grants, arguments, standard input, and exit
+status. Executables are cached in `$TOK_HOME/cache/native/` (default
+`~/.tok`) under a SHA-256 of the generated Rust source and the `rustc -vV`
+output, so a second run of an unchanged program skips compilation entirely:
+a loop that takes 946 ms in the interpreter takes about 100 ms this way. It
+needs a Rust toolchain and cannot be combined with `--json`. The interpreter
+remains the reference for semantics; both are tested to agree. Delete the
+cache directory to reclaim space.

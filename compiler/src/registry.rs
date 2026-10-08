@@ -73,15 +73,19 @@ pub fn find(name: &str, version: Option<&str>) -> Option<RegistryPackage> {
 }
 
 fn store_root() -> Result<PathBuf, String> {
-    let home = std::env::var_os("TOK_HOME")
+    Ok(tok_home()?.join("store"))
+}
+
+/// `$TOK_HOME`, else `~/.tok`: the package store and build cache live here.
+pub fn tok_home() -> Result<PathBuf, String> {
+    std::env::var_os("TOK_HOME")
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
                 .map(|home| PathBuf::from(home).join(".tok"))
         })
-        .ok_or("cannot locate the package store; set TOK_HOME")?;
-    Ok(home.join("store"))
+        .ok_or_else(|| "cannot locate the package store; set TOK_HOME".to_owned())
 }
 
 /// The verified store directory holding `package`, writing it if needed.
