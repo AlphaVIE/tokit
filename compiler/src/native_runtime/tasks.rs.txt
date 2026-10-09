@@ -11,10 +11,45 @@ impl<T> __TokRender for __TokTask<T> {
     fn tok_render(&self) -> String { "<task>".to_owned() }
 }
 #[cfg(not(target_family = "wasm"))]
+const __TOK_MAX_ACTIVE_TASKS: usize = 64;
+#[cfg(not(target_family = "wasm"))]
+static __TOK_ACTIVE_TASKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(not(target_family = "wasm"))]
+struct __TokTaskSlot;
+#[cfg(not(target_family = "wasm"))]
+impl Drop for __TokTaskSlot {
+    fn drop(&mut self) {
+        __TOK_ACTIVE_TASKS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+#[cfg(not(target_family = "wasm"))]
+fn __tok_task_from_spawn<T>(started: std::io::Result<std::thread::JoinHandle<T>>) -> __TokTask<T> {
+    let (handle, result) = match started {
+        Ok(handle) => (Some(handle), None),
+        Err(_) => (None, Some(Err(__TokTaskError::Failed))),
+    };
+    __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState { handle, result })))
+}
+#[cfg(not(target_family = "wasm"))]
 fn __tok_spawn<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> __TokTask<T> {
-    __TokTask(std::sync::Arc::new(std::sync::Mutex::new(__TokTaskState {
-        handle: Some(std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(job).expect("cannot start task thread")), result: None,
-    })))
+    __tok_spawn_limited(job, __TOK_MAX_ACTIVE_TASKS)
+}
+#[cfg(not(target_family = "wasm"))]
+fn __tok_spawn_limited<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static, limit: usize) -> __TokTask<T> {
+    use std::sync::atomic::Ordering;
+    if __TOK_ACTIVE_TASKS.fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+        (active < limit).then(|| active + 1)
+    }).is_err() {
+        return __tok_task_from_spawn(Err(std::io::Error::other("task capacity reached")));
+    }
+    let started = std::thread::Builder::new().stack_size(__TOK_STACK_BYTES).spawn(move || {
+        let _slot = __TokTaskSlot;
+        job()
+    });
+    if started.is_err() {
+        __TOK_ACTIVE_TASKS.fetch_sub(1, Ordering::AcqRel);
+    }
+    __tok_task_from_spawn(started)
 }
 // Spawned functions are pure, so running them at the spawn site is a valid schedule.
 #[cfg(target_family = "wasm")]

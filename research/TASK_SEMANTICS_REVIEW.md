@@ -15,11 +15,12 @@ frozen. See [issue #42](https://github.com/AlphaVIE/tokit/issues/42).
   first `join`, and later joins, including joins through copies, return that
   same result. The interpreter also permits repeated joins. This is covered by
   `compiler/tests/tasks.rs`.
-- `TaskError` has one variant, `Failed`. An uncaught host panic in a native
-  task maps to it. Existing Tokit runtime diagnostics, such as overflow
-  (`E201`), remain fatal. Native thread creation currently uses `expect`, so
-  failure to start a thread does not return `TaskError::Failed`.
-- No cancellation operation or language-level limit on live tasks exists.
+- `TaskError` has one variant, `Failed`. An uncaught host panic, native thread
+  creation failure, or the native limit of 64 running tasks maps to it.
+  Existing Tokit runtime diagnostics, such as overflow (`E201`), remain fatal.
+- No cancellation operation exists. Native tasks are limited to 64 concurrent
+  threads; the interpreter evaluates tasks eagerly and does not model resource
+  exhaustion.
   Dropping a native task's last handle drops its join handle; a running thread
   may continue until it completes or the process exits. The interpreter has
   already evaluated that task at the spawn site.
@@ -40,28 +41,30 @@ only bounded successful results; it cannot establish failure behavior.
 3. **Keep fatal Tokit diagnostics fatal in all tasks.** Do not silently turn
    `E201` and similar diagnostics into `TaskError::Failed`, which would erase
    their code and source location. Reserve `Failed` for task infrastructure
-   failures and uncaught host panics. Make native thread-start failure produce
-   a completed failed task before promising this rule publicly.
+   failures and uncaught host panics. Native thread-start failure now produces
+   a completed failed task.
 4. **Do not add cancellation yet.** Define dropping an unjoined handle as
    discarding the result, without a guarantee that native work finishes before
    process exit. Because tasks are pure, successful completion has no
    language-visible side effect. Resource use and completion time remain
    observable to the host and should not be described as deterministic.
-5. **Choose a resource bound before advertising unbounded parallelism.** The
-   current one-thread-per-task approach can exhaust host threads or virtual
-   address space. A bound or executor design should state what `spawn` and
-   `join` return when capacity is exhausted. Keeping `spawn -> Task<T>` would
-   allow a completed failed task, reported on `join`, without changing syntax.
+5. **Review the provisional resource bound.** The native runtime now permits
+   64 concurrently running tasks and returns a completed failed task at
+   capacity. Confirm that this is an appropriate public contract or replace
+   the one-thread-per-task approach with an executor. The interpreter cannot
+   reproduce resource exhaustion because it evaluates tasks eagerly.
 
 ## Evidence needed before closing #42
 
 - Tests for repeated joins through copied handles on both backends, including
   a failed task where failure can be injected without relying on a Tokit
   runtime diagnostic.
-- A controlled native thread-start failure test and matching interpreter
-  contract for the resulting `TaskError::Failed`.
-- Tests for fatal diagnostics inside tasks, dropped unjoined tasks, and a
-  chosen resource limit. Keep successful results and failure modes separate.
+- The controlled native thread-start failure and capacity tests now live in
+  `compiler/tests/native_task_runtime.rs`. Decide how much host resource
+  failure behavior the interpreter should model.
+- Fatal arithmetic diagnostics inside tasks are covered by `compiler/tests/tasks.rs`.
+  Add tests for dropped unjoined tasks, keeping successful results and failure
+  modes separate.
 - A decision on capture closures and on whether cancellation belongs in the
   first stable task API. Document any syntax or API migration before changing
   the existing prototype.

@@ -109,26 +109,37 @@ fn json_cli_corpus_agrees_across_interpreter_and_native() {
     if native_available {
         native::build_with_sources(&loaded.program, &loaded.sources, &output).unwrap();
     }
-    let fixtures = [
-        ("null", Some("null")),
-        ("{}", Some("{}")),
-        ("-0.25E+08", Some("-0.25E+08")),
+    let mut fixtures = vec![
+        ("null".to_owned(), Some("null".to_owned())),
+        ("{}".to_owned(), Some("{}".to_owned())),
+        ("-0.25E+08".to_owned(), Some("-0.25E+08".to_owned())),
         (
-            "  [1, true, {\"é\": \"\\uD83D\\uDE00\"}] \n",
-            Some("[1,true,{\"é\":\"😀\"}]"),
+            "  [1, true, {\"é\": \"\\uD83D\\uDE00\"}] \n".to_owned(),
+            Some("[1,true,{\"é\":\"😀\"}]".to_owned()),
         ),
-        ("\"\\u0000\"", Some("\"\\u0000\"")),
-        ("\"a\\/b\"", Some("\"a/b\"")),
-        ("[1,]", None),
-        ("{\"x\":}", None),
-        ("+1", None),
-        ("\"\\uDEAD\"", None),
+        ("\"\\u0000\"".to_owned(), Some("\"\\u0000\"".to_owned())),
+        ("\"a\\/b\"".to_owned(), Some("\"a/b\"".to_owned())),
+        ("[1,]".to_owned(), None),
+        ("{\"x\":}".to_owned(), None),
+        ("+1".to_owned(), None),
+        ("\"\\uDEAD\"".to_owned(), None),
     ];
+    // Pretty input and canonical output are supplied by an independent JSON
+    // implementation. Varying collection widths exercises copying and growth.
+    for width in [1, 4, 16, 64] {
+        let items = (0..width)
+            .map(|id| serde_json::json!({ "id": id, "text": format!("item-{id}-é") }))
+            .collect::<Vec<_>>();
+        let value = serde_json::json!({ "items": items, "ok": true });
+        let pretty = serde_json::to_string_pretty(&value).unwrap();
+        let canonical = value.to_string();
+        fixtures.push((pretty, Some(canonical)));
+    }
     for (input, canonical) in fixtures {
         let expected =
             canonical.map_or_else(|| "None".to_owned(), |text| format!("Some({text:?})"));
         let interpreted = Command::new(env!("CARGO_BIN_EXE_tok"))
-            .args(["run", entry.to_str().unwrap(), "--", input])
+            .args(["run", entry.to_str().unwrap(), "--", &input])
             .output()
             .unwrap();
         assert!(
@@ -142,7 +153,7 @@ fn json_cli_corpus_agrees_across_interpreter_and_native() {
             "interpreter: {input}"
         );
         if native_available {
-            let compiled = Command::new(&output).args(["--", input]).output().unwrap();
+            let compiled = Command::new(&output).args(["--", &input]).output().unwrap();
             assert!(
                 compiled.status.success(),
                 "{input}: {}",

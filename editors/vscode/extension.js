@@ -5,6 +5,7 @@ const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 
 let client;
+let restartQueue = Promise.resolve();
 
 function createClient() {
   const command = vscode.workspace.getConfiguration("tokit").get("serverPath", "tok");
@@ -17,7 +18,7 @@ function createClient() {
   );
 }
 
-async function restart() {
+async function restartNow() {
   if (client) {
     await client.stop();
   }
@@ -29,6 +30,11 @@ async function restart() {
       `Tokit: could not start "${client.serverOptions?.run?.command ?? "tok"} lsp" (${error.message}). Set tokit.serverPath.`,
     );
   }
+}
+
+function restart() {
+  restartQueue = restartQueue.catch(() => {}).then(restartNow);
+  return restartQueue;
 }
 
 function activate(context) {
@@ -44,7 +50,7 @@ function activate(context) {
 }
 
 function deactivate() {
-  return client ? client.stop() : undefined;
+  return restartQueue.catch(() => {}).then(() => client?.stop());
 }
 
 module.exports = { activate, deactivate };

@@ -34,7 +34,10 @@ workflow does not run until it is pushed to GitHub.
 The site uses relative asset links so it works at the default project URL
 (`AlphaVIE.github.io/tokit/`) and under the custom domain `tokit-lang.org`.
 The build copies `src/CNAME` into the published artifact. The apex domain needs
-GitHub Pages A records (and optionally AAAA records); `www.tokit-lang.org` can
-use a CNAME pointing to `AlphaVIE.github.io`. Set the custom domain in GitHub
-Pages settings and enable **Enforce HTTPS** once GitHub has issued the
-certificate.
+GitHub Pages A records (and optionally AAAA records). At the DNS provider,
+remove every A or AAAA record whose host is `www`, then create exactly one
+`www` CNAME with target `alphavie.github.io` (no scheme or path). Keep the
+apex A records and the Pages custom domain set to `tokit-lang.org`. Once DNS
+propagates, use **Check again** in Pages settings and enable **Enforce HTTPS**
+after GitHub issues the certificate. The CNAME file in this repository names
+only the apex domain; it does not replace the DNS provider's `www` record.

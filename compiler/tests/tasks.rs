@@ -79,3 +79,25 @@ fn only_typed_pure_named_functions_can_be_spawned() {
         assert_eq!(check(source).unwrap_err().code, code, "{source}");
     }
 }
+
+#[test]
+fn arithmetic_failure_inside_task_remains_a_fatal_diagnostic() {
+    let source =
+        "overflow()->i32{2147483647+1} main()->Result<i32,TaskError>{join(spawn overflow())}";
+    assert_eq!(run(source).unwrap_err().code, "E201");
+    if Command::new("rustc").arg("--version").output().is_err() {
+        assert_ne!(std::env::var("TOKIT_REQUIRE_NATIVE").as_deref(), Ok("1"));
+        return;
+    }
+    let output = std::env::temp_dir().join(format!(
+        "tokit-task-overflow-{}-{}{}",
+        std::process::id(),
+        common::nonce(),
+        std::env::consts::EXE_SUFFIX
+    ));
+    native::build(&check(source).unwrap(), source, &output).unwrap();
+    let result = Command::new(&output).output().unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("E201"));
+    std::fs::remove_file(output).unwrap();
+}

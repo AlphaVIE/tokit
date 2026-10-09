@@ -59,7 +59,11 @@ the last copy of a `Conn` does not close it yet.
   Arguments are copied in, so tasks share nothing.
 - Native tasks run on OS threads with a 512 MiB reserved stack. The reference
   interpreter evaluates a task eagerly at the spawn site; because tasks are
-  pure, both schedules produce the same result.
+  pure, both schedules produce the same successful result. Native execution
+  permits at most 64 concurrently running task threads. If that limit is
+  reached or a thread cannot start, `join` returns `Err(TaskError::Failed)`;
+  the interpreter does not simulate host resource exhaustion. A completed
+  task releases its slot even if its result has not been joined yet.
 - `serve(addr,limit,workers,handler)` answers HTTP requests on a pool of
   native threads. Handlers may perform effects, but they receive copies of
   their captures, so the only nondeterminism is the interleaving of their
@@ -81,7 +85,8 @@ the last copy of a `Conn` does not close it yet.
 - `exit(code)` flushes standard output and ends the process.
 
 Both backends report the same code at the same source position for the same
-program and input.
+language-level failure and input. Native host resource failures, including
+task thread exhaustion, have no interpreter equivalent.
 
 ## Unsafe model
 

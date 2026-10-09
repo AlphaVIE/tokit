@@ -72,5 +72,5 @@ at all (`E117`), so parallel tasks cannot leak data or race on resources.
 
 ## Reporting
 
-Security issues should be reported privately to the repository owner rather
-than in public issues.
+Security issues should follow the private reporting instructions in
+[SECURITY.md](../SECURITY.md), rather than being described in public issues.
