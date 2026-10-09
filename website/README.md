@@ -32,9 +32,9 @@ Actions** as the Pages build source in the repository's Pages settings. This
 workflow does not run until it is pushed to GitHub.
 
 The site uses relative asset links so it works at the default project URL
-(`AlphaVIE.github.io/tokit/`) and under a custom domain. Once the desired
-domain is known, set it as the custom domain in GitHub Pages settings and
-configure DNS with your registrar. For a subdomain, use a CNAME record pointing
-to `AlphaVIE.github.io`; for an apex domain, use the GitHub Pages A/AAAA
-records shown in GitHub's current documentation. Enable **Enforce HTTPS** once
-GitHub has issued the certificate. No domain is hardcoded in this draft.
+(`AlphaVIE.github.io/tokit/`) and under the custom domain `tokit-lang.org`.
+The build copies `src/CNAME` into the published artifact. The apex domain needs
+GitHub Pages A records (and optionally AAAA records); `www.tokit-lang.org` can
+use a CNAME pointing to `AlphaVIE.github.io`. Set the custom domain in GitHub
+Pages settings and enable **Enforce HTTPS** once GitHub has issued the
+certificate.
