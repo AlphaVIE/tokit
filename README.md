@@ -2,7 +2,7 @@
 
 **A compact, statically typed language built for writing code with language
 models.** Few tokens, one canonical form, diagnostics a model can act on, and
-native executables as fast as Rust.
+native executables compiled through Rust.
 
 [Language guide](spec/LLM_GUIDE.md) ·
 [Specifications](spec/README.md) · [Examples](examples/) ·
@@ -40,9 +40,10 @@ $ tok build cart.tok -o cart && ./cart
 - **Explicit capabilities.** Files, network, and processes need
   `--allow-read`, `--allow-write`, `--allow-net`, or `--allow-run`;
   `tok explain` lists everything a program can do before you run it.
-- **Fast.** `tok build` emits Rust and compiles it with LLVM; on the measured
-  loops Tokit and Rust run within 1% of each other. WebAssembly via
-  `--target wasm32-wasip1`.
+- **Native output.** `tok build` emits Rust and compiles it with LLVM. The
+  documented [microbenchmarks](benchmarks/native/README.md) measured runtimes
+  close to equivalent Rust on specific loops and hosts; they do not establish
+  general performance. WebAssembly is available via `--target wasm32-wasip1`.
 
 ## Install
 
@@ -58,7 +59,7 @@ compilation: `tok build` and `tok run --native` also need
 [Rust](https://rustup.rs). The VS Code extension (`tokit-vscode.vsix`) is
 attached to each release; other editors can run `tok lsp`.
 
-To build from source: `cargo build --release -p tokit-compiler` (Rust 1.98).
+To build from source: `cargo build --locked --release -p tokit-compiler` (Rust 1.98).
 
 ## Quick start
 

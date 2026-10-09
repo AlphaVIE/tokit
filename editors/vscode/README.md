@@ -9,13 +9,16 @@ and completion.
 1. Build the compiler and put `tok` on your `PATH`, or note its full path:
 
    ```bash
-   cargo build --release -p tokit-compiler
+   cargo build --locked --release -p tokit-compiler
    ```
 
 2. Package and install the extension:
 
    ```bash
-   cd editors/vscode && npm install && npx vsce package
+   cd editors/vscode
+   npm ci
+   npx --no-install vsce package
+   cd ../..
    ```
 
    ```bash

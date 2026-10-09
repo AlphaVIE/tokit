@@ -2,7 +2,7 @@ name: Release
 
 # A pushed tag such as v0.1.0 builds tok for every platform and publishes a
 # GitHub release with the archives, checksums, and the VS Code extension.
-# Pull requests that change this workflow build everything without publishing.
+# Pull requests that affect release inputs build everything without publishing.
 
 permissions:
   contents: read
@@ -13,6 +13,18 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - compiler/**
+      - packages/**
+      - editors/vscode/**
+      - examples/answer.tok
+      - examples/calculator.tok
+      - README.md
+      - LICENSE-MIT
+      - LICENSE-APACHE
+      - spec/LLM_GUIDE.md
       - scripts/install.sh
       - scripts/install.ps1
 
@@ -86,8 +98,8 @@ jobs:
         run: |
           cp ../../LICENSE-MIT ../../LICENSE-APACHE .
           echo 'MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.' > LICENSE
-          npm install --no-audit --no-fund
-          npx vsce package --out ../../tokit-vscode.vsix
+          npm ci --no-audit --no-fund
+          npx --no-install vsce package --out ../../tokit-vscode.vsix
       - uses: actions/upload-artifact@v4
         with:
           name: tokit-vscode

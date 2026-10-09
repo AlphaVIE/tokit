@@ -18,14 +18,14 @@ jobs:
       - name: Format
         run: cargo +1.98.1 fmt --all -- --check
       - name: Lint
-        run: cargo +1.98.1 clippy --workspace --all-targets -- -D warnings
+        run: cargo +1.98.1 clippy --locked --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo +1.98.1 test --workspace
+        run: cargo +1.98.1 test --locked --workspace
         env:
           TOKIT_REQUIRE_NATIVE: '1'
           TOKIT_NETWORK_TESTS: '1'
       - name: Run Tokit example suite
-        run: cargo +1.98.1 run --quiet -p tokit-compiler --bin tok -- test examples/tests.tok
+        run: cargo +1.98.1 run --locked --quiet -p tokit-compiler --bin tok -- test examples/tests.tok
       - name: Website is built from compiling snippets
         run: |
           python3 website/build.py --tok target/debug/tok
@@ -46,7 +46,7 @@ jobs:
           curl -sSf https://wasmtime.dev/install.sh | bash
           echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
       - name: Build and run WebAssembly modules
-        run: cargo +1.98.1 test -p tokit-compiler --test wasm
+        run: cargo +1.98.1 test --locked -p tokit-compiler --test wasm
         env:
           TOKIT_WASM_RUNNER: wasmtime
           TOKIT_REQUIRE_WASM: '1'
