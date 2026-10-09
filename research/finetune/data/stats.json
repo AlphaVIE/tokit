@@ -1,6 +1,6 @@
 {
   "seed": 20261006,
-  "tok_sha256": "0c21d4fc9b97fd0fe578cb4b2987e5aa82698b26e171d844b93d523c0c75a8bd",
+  "tok_sha256": "02b2c39a7eaab745d2afd34ca20ef8025c5e2bdab0293fe378576bee5ac7f55d",
   "families": [
     "binary_search",
     "bits",
@@ -11,9 +11,11 @@
     "closures",
     "count_prefix",
     "crud_server",
+    "dedupe",
     "digest",
     "dispatch",
     "enum_machine",
+    "expr_tree",
     "extreme",
     "factorial",
     "fibonacci",
@@ -32,6 +34,7 @@
     "records_total",
     "reverse_words",
     "rle",
+    "rpn",
     "sort_records",
     "stdin_lines",
     "string_transform",
@@ -39,6 +42,7 @@
     "sum_filtered",
     "temperature",
     "tree",
+    "undo",
     "word_count",
     "worker_server"
   ],
@@ -51,24 +55,24 @@
   ],
   "splits": {
     "train": {
-      "rows": 1398,
+      "rows": 1596,
       "kinds": {
-        "generate": 1068,
-        "repair": 330
+        "generate": 1202,
+        "repair": 394
       }
     },
     "val": {
-      "rows": 78,
+      "rows": 89,
       "kinds": {
-        "generate": 60,
-        "repair": 18
+        "repair": 22,
+        "generate": 67
       }
     },
     "test_iid": {
-      "rows": 78,
+      "rows": 89,
       "kinds": {
-        "repair": 29,
-        "generate": 49
+        "generate": 68,
+        "repair": 21
       }
     },
     "test_ood": {

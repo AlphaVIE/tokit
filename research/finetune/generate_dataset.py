@@ -432,7 +432,7 @@ def fam_temperature(rng):
 
 def fam_brackets(rng):
     s = "".join(pick(rng, ["()", "[]", "{}", "(", ")", "[", "]"]) for _ in range(rng.randint(2, 6)))
-    code = ("balanced(s:String)->bool{var stack:[String]=[];for c in chars(s){match c{\"(\"=>{stack.push(\")\");},\"[\"=>{stack.push(\"]\");},\"{\"=>{stack.push(\"}\");},_=>{if len(stack)==0||stack[len(stack)-1]!=c{return false;}stack=slice(stack,0,len(stack)-1);}}}len(stack)==0}\n"
+    code = ("balanced(s:String)->bool{var stack:[String]=[];for c in chars(s){match c{\"(\"=>{stack.push(\")\");},\"[\"=>{stack.push(\"]\");},\"{\"=>{stack.push(\"}\");},_=>{if last(stack)!=Some(c){return false;}stack.pop();}}}len(stack)==0}\n"
             f"main()->bool{{balanced({show_str(s)})}}")
     pairs = {")": "(", "]": "[", "}": "{"}
     st = []
@@ -617,6 +617,89 @@ def fam_worker_server(rng):
     return instr, code, None, {"check_only": True}
 
 
+def fam_rpn(rng):
+    tokens, depth, values = [], 0, []
+    for _ in range(rng.randint(3, 6)):
+        if depth >= 2 and rng.random() < 0.5:
+            op = pick(rng, ["+", "-", "*"])
+            tokens.append(op)
+            b, a = values.pop(), values.pop()
+            values.append(a + b if op == "+" else a - b if op == "-" else a * b)
+            depth -= 1
+        else:
+            n = rng.randint(1, 9)
+            tokens.append(str(n))
+            values.append(n)
+            depth += 1
+    while depth >= 2:
+        op = pick(rng, ["+", "*"])
+        tokens.append(op)
+        b, a = values.pop(), values.pop()
+        values.append(a + b if op == "+" else a * b)
+        depth -= 1
+    code = ("eval(ts:[String])->Option<I>{var st:[I]=[];for t in ts{match t{\"+\"=>{let b=last(st)?;st.pop();let a=last(st)?;st.pop();st.push(a+b);},"
+            "\"-\"=>{let b=last(st)?;st.pop();let a=last(st)?;st.pop();st.push(a-b);},\"*\"=>{let b=last(st)?;st.pop();let a=last(st)?;st.pop();st.push(a*b);},"
+            "_=>{st.push(parse_i32(t).ok()?);}}}last(st)}\n"
+            f"main()->Option<I>{{eval({slit(tokens)})}}")
+    code = code.replace("parse_i32(t).ok()?", "match parse_i32(t){Ok(n)=>n,Err(e)=>{return None;}}")
+    instr = (f"Evaluate the reverse Polish expression {slit(tokens)} in Tokit with a stack: push numbers, and for "
+             "an operator take the top two with `last` and `pop`. Return the result as `Option<I>`.")
+    return instr, code, show(("Some", values[-1])), {}
+
+
+def fam_undo(rng):
+    ops = []
+    for _ in range(rng.randint(4, 8)):
+        ops.append("undo" if ops and rng.random() < 0.35 else pick(rng, WORDS[:8]))
+    code = ("apply(ops:[String])->[String]{var doc:[String]=[];for o in ops{if o==\"undo\"{doc.pop();}else{doc.push(o);}}doc}\n"
+            f"main()->[String]{{apply({slit(ops)})}}")
+    doc = []
+    for o in ops:
+        if o == "undo":
+            if doc:
+                doc.pop()
+        else:
+            doc.append(o)
+    instr = (f"Replay the edits {slit(ops)} in Tokit: each word is appended to a document, and \"undo\" removes "
+             "the most recent word (if any) with `pop`. Return the final document.")
+    return instr, code, show(doc), {}
+
+
+def fam_dedupe(rng):
+    xs = []
+    for _ in range(rng.randint(5, 10)):
+        xs.append(xs[-1] if xs and rng.random() < 0.4 else rng.randint(0, 5))
+    code = ("dedupe(xs:[I])->[I]{var out:[I]=[];for x in xs{if last(out)!=Some(x){out.push(x);}}out}\n"
+            f"main()->[I]{{dedupe({lit(xs)})}}")
+    out = []
+    for x in xs:
+        if not out or out[-1] != x:
+            out.append(x)
+    instr = f"Remove adjacent duplicates from {lit(xs)} in Tokit, comparing each value with `last` of the result."
+    return instr, code, show(out), {}
+
+
+def fam_expr_tree(rng):
+    def build(d):
+        if d == 0 or rng.random() < 0.3:
+            n = rng.randint(1, 6)
+            return f"Expr::Num({n})", n
+        kind = pick(rng, ["Add", "Mul"])
+        parts = [build(d - 1) for _ in range(rng.randint(2, 3))]
+        value = sum(v for _, v in parts) if kind == "Add" else 1
+        if kind == "Mul":
+            for _, v in parts:
+                value *= v
+        return f"Expr::{kind}([{','.join(t for t, _ in parts)}])", value
+    tree, value = build(rng.randint(1, 3))
+    code = ("enum Expr{Num(I),Add([Expr]),Mul([Expr])}\n"
+            "eval(e:Expr)->I{match e{Expr::Num(n)=>n,Expr::Add(xs)=>fold(xs,0,|a,x|a+eval(x)),Expr::Mul(xs)=>fold(xs,1,|a,x|a*eval(x))}}\n"
+            f"main()->I{{eval({tree})}}")
+    instr = (f"Define a Tokit enum `Expr{{Num(I),Add([Expr]),Mul([Expr])}}` and a recursive `eval` with `fold`; "
+             f"evaluate {tree}.")
+    return instr, code, show(value), {}
+
+
 FAMILIES: dict[str, Callable] = {name[4:]: fn for name, fn in globals().items() if name.startswith("fam_")}
 # Held out entirely for the out-of-distribution test split.
 OOD_FAMILIES = ["rle", "brackets", "binary_search", "tree", "dispatch"]
@@ -685,6 +768,14 @@ def mutations(code: str, rng: random.Random) -> list[tuple[str, str]]:
         out.append(("unqualified variant", code[:match.start()] + match.group(1) + code[match.end():]))
     if "=>" in code:
         out.append(("arrow instead of fat arrow", code.replace("=>", "->", 1)))
+    if "var " in code:
+        out.append(("Rust let mut", code.replace("var ", "let mut ", 1)))
+    if ":[String]" in code:
+        out.append(("Rust char type", code.replace(":[String]", ":[char]", 1)))
+    if match := re.search(r"\blast\((\w+)\)", code):
+        out.append(("method last", code[:match.start()] + f"{match.group(1)}.last()" + code[match.end():]))
+    if match := re.search(r"(\w+)\.pop\(\);", code):
+        out.append(("pop as expression", code[:match.start()] + f"let top={match.group(1)}.pop();" + code[match.end():]))
     rng.shuffle(out)
     return out
 
