@@ -22,8 +22,10 @@ Implementations may share storage as long as no program can tell:
   binding needs them; programs that rebuild large values in loops pay for it.
 
 The only shared, mutable runtime objects are handles whose sharing is part of
-their meaning: `Task` (one result, joined once), `Conn` and `Listener` (one
-socket). Copies of a handle refer to the same object.
+their meaning: `Task` (one cached result, observable through repeated joins),
+`Conn` and `Listener` (one socket). Copies of a handle refer to the same
+object. The broader task failure and cancellation contract is still under
+[review](../research/TASK_SEMANTICS_REVIEW.md).
 
 ## GC model: no tracing collector
 

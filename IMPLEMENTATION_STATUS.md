@@ -34,6 +34,7 @@ enums, pattern matching on enums, integers, and strings, modules, local
 packages, files, standard input and output, JSON, tasks, and native
 executables. It does not yet satisfy the brief's broad
 general-purpose, interoperability, IDE, and self-hosting goals. Open design
-work is tracked in [task semantics](https://github.com/AlphaVIE/tokit/issues/42),
+work is tracked in [task semantics](https://github.com/AlphaVIE/tokit/issues/42)
+([decision review](research/TASK_SEMANTICS_REVIEW.md)),
 [JSON](https://github.com/AlphaVIE/tokit/issues/83), and
 [packages](https://github.com/AlphaVIE/tokit/issues/88).
