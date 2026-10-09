@@ -138,6 +138,31 @@ does not yet generalize to unseen problem shapes: on `rle`, `tree`, and
 programs (recommendation 2 below) is the next lever; validation loss near
 zero shows the template families alone are learned completely.
 
+## Second run: stack families
+
+After `last` and `pop` were added to the language, the dataset gained four
+training families (`rpn`, `undo`, `dedupe`, `expr_tree`) and repair
+mutations for the Rust habits seen above (`let mut`, `char`, `.last()`,
+`let top=xs.pop();`), giving 1,596 training rows. The held-out families are
+unchanged except that the `brackets` reference now uses `last`/`pop`. All
+three models were evaluated on the regenerated `test_ood`:
+
+| Model | pass@1 | after repair | input tokens |
+| --- | ---: | ---: | ---: |
+| Qwen2.5-Coder-7B + guide | 21.8% | 22.9% | 2,045,128 |
+| tokit-7b (first dataset) | 46.2% | **47.6%** | 109,032 |
+| tokit-7b-v2 (stack families) | 34.5% | 35.6% | 126,588 |
+
+The second model is worse on unseen families: `binary_search` generation
+fell from 40/40 to 19/40 and `dispatch` from 26/40 to 5/40, while
+`brackets` stayed at 0/40 despite `pop`. Its failures are ordinary
+generation mistakes (a stray `;` after `Some(lo)`, `char` types, `max` over a
+list) that two repair rounds did not fix. More template families do not
+improve generalization; with validation loss near zero in both runs, the
+model memorizes the templates. Keep the first model, and broaden the data
+with verified programs from a stronger model (recommendation 2) before
+training again.
+
 ## Recommendation
 
 1. **Start without fine-tuning.** Give a frontier model (Claude, GPT/Codex)
