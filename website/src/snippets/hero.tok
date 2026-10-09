@@ -1,3 +1,9 @@
 struct Item{name:String,price:F}
-total(items:[Item])->F{fold(items,0.0,|sum,i|sum+i.price)}
-main()->String{let cart=[Item("tea",3.5),Item("cake",4.25)];"total "+String(total(cart))}
+total(items:[Item])->F{
+  fold(items,0.0,|sum,i|sum+i.price)
+}
+main()->String{
+  let cart=[Item("tea",3.5),
+            Item("cake",4.25)];
+  "total "+String(total(cart))
+}

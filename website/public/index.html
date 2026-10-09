@@ -3,193 +3,111 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tokit — a compact language for code written with AI</title>
-<meta name="description" content="Tokit is a statically typed programming language built for writing code with language models: fewer tokens, one canonical form, fixable diagnostics, and native executables as fast as Rust.">
-<meta name="theme-color" content="#fbfbf9" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
-<meta property="og:title" content="Tokit">
-<meta property="og:description" content="A compact, statically typed language for code written with AI.">
+<meta name="theme-color" content="#0b1114">
+<meta name="description" content="Tokit is a compact, statically typed language for writing, checking, and running code with AI. Explore the syntax, tools, and examples.">
 <meta property="og:type" content="website">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/style.css">
+<meta property="og:title" content="Tokit — A small language with clear answers">
+<meta property="og:description" content="Compact syntax. Precise diagnostics. Native executables.">
+<title>Tokit — A small language with clear answers</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-
-<header class="top">
-  <div class="wrap bar">
-    <a class="brand" href="/" aria-label="Tokit home">
-      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 11h14M16 11v12" stroke="var(--bg)" stroke-width="3.2" stroke-linecap="round"/></svg>
-      <span>tokit</span>
-    </a>
-    <nav aria-label="Main">
-      <a href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md">Guide</a>
-      <a href="https://github.com/AlphaVIE/tokit/blob/main/spec/README.md">Docs</a>
-      <a href="https://github.com/AlphaVIE/tokit/tree/main/examples">Examples</a>
-      <a href="https://github.com/AlphaVIE/tokit">GitHub</a>
-    </nav>
-  </div>
-</header>
-
+<header class="site-header"><div class="shell header-inner">
+  <a class="identity" href="./" aria-label="Tokit home"><span class="mark" aria-hidden="true">t<span>.</span></span><span>tokit</span></a>
+  <nav aria-label="Main navigation"><a href="#language">Language</a><a href="#tooling">Tooling</a><a href="#install">Install</a><a class="nav-github" href="https://github.com/AlphaVIE/tokit">GitHub <span aria-hidden="true">→</span></a></nav>
+</div></header>
 <main id="main">
-  <section class="wrap hero">
-    <div class="hero-text">
-      <p class="eyebrow">Version 0.1 · MIT or Apache-2.0</p>
-      <h1>A compact, strict language for code written with AI.</h1>
-      <p class="lead">Tokit programs take fewer tokens to write, the compiler tells a model exactly what to fix, and <code>tok build</code> produces native executables as fast as Rust.</p>
-      <div class="install" role="group" aria-label="Install command">
-        <div class="tabs" role="tablist">
-          <button role="tab" aria-selected="true" aria-controls="cmd-unix" id="tab-unix">macOS / Linux</button>
-          <button role="tab" aria-selected="false" aria-controls="cmd-win" id="tab-win">Windows</button>
-        </div>
-        <div class="cmd" id="cmd-unix" role="tabpanel" aria-labelledby="tab-unix"><code>curl -sSf https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.sh | sh</code><button class="copy" type="button" aria-label="Copy command">Copy</button></div>
-        <div class="cmd" id="cmd-win" role="tabpanel" aria-labelledby="tab-win" hidden><code>irm https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.ps1 | iex</code><button class="copy" type="button" aria-label="Copy command">Copy</button></div>
-      </div>
-      <p class="actions"><a class="button primary" href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md">Read the guide</a><a class="button" href="https://github.com/AlphaVIE/tokit/releases">Download</a></p>
-    </div>
-    <figure class="code hero-code">
-      <figcaption><span>cart.tok</span></figcaption>
-      <pre><code><span class="k">struct</span> <span class="t">Item</span>{name:<span class="t">String</span>,price:<span class="t">F</span>}
-<span class="f">total</span>(items:[<span class="t">Item</span>])-&gt;<span class="t">F</span>{<span class="f">fold</span>(items,<span class="n">0.0</span>,|sum,i|sum+i.price)}
-<span class="f">main</span>()-&gt;<span class="t">String</span>{<span class="k">let</span> cart=[<span class="t">Item</span>(<span class="s">&quot;tea&quot;</span>,<span class="n">3.5</span>),<span class="t">Item</span>(<span class="s">&quot;cake&quot;</span>,<span class="n">4.25</span>)];<span class="s">&quot;total &quot;</span>+<span class="t">String</span>(<span class="f">total</span>(cart))}</code></pre>
-      <pre class="out" aria-label="Output"><code><span class="prompt">$</span> tok run cart.tok
-"total 7.75"</code></pre>
-    </figure>
-  </section>
-
-  <section class="wrap stats" aria-label="Measurements">
-    <dl>
-      <div><dt>vs. Rust</dt><dd>−19%</dd><p>source tokens</p></div>
-      <div><dt>vs. Python</dt><dd>−26%</dd><p>source tokens</p></div>
-      <div><dt>vs. TypeScript</dt><dd>−44%</dd><p>source tokens</p></div>
-      <div><dt>Native speed</dt><dd>±1%</dd><p>of Rust on the same loop</p></div>
-    </dl>
-  </section>
-
-  <section class="wrap split">
-    <div>
-      <h2>Same function, fewer tokens</h2>
-      <p>Each version returns a typed error for division by zero. Counted with the <code>o200k_base</code> tokenizer used by current OpenAI models.</p>
-      <p class="fine">Across all five <a href="https://github.com/AlphaVIE/tokit/tree/main/research/baselines">executable baselines</a>, the core functions take 182 tokens in Tokit, 226 in Rust, 246 in Python, 273 in Go, 292 in Java, 327 in TypeScript, 342 in C++, and 510 in C. These are small tasks: read the numbers as a direction, and reproduce them with <code>scripts/compare_baseline_tokens.py</code>.</p>
-    </div>
-    <div class="compare">
-      <figure class="code">
-        <figcaption><span>Tokit</span><span class="count">40 tokens</span></figcaption>
-        <pre><code><span class="k">enum</span> <span class="t">DivError</span>{<span class="t">DivZero</span>}
-<span class="f">divide</span>(a:<span class="t">I</span>,b:<span class="t">I</span>)-&gt;<span class="t">Result</span>&lt;<span class="t">I</span>,<span class="t">DivError</span>&gt;{
-  <span class="k">if</span> b==<span class="n">0</span>{<span class="v">Err</span>(<span class="t">DivError</span>::<span class="t">DivZero</span>)}<span class="k">else</span>{<span class="v">Ok</span>(a/b)}
-}</code></pre>
-      </figure>
-      <figure class="code plain">
-        <figcaption><span>Rust</span><span class="count">53 tokens</span></figcaption>
-        <pre><code>enum DivError { DivZero }
-fn divide(a: i32, b: i32) -&gt; Result&lt;i32, DivError&gt; {
-    if b == 0 { Err(DivError::DivZero) } else { Ok(a / b) }
-}</code></pre>
-      </figure>
-      <figure class="code plain">
-        <figcaption><span>TypeScript</span><span class="count">82 tokens</span></figcaption>
-        <pre><code>type DivError = "DivZero";
-type Result = { ok: true; value: number } | { ok: false; error: DivError };
-function divide(a: number, b: number): Result {
-    if (b === 0) return { ok: false, error: "DivZero" };
-    return { ok: true, value: Math.trunc(a / b) };
-}</code></pre>
-      </figure>
-    </div>
-  </section>
-
-  <section class="wrap split reverse">
-    <div>
-      <h2>Errors a model can fix in one step</h2>
-      <p>Every diagnostic has a stable code, an exact position, and a message that names the repair. <code>tok check --json</code> returns it as data, so an agent can loop until the program compiles.</p>
-      <ul class="ticks">
-        <li>Exhaustive matching names the missing case.</li>
-        <li><code>xs.len()</code> is answered with <code>call len(x)</code>.</li>
-        <li>Type errors show the expected and the actual type.</li>
-      </ul>
-    </div>
-    <div>
-      <figure class="code">
-        <figcaption><span>shapes.tok</span></figcaption>
-        <pre><code><span class="k">enum</span> <span class="t">Shape</span>{<span class="t">Circle</span>(<span class="t">F</span>),<span class="t">Square</span>(<span class="t">F</span>)}
-<span class="f">area</span>(s:<span class="t">Option</span>&lt;<span class="t">Shape</span>&gt;)-&gt;<span class="t">F</span>{<span class="k">match</span> s{<span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Circle</span>(r))=&gt;<span class="f">pi</span>()*r*r,<span class="v">None</span>=&gt;<span class="n">0.0</span>}}</code></pre>
-      </figure>
-      <figure class="code plain">
-        <figcaption><span>tok check --json shapes.tok</span></figcaption>
-        <pre><code>{"ok":false,"error":{"code":"E116","line":2,"column":26,
- "message":"non-exhaustive match: missing Some(Square)"}}</code></pre>
-      </figure>
-    </div>
-  </section>
-
-  <section class="wrap">
-    <h2 class="center">What you get</h2>
-    <ul class="grid">
-      <li><h3>One canonical form</h3><p><code>tok fmt</code> and <code>tok compact</code> leave exactly one way to write a program, so generated code diffs cleanly.</p></li>
-      <li><h3>Safe by construction</h3><p>Values instead of references: no null, no <code>unsafe</code>, no data races, no garbage-collector pauses. Overflow stops with a code.</p></li>
-      <li><h3>Explicit capabilities</h3><p>Files, network, and subprocesses need a grant such as <code>--allow-net</code>. <code>tok explain</code> lists every effect before you run anything.</p></li>
-      <li><h3>Native and WebAssembly</h3><p><code>tok build</code> compiles through LLVM to a single executable, or to a WASI module with <code>--target wasm32-wasip1</code>.</p></li>
-      <li><h3>Batteries for services</h3><p>HTTP and HTTPS, worker-pool servers, TCP, WebSocket, JSON, Redis, PostgreSQL, hashing, files, and parallel tasks.</p></li>
-      <li><h3>Editor support</h3><p>A language server with completion, go-to-definition across files, hover, references, and rename, plus a VS Code extension.</p></li>
-    </ul>
-  </section>
-
-  <section class="wrap split">
-    <div>
-      <h2>Expressions all the way down</h2>
-      <p>Records, enums with payloads, generics, lambdas, and pattern matching that nests. <code>if</code> and <code>match</code> are values; <code>?</code> propagates errors; <code>==</code> compares structurally.</p>
-      <p>The whole language is described in a <a href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md">2,500-token guide</a> that you can paste into any model's system prompt. Every example in it is compiled and run by the test suite.</p>
-    </div>
-    <div>
-      <figure class="code">
-        <figcaption><span>area.tok</span></figcaption>
-        <pre><code><span class="k">enum</span> <span class="t">Shape</span>{<span class="t">Circle</span>(<span class="t">F</span>),<span class="t">Square</span>(<span class="t">F</span>)}
-<span class="f">area</span>(s:<span class="t">Option</span>&lt;<span class="t">Shape</span>&gt;)-&gt;<span class="t">F</span>{<span class="k">match</span> s{<span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Circle</span>(r))=&gt;<span class="f">pi</span>()*r*r,<span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Square</span>(a))=&gt;a*a,<span class="v">None</span>=&gt;<span class="n">0.0</span>}}
-<span class="f">main</span>()-&gt;<span class="t">F</span>{<span class="f">area</span>(<span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Square</span>(<span class="n">3.0</span>)))}</code></pre>
-      </figure>
-      <figure class="code">
-        <figcaption><span>server.tok</span></figcaption>
-        <pre><code><span class="c">// GET /hello?name answers in parallel on eight workers.</span>
-<span class="f">handle</span>(r:<span class="t">Request</span>)-&gt;<span class="t">Response</span>{<span class="k">let</span> h:<span class="t">Map</span>&lt;<span class="t">String</span>,<span class="t">String</span>&gt;=<span class="t">Map</span>();<span class="k">match</span> r.path{<span class="s">&quot;/hello&quot;</span>=&gt;<span class="t">Response</span>(<span class="n">200</span>,h,<span class="s">&quot;hello &quot;</span>+r.query),_=&gt;<span class="t">Response</span>(<span class="n">404</span>,h,<span class="s">&quot;not found&quot;</span>)}}
-<span class="f">main</span>()-&gt;<span class="t">Unit</span>{<span class="k">match</span> <span class="f">serve</span>(<span class="s">&quot;127.0.0.1:8080&quot;</span>,<span class="n">0</span>,<span class="n">8</span>,|r|<span class="f">handle</span>(r)){<span class="v">Ok</span>(u)=&gt;{},<span class="v">Err</span>(e)=&gt;{<span class="f">print</span>(<span class="s">&quot;cannot serve&quot;</span>);<span class="f">exit</span>(<span class="n">1</span>);}}}</code></pre>
-      </figure>
-    </div>
-  </section>
-
-  <section class="wrap start">
-    <h2 class="center">Get started</h2>
-    <ol class="steps">
-      <li><h3>Install</h3><p>Run the install command above. Add <a href="https://rustup.rs">Rust</a> if you want native builds.</p></li>
-      <li><h3>Create a project</h3><pre><code>tok new hello &amp;&amp; cd hello
-tok run main.tok</code></pre></li>
-      <li><h3>Hand it to your model</h3><p>Paste the <a href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md">guide</a> into the system prompt and let the model call <code>tok check --json</code>. Or <a href="https://github.com/AlphaVIE/tokit/tree/main/research/finetune">fine-tune your own</a>.</p></li>
-    </ol>
-  </section>
+<section class="hero shell" aria-labelledby="hero-title">
+  <div class="hero-copy"><p class="eyebrow"><span class="eyebrow-line"></span> THE LANGUAGE</p>
+    <h1 id="hero-title">Less syntax.<br><em>More signal.</em></h1>
+    <p class="hero-lead">Tokit is a compact, statically typed language for code written with language models. Write a little, check precisely, and run it natively.</p>
+    <div class="hero-actions"><a class="button button-dark" href="#install">Get started <span aria-hidden="true">→</span></a><a class="text-link" href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md">Read the language guide <span aria-hidden="true">→</span></a></div>
+    <p class="hero-note">Open source · MIT or Apache-2.0 · Version 0.1</p>
+  </div>
+  <div class="hero-demo" aria-label="Tokit code example"><div class="demo-top"><span><i></i> cart.tok</span><span>TOKIT / 001</span></div><pre><code><span class="k">struct</span> <span class="t">Item</span>{name:<span class="t">String</span>,price:<span class="t">F</span>}
+<span class="f">total</span>(items:[<span class="t">Item</span>])-&gt;<span class="t">F</span>{
+  <span class="f">fold</span>(items,<span class="n">0.0</span>,|sum,i|sum+i.price)
+}
+<span class="f">main</span>()-&gt;<span class="t">String</span>{
+  <span class="k">let</span> cart=[<span class="t">Item</span>(<span class="s">&quot;tea&quot;</span>,<span class="n">3.5</span>),
+            <span class="t">Item</span>(<span class="s">&quot;cake&quot;</span>,<span class="n">4.25</span>)];
+  <span class="s">&quot;total &quot;</span>+<span class="t">String</span>(<span class="f">total</span>(cart))
+}</code></pre><div class="demo-result"><span>$ tok run cart.tok</span><strong>"total 7.75"</strong></div></div>
+</section>
+<div class="shell rule-caption"><span>01 / THE IDEA</span><span>BUILT FOR A SHORT FEEDBACK LOOP</span></div>
+<section class="intro shell" aria-labelledby="idea-title"><h2 id="idea-title">A language that gets<br>to the point.</h2><div><p class="intro-lead">Small programs should stay small. Tokit keeps syntax concise, gives each program a canonical form, and reports errors in a way a person or an agent can act on.</p><a class="text-link" href="https://github.com/AlphaVIE/tokit/blob/main/spec/README.md">Explore the specifications <span aria-hidden="true">→</span></a></div></section>
+<section class="features shell" aria-label="Core capabilities">
+  <article><span class="feature-index">01</span><h3>Compact by design</h3><p>Types, pattern matching, and functions without the ceremony. <code>tok fmt</code> keeps one consistent shape.</p></article>
+  <article><span class="feature-index">02</span><h3>Errors with a next step</h3><p>Stable diagnostic codes, source positions, and JSON output make <code>tok check</code> useful in an editing loop.</p></article>
+  <article><span class="feature-index">03</span><h3>Real executables</h3><p>Interpret while exploring, or use <code>tok build</code> to compile a native executable with Rust.</p></article>
+</section>
+<div class="shell rule-caption" id="language"><span>02 / THE LANGUAGE</span><span>SMALL SURFACE, USEFUL TOOLS</span></div>
+<section class="language shell" aria-labelledby="language-title"><div class="section-heading"><h2 id="language-title">Readable at a glance.</h2><p>Values, enums, and exhaustive matches fit together without hiding the control flow.</p></div><div class="language-grid">
+  <div class="code-panel"><div class="panel-label"><span>area.tok</span><span>EXAMPLE 01</span></div><pre><code><span class="k">enum</span> <span class="t">Shape</span>{<span class="t">Circle</span>(<span class="t">F</span>),<span class="t">Square</span>(<span class="t">F</span>)}
+<span class="f">area</span>(s:<span class="t">Option</span>&lt;<span class="t">Shape</span>&gt;)-&gt;<span class="t">F</span>{
+  <span class="k">match</span> s{
+    <span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Circle</span>(r))=&gt;<span class="f">pi</span>()*r*r,
+    <span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Square</span>(a))=&gt;a*a,
+    <span class="v">None</span>=&gt;<span class="n">0.0</span>
+  }
+}
+<span class="f">main</span>()-&gt;<span class="t">F</span>{<span class="f">area</span>(<span class="v">Some</span>(<span class="t">Shape</span>::<span class="t">Square</span>(<span class="n">3.0</span>)))}</code></pre></div>
+  <div class="language-aside"><p class="aside-label">IN THE LANGUAGE</p><ul><li><span>01</span> Static types and inference</li><li><span>02</span> Records and enums with payloads</li><li><span>03</span> Exhaustive pattern matching</li><li><span>04</span> Results and <code>?</code> propagation</li></ul><a class="text-link" href="https://github.com/AlphaVIE/tokit/tree/main/examples">Browse working examples <span aria-hidden="true">→</span></a></div>
+</div></section>
+<div class="shell rule-caption" id="tooling"><span>03 / THE TOOLING</span><span>FEEDBACK YOU CAN USE</span></div>
+<section class="tooling shell" aria-labelledby="tooling-title"><div class="tooling-copy"><h2 id="tooling-title">The compiler tells you what to fix.</h2><p>Check a file before running it. Diagnostics include a code, location, and concrete message. Use <code>--json</code> to read them from an editor or an agent.</p><a class="text-link" href="https://github.com/AlphaVIE/tokit/blob/main/spec/DIAGNOSTICS.md">See diagnostic codes <span aria-hidden="true">→</span></a></div><div class="terminal"><div class="panel-label"><span>TERMINAL</span><span>tok check</span></div><pre><code><span class="terminal-prompt">$</span> tok check --json shapes.tok
+{
+  "ok": false,
+  "error": {
+    "code": "E116",
+    "line": 2, "column": 26,
+    "message": "non-exhaustive match: missing Some(Square)"
+  }
+}</code></pre></div></section>
+<section class="tools-strip shell" aria-label="Tokit commands"><div><code>tok run</code><span>Explore instantly</span></div><div><code>tok check</code><span>Catch mistakes</span></div><div><code>tok fmt</code><span>Keep one form</span></div><div><code>tok build</code><span>Ship a binary</span></div></section>
+<section class="capabilities shell" aria-label="More Tokit capabilities"><p class="eyebrow">BEYOND THE FIRST PROGRAM</p><div><strong>Explicit permissions</strong><span>File, network, and process access require grants such as <code>--allow-net</code>.</span></div><div><strong>Ready for services</strong><span>HTTP, WebSocket, JSON, Redis, and PostgreSQL packages ship with the compiler.</span></div><div><strong>Editor and target support</strong><span>Use <code>tok lsp</code>, the VS Code extension, or build for WASI.</span></div></section>
+<div class="shell rule-caption" id="install"><span>04 / GET STARTED</span><span>FROM ZERO TO RUNNING</span></div>
+<section class="install-section shell" aria-labelledby="install-title"><div class="install-heading"><h2 id="install-title">Start with one command.</h2><p>The installer fetches a release and verifies its SHA-256. Add <a href="https://rustup.rs">Rust</a> when you want native builds.</p></div><div class="install-box">
+  <div class="install-tabs" role="tablist" aria-label="Operating system"><button type="button" role="tab" aria-selected="true" aria-controls="install-unix" id="tab-unix">macOS / Linux</button><button type="button" role="tab" aria-selected="false" aria-controls="install-windows" id="tab-windows" tabindex="-1">Windows</button></div>
+  <div class="install-command" id="install-unix" role="tabpanel" aria-labelledby="tab-unix"><code>curl -sSf https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.sh | sh</code><button class="copy-button" type="button" aria-label="Copy macOS and Linux install command">Copy</button></div>
+  <div class="install-command" id="install-windows" role="tabpanel" aria-labelledby="tab-windows" hidden><code>irm https://raw.githubusercontent.com/AlphaVIE/tokit/main/scripts/install.ps1 | iex</code><button class="copy-button" type="button" aria-label="Copy Windows install command">Copy</button></div>
+</div><div class="first-run"><span>THEN TRY IT</span><code>tok new hello &amp;&amp; cd hello</code><code>tok run main.tok</code></div></section>
+<section class="resources shell" aria-labelledby="resources-title"><div><p class="eyebrow">KEEP EXPLORING</p><h2 id="resources-title">Everything you need<br>to go further.</h2></div><div class="resource-links">
+<a href="https://github.com/AlphaVIE/tokit/blob/main/spec/LLM_GUIDE.md"><span><strong>Language guide</strong><small>A concise reference for people and models</small></span><b aria-hidden="true">→</b></a>
+<a href="https://github.com/AlphaVIE/tokit/blob/main/spec/README.md"><span><strong>Specifications</strong><small>Syntax, types, packages, and tools</small></span><b aria-hidden="true">→</b></a>
+<a href="https://github.com/AlphaVIE/tokit/releases"><span><strong>Releases &amp; downloads</strong><small>Compiler binaries and VS Code extension</small></span><b aria-hidden="true">→</b></a>
+</div></section>
 </main>
-
-<footer class="wrap foot">
-  <p>Tokit 0.1 · <a href="https://github.com/AlphaVIE/tokit">Source on GitHub</a> · <a href="https://github.com/AlphaVIE/tokit/blob/main/LICENSE-MIT">MIT</a> or <a href="https://github.com/AlphaVIE/tokit/blob/main/LICENSE-APACHE">Apache-2.0</a></p>
-</footer>
-
+<footer class="site-footer"><div class="shell footer-inner"><a class="identity" href="./"><span class="mark" aria-hidden="true">t<span>.</span></span><span>tokit</span></a><p>Small language. Clear answers.</p><div><a href="https://github.com/AlphaVIE/tokit">GitHub</a><a href="https://github.com/AlphaVIE/tokit/blob/main/LICENSE-MIT">MIT</a><a href="https://github.com/AlphaVIE/tokit/blob/main/LICENSE-APACHE">Apache-2.0</a></div></div></footer>
 <script>
-document.querySelectorAll('[role=tab]').forEach(function (tab) {
-  tab.addEventListener('click', function () {
-    document.querySelectorAll('[role=tab]').forEach(function (other) {
-      var selected = other === tab;
-      other.setAttribute('aria-selected', selected);
-      document.getElementById(other.getAttribute('aria-controls')).hidden = !selected;
-    });
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function selectTab(tab) {
+  tabs.forEach(other => {
+    const selected = other === tab;
+    other.setAttribute('aria-selected', String(selected));
+    other.tabIndex = selected ? 0 : -1;
+    document.getElementById(other.getAttribute('aria-controls')).hidden = !selected;
+  });
+}
+tabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectTab(tab));
+  tab.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    event.preventDefault();
+    const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    selectTab(next);
+    next.focus();
   });
 });
-document.querySelectorAll('.copy').forEach(function (button) {
-  button.addEventListener('click', function () {
-    navigator.clipboard.writeText(button.previousElementSibling.textContent).then(function () {
-      button.textContent = 'Copied';
-      setTimeout(function () { button.textContent = 'Copy'; }, 1600);
-    });
-  });
-});
+document.querySelectorAll('.copy-button').forEach(button => button.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(button.previousElementSibling.textContent);
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+  } catch { button.textContent = 'Select text'; }
+}));
 </script>
 </body>
 </html>
